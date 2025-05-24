@@ -3170,5 +3170,55 @@ def ensure_folder_exists(folder_path):
 
 #############################################################################################
 
+##############################################################################################
+# Web service
+##############################################################################################
+def run_process_from_project_folder(project_id, upload_folder):
+    """Load SHP files from project folder and run the main process."""
+    base_path = os.path.join(upload_folder, str(project_id))
+    
+    required_files = {
+        'meterData': 'meter.shp',
+        'lvData': 'lv.shp',
+        'mvData': 'mv.shp',
+        'transformerData': 'tr.shp',
+        'eserviceData': 'eservice.shp',
+    }
+
+    # Load all shapefiles
+    data = {}
+    for key, filename in required_files.items():
+        shp_path = os.path.join(base_path, filename)
+        if not os.path.exists(shp_path):
+            logging.error(f"{filename} not found in {base_path}")
+            return {'error': f"{filename} not found"}
+        data[key] = shapefile.Reader(shp_path)
+    
+    # 👉 ถ้า main() ใช้ global variable ให้กำหนดแบบนี้
+    global meterData, lvData, mvData, transformerData, eserviceData
+    meterData = data['meterData']
+    lvData = data['lvData']
+    mvData = data['mvData']
+    transformerData = data['transformerData']
+    eserviceData = data['eserviceData']
+
+    # 🔧 เรียกฟังก์ชัน main เพื่อประมวลผล
+    try:
+        result = main()
+    except Exception as e:
+        logging.exception("Error during main process")
+        return {'error': f'Error in main(): {str(e)}'}
+
+    return {
+        'message': 'ประมวลผลเสร็จสิ้น',
+        'summary': result  # ต้องแน่ใจว่า main() return อะไรบางอย่างที่พออ่านได้
+    }
+
+
+
+
+
+##############################################################################################
+
 if __name__ == "__main__":
     createGUI()

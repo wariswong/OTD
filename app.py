@@ -2,6 +2,8 @@ from flask import Flask, request, jsonify, render_template, redirect, url_for
 from werkzeug.utils import secure_filename
 import os, shutil
 import mysql.connector
+from process import run_process_from_project_folder
+import logging
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = './uploads'
@@ -194,6 +196,16 @@ def delete(project_id):
 
     cur.close(); conn.close()
     return jsonify({'message':'ลบสำเร็จ'}), 200
+
+@app.route('/run/<int:project_id>', methods=['POST'])
+def run_project(project_id):
+    try:
+        result = run_process_from_project_folder(project_id, app.config['UPLOAD_FOLDER'])
+        # return jsonify({'message': 'ประมวลผลเสร็จสิ้น', 'result': result})
+        return jsonify(result)
+    except Exception as e:
+        logging.exception("Error in running project")
+        return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)
