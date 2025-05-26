@@ -200,7 +200,9 @@ def delete(project_id):
 @app.route('/run/<int:project_id>', methods=['POST'])
 def run_project(project_id):
     try:
-        result = run_process_from_project_folder(project_id, app.config['UPLOAD_FOLDER'])
+        folder_path = app.config['UPLOAD_FOLDER']
+        result = run_process_from_project_folder(project_id, folder_path)
+
         # return jsonify({'message': 'ประมวลผลเสร็จสิ้น', 'result': result})
         return jsonify(result)
     except Exception as e:
