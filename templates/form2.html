@@ -79,3 +79,31 @@
   </script>
 </body>
 </html>
+
+
+<!-- 
+
+{% for ftype in ['meter', 'lv', 'mv', 'eservice', 'tr'] %}
+      <div class="mb-3">
+        <label>{{ ftype|upper }}</label>
+        <!-- <input type="file" name="file_{{ ftype }}" accept=".shp" class="form-control" {{ 'required' if mode == 'create' else '' }}> -->
+        <!-- <input type="file" name="file_{{ ftype }}" accept=".shp" class="form-control"> -->
+        <input type="file" name="file_{{ ftype }}[]" multiple class="form-control">
+
+        <!-- {% if mode == 'edit' and existing_files.get(ftype) %}
+        <small class="text-success">ไฟล์เดิม: {{ existing_files[ftype] }}</small>
+        {% endif %} --><!--
+        {% if mode == 'edit' and existing_files.get(ftype) %}
+        <small class="text-success">ไฟล์เดิม:
+          <ul class="mb-0">
+            {% for fname in existing_files[ftype] %}
+            <li>{{ fname }}</li>
+            {% endfor %}
+          </ul>
+        </small>
+        {% endif %}
+      </div>
+      {% endfor %}
+
+
+-->

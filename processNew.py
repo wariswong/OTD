@@ -1,3 +1,5 @@
+# ---------------------------------
+# Library imports
 import numpy as np
 import pandas as pd
 import networkx as nx
@@ -15,14 +17,43 @@ import sys
 import os
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg,NavigationToolbar2Tk
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from sklearn.cluster import MiniBatchKMeans
 import pyproj
 import json
+from geojson import Feature, Point, FeatureCollection
 
-meterData = lvData = mvData = transformerData = eserviceData = None
+# ---------------------------------
+# 2) Global variables
+meterData = None
+lvData = None
+mvData = None
+transformerData = None
+eserviceData = None
+meterLocations = None
+initialVoltages = None
+totalLoads = None
+phase_loads = None
+peano = None
+phases = None
+lvLinesX = None
+lvLinesY = None
+lvLines = None
+mvLinesX = None
+mvLinesY = None
+mvLines = None
+filteredEserviceLines = None
+initialTransformerLocation = None
+latest_split_result = None     
+reopt_btn            = None 
+lvLines              = None   
+mvLines              = None   
+initialVoltage       = None   # 230 V (set in main)
+conductorResistance  = None   # Ω/km (set in main)
+powerFactor          = None   # 0.875 (set in main)
+SNAP_TOLERANCE = 0.1
 
-##############################################################################
-# 1) A CUSTOM LOG HANDLER THAT WRITES TO A TKINTER TEXT WIDGET
-##############################################################################
+# ---------------------------------
+# 3) Classes: TextHandler, TkProgress, EdgeNavigatorDialog
 class TextHandler(logging.Handler):
     """A custom logging handler that sends log messages to a Tkinter Text widget."""
     def __init__(self, text_widget):
@@ -37,6 +68,44 @@ class TextHandler(logging.Handler):
     def _insert_message(self, msg):
         self.text_widget.insert(tk.END, msg + "\n")
         self.text_widget.see(tk.END)
+
+class TkProgress:
+    """
+    Progress-bar แบบ determinate + แสดงชื่อขั้นตอนและเปอร์เซ็นต์
+    """
+    def __init__(self, bar_widget: ttk.Progressbar, label_widget: tk.Label):
+        self.bar   = bar_widget
+        self.label = label_widget
+        self.total = 1
+        self.cur   = 0
+        self.stage = ""
+
+    # ---------- public API ----------
+    def start(self, total: int, stage: str = ""):
+        self.total = max(1, total)
+        self.cur   = 0
+        self.stage = stage
+        self.bar['maximum'] = self.total
+        self.bar['value']   = 0
+        self._show()
+
+    def step(self, n: int = 1):
+        self.cur = min(self.cur + n, self.total)
+        self._show()
+
+    def finish(self, stage_done: str = "Done"):
+        self.cur   = self.total
+        self.stage = stage_done
+        self._show()
+
+    # ---------- internal ----------
+    def _show(self):
+        pct = int(100 * self.cur / self.total)
+        self.label.config(text=f"{self.stage}  {pct:3d}%")
+        self.bar['value'] = self.cur
+        self.bar.update_idletasks()
+        self.label.update_idletasks()
+
 
 
 class EdgeNavigatorDialog(tk.Toplevel):
@@ -131,21 +200,33 @@ class EdgeNavigatorDialog(tk.Toplevel):
         self.status_lbl.config(text=f"Candidate #{self.curr_idx}  |  ΔLoad = {diff:.1f} kW")
 
     def _update_preview(self):
+        """วาด preview แบบเร็ว ไม่สร้าง legend ซ้ำ และไม่เรียก plt ระดับโมดูล"""
         self.ax.clear()
-        # วาด LV & MV lines
-        for x, y in zip(self.lvLinesX, self.lvLinesY):
-            plt.plot(x, y, color='lime', linewidth=1, linestyle='--', label='LV Line' if 'LV Line' not in plt.gca().get_legend_handles_labels()[1] else "")
-        for x, y in zip(self.mvLinesX, self.mvLinesY):
-            plt.plot(x, y, color='maroon', linewidth=1, linestyle='-.', label='MV Line' if 'MV Line' not in plt.gca().get_legend_handles_labels()[1] else "")
-        # วาด meter locations
-        self.ax.plot(self.meterLocs[:,0], self.meterLocs[:,1], 'k.', markersize=3)
-        # ไฮไลต์ current edge
+
+        # ==== ใช้ LineCollection เร็วกว่า plot เป็นเส้น-ต่อ-เส้น ====
+        from matplotlib.collections import LineCollection
+        if self.lvLinesX:
+            lv_coll = LineCollection(
+                [list(zip(x, y)) for x, y in zip(self.lvLinesX, self.lvLinesY)],
+                colors='lime', linewidths=.8, linestyles='--')
+            self.ax.add_collection(lv_coll)
+        if self.mvLinesX:
+            mv_coll = LineCollection(
+                [list(zip(x, y)) for x, y in zip(self.mvLinesX, self.mvLinesY)],
+                colors='maroon', linewidths=.8, linestyles='-.')
+            self.ax.add_collection(mv_coll)
+
+        # meter จุดดำ
+        self.ax.plot(self.meterLocs[:, 0], self.meterLocs[:, 1], 'k.', ms=3)
+
+        # ไฮไลต์ edge ปัจจุบัน
         u, v = self.edge_df.iloc[self.curr_idx]['Edge']
-        x1, y1 = self.coord[u]
-        x2, y2 = self.coord[v]
-        self.ax.plot([x1, x2], [y1, y2], 'r-', linewidth=3)
+        x1, y1 = self.coord[u];  x2, y2 = self.coord[v]
+        self.ax.plot([x1, x2], [y1, y2], 'r-', lw=2.5)
+
         self.ax.set_aspect('equal')
-        self.canvas.draw()
+        self.ax.axis()          # ลด overhead legend/กรอบ
+        self.canvas.draw_idle()
 
     def prev_edge(self):
         if self.curr_idx > 0:
@@ -366,12 +447,9 @@ class EdgeNavigatorDialog(tk.Toplevel):
         map_window.transient(self)
         map_window.grab_set()
         self.wait_window(map_window)
-                    
-##############################################################################
-# 2) YOUR EXISTING FUNCTIONS
-#    NOTE: loadShapefiles() is updated so it DOES NOT reconfigure the logger.
-##############################################################################
 
+# ---------------------------------
+# 4) Filters
 class SummaryFilter(logging.Filter):
     """Only allow console messages that match certain keywords (optional)."""
     def filter(self, record):
@@ -396,39 +474,9 @@ class SummaryFilter(logging.Filter):
             
         ]
         return any(kw in msg for kw in keywords)
-
-# Global variables to store the shapefile data
-meterData = None
-lvData = None
-mvData = None
-transformerData = None
-eserviceData = None
-meterLocations = None
-initialVoltages = None
-totalLoads = None
-phase_loads = None
-peano = None
-phases = None
-lvLinesX = None
-lvLinesY = None
-lvLines = None
-mvLinesX = None
-mvLinesY = None
-mvLines = None
-filteredEserviceLines = None
-initialTransformerLocation = None
-latest_split_result = None     
-reopt_btn            = None 
-lvLines              = None   # becomes a list of LV line dicts after main()
-mvLines              = None   # list of MV line dicts
-initialVoltage       = None   # 230 V (set in main)
-conductorResistance  = None   # Ω/km (set in main)
-powerFactor          = None   # 0.875 (set in main)
-SNAP_TOLERANCE = 0.1
-_EDGE_DF_CACHE       = None  
-
-   
-
+    
+# ---------------------------------
+# 5) loadShapefiles
 def loadShapefiles(parent):
     """Load the shapefiles when called by the UI."""
     global meterData, lvData, mvData, transformerData, eserviceData
@@ -493,6 +541,7 @@ def loadShapefiles(parent):
     transformerData = shapefile.Reader(transformerFileName, encoding='cp874')
     logging.info(f"Transformer shapefile selected: {transformerFileName}")
     logger = logging.getLogger()
+    
     # ลบ FileHandler ที่มีอยู่แล้วออก
     for handler in logger.handlers[:]:
         if isinstance(handler, logging.FileHandler):
@@ -509,9 +558,9 @@ def loadShapefiles(parent):
     logging.info(f"Logger file handler updated: {log_filename}")
 
     logging.info("All shapefiles loaded successfully.")
-    
 
-
+# ---------------------------------
+# 6) snapping & tolerance utility
 def snap_coordinates_to_tolerance(coords_list, tolerance=0.1):
     """
     Snap coordinates ที่อยู่ใกล้กันภายในระยะ tolerance ให้ใช้พิกัดเดียวกัน
@@ -566,10 +615,586 @@ def snap_coordinates_to_tolerance(coords_list, tolerance=0.1):
     
     return coord_mapping
 
+def find_optimal_tolerance(coords_list, min_tolerance=0.0000001, max_tolerance=0.001, 
+                          target_reduction_ratio=0.95, max_iterations=20):
+    """
+    หาค่า tolerance ที่เหมาะสมสำหรับ coordinate snapping โดยใช้ binary search
+    
+    Args:
+        coords_list: list of (x, y) coordinates
+        min_tolerance: ค่า tolerance ต่ำสุดที่ต้องการทดสอบ (default: 0.0000001)
+        max_tolerance: ค่า tolerance สูงสุดที่ต้องการทดสอบ (default: 0.001)
+        target_reduction_ratio: อัตราส่วนของจำนวนพิกัดที่ต้องการหลังจาก snap (default: 0.95)
+        max_iterations: จำนวนรอบสูงสุดในการค้นหา (default: 20)
+    
+    Returns:
+        float: ค่า tolerance ที่เหมาะสม
+    """
+    
+    if not coords_list:
+        logging.warning("Empty coordinates list provided to find_optimal_tolerance")
+        return min_tolerance
+    
+    # แปลงเป็น set เพื่อกำจัดพิกัดที่ซ้ำกัน
+    unique_coords = list(set(coords_list))
+    original_count = len(unique_coords)
+    
+    logging.info(f"Finding optimal tolerance for {original_count} unique coordinates")
+    logging.info(f"Target reduction ratio: {target_reduction_ratio}")
+    
+    # ถ้ามีพิกัดน้อย ใช้ค่า tolerance ต่ำ
+    if original_count < 100:
+        logging.info(f"Small dataset ({original_count} points), using minimum tolerance")
+        return min_tolerance
+    
+    # คำนวณจำนวนพิกัดเป้าหมายหลังจาก snap
+    target_count = int(original_count * target_reduction_ratio)
+    
+    # Binary search หาค่า tolerance ที่เหมาะสม
+    low = min_tolerance
+    high = max_tolerance
+    best_tolerance = min_tolerance
+    best_count = original_count
+    
+    iteration = 0
+    while iteration < max_iterations and (high - low) > min_tolerance:
+        mid_tolerance = (low + high) / 2
+        
+        # ทดสอบ snap ด้วย tolerance ปัจจุบัน
+        snap_map = snap_coordinates_to_tolerance(unique_coords, mid_tolerance)
+        snapped_coords = list(set(snap_map.values()))
+        snapped_count = len(snapped_coords)
+        
+        reduction_ratio = snapped_count / original_count
+        
+        logging.debug(f"Iteration {iteration}: tolerance={mid_tolerance:.8f}, "
+                     f"snapped_count={snapped_count}, ratio={reduction_ratio:.3f}")
+        
+        # ตรวจสอบว่าใกล้เคียงกับเป้าหมายหรือไม่
+        if abs(reduction_ratio - target_reduction_ratio) < 0.01:
+            best_tolerance = mid_tolerance
+            best_count = snapped_count
+            break
+        
+        # ปรับช่วงการค้นหา
+        if reduction_ratio > target_reduction_ratio:
+            # ยังมีจุดมากเกินไป, เพิ่ม tolerance
+            low = mid_tolerance
+        else:
+            # จุดน้อยเกินไป, ลด tolerance
+            high = mid_tolerance
+            
+        # เก็บค่าที่ดีที่สุด
+        if abs(reduction_ratio - target_reduction_ratio) < abs(best_count/original_count - target_reduction_ratio):
+            best_tolerance = mid_tolerance
+            best_count = snapped_count
+            
+        iteration += 1
+    
+    # ตรวจสอบผลลัพธ์
+    final_snap_map = snap_coordinates_to_tolerance(unique_coords, best_tolerance)
+    final_snapped_coords = list(set(final_snap_map.values()))
+    final_count = len(final_snapped_coords)
+    final_ratio = final_count / original_count
+    
+    logging.info(f"Optimal tolerance found: {best_tolerance:.8f}")
+    logging.info(f"Original coordinates: {original_count}, Snapped coordinates: {final_count}")
+    logging.info(f"Reduction ratio: {final_ratio:.3f}")
+    
+    # คำนวณระยะทางเฉลี่ยระหว่างจุดที่ถูก snap
+    total_distance = 0
+    snap_count = 0
+    for orig_coord in unique_coords:
+        snapped_coord = final_snap_map[orig_coord]
+        if orig_coord != snapped_coord:
+            distance = np.hypot(orig_coord[0] - snapped_coord[0], 
+                               orig_coord[1] - snapped_coord[1])
+            total_distance += distance
+            snap_count += 1
+    
+    if snap_count > 0:
+        avg_snap_distance = total_distance / snap_count
+        logging.info(f"Average snap distance: {avg_snap_distance:.6f} units")
+    
+    return best_tolerance
 
-# ส่วนที่ 2: แก้ไขฟังก์ชัน extractLineData และ extractLineDataWithAttributes เดิม
-# แทนที่ฟังก์ชันเดิมในโค้ดของคุณด้วยฟังก์ชันเหล่านี้
 
+def analyze_coordinate_distribution(coords_list):
+    """
+    วิเคราะห์การกระจายตัวของพิกัดเพื่อช่วยกำหนด tolerance
+    
+    Args:
+        coords_list: list of (x, y) coordinates
+    
+    Returns:
+        dict: ข้อมูลสถิติของการกระจายตัวพิกัด
+    """
+    if not coords_list:
+        return {}
+    
+    coords_array = np.array(list(set(coords_list)))
+    
+    # คำนวณระยะทางขั้นต่ำระหว่างจุด
+    if len(coords_array) > 1:
+        tree = cKDTree(coords_array)
+        distances, _ = tree.query(coords_array, k=2)  # k=2 เพื่อหาจุดที่ใกล้ที่สุด (ไม่รวมตัวเอง)
+        min_distances = distances[:, 1]  # ระยะทางไปยังจุดที่ใกล้ที่สุด
+        
+        stats = {
+            'count': len(coords_array),
+            'min_distance': np.min(min_distances),
+            'max_distance': np.max(min_distances),
+            'mean_distance': np.mean(min_distances),
+            'median_distance': np.median(min_distances),
+            'std_distance': np.std(min_distances),
+            'percentile_10': np.percentile(min_distances, 10),
+            'percentile_25': np.percentile(min_distances, 25),
+            'percentile_50': np.percentile(min_distances, 50),
+            'percentile_75': np.percentile(min_distances, 75),
+            'percentile_90': np.percentile(min_distances, 90)
+        }
+        
+        # แนะนำ tolerance ตามการกระจายตัว
+        suggested_tolerance = stats['percentile_10'] / 2  # ใช้ครึ่งหนึ่งของ percentile ที่ 10
+        stats['suggested_tolerance'] = suggested_tolerance
+        
+        logging.info("Coordinate distribution analysis:")
+        logging.info(f"  Total points: {stats['count']}")
+        logging.info(f"  Min nearest distance: {stats['min_distance']:.8f}")
+        logging.info(f"  Mean nearest distance: {stats['mean_distance']:.8f}")
+        logging.info(f"  Suggested tolerance: {stats['suggested_tolerance']:.8f}")
+        
+        return stats
+    else:
+        return {'count': len(coords_array)}
+
+
+def auto_determine_snap_tolerance(meter_locations, lv_lines, mv_lines, 
+                                 reduction_ratio=0.98, use_analysis=True):
+    """
+    กำหนดค่า snap tolerance อัตโนมัติตามข้อมูลที่มี
+    
+    Args:
+        meter_locations: array ของตำแหน่งมิเตอร์
+        lv_lines: list ของ LV lines
+        mv_lines: list ของ MV lines
+        reduction_ratio: อัตราส่วนการลดจำนวนพิกัด (default: 0.98)
+        use_analysis: ใช้การวิเคราะห์การกระจายตัวหรือไม่ (default: True)
+    
+    Returns:
+        float: ค่า snap tolerance ที่เหมาะสม
+    """
+    # รวบรวมพิกัดทั้งหมด
+    all_coords = []
+    
+    # จากมิเตอร์
+    if meter_locations is not None and len(meter_locations) > 0:
+        all_coords.extend([(loc[0], loc[1]) for loc in meter_locations])
+    
+    # จาก LV lines
+    for line in lv_lines:
+        coords = [(x, y) for x, y in zip(line['X'], line['Y']) 
+                  if not (np.isnan(x) or np.isnan(y))]
+        all_coords.extend(coords)
+    
+    # จาก MV lines
+    for line in mv_lines:
+        coords = [(x, y) for x, y in zip(line['X'], line['Y']) 
+                  if not (np.isnan(x) or np.isnan(y))]
+        all_coords.extend(coords)
+    
+    if not all_coords:
+        logging.warning("No coordinates found for tolerance calculation")
+        return 0.000002  # ค่า default
+    
+    # วิเคราะห์การกระจายตัว
+    if use_analysis:
+        stats = analyze_coordinate_distribution(all_coords)
+        if 'suggested_tolerance' in stats:
+            # ใช้ค่าที่แนะนำจากการวิเคราะห์เป็นจุดเริ่มต้น
+            min_tol = stats['suggested_tolerance'] / 10
+            max_tol = stats['suggested_tolerance'] * 10
+        else:
+            min_tol = 0.0000001
+            max_tol = 0.001
+    else:
+        min_tol = 0.0000001
+        max_tol = 0.001
+    
+    # หาค่า tolerance ที่เหมาะสม
+    optimal_tolerance = find_optimal_tolerance(
+        all_coords, 
+        min_tolerance=min_tol,
+        max_tolerance=max_tol,
+        target_reduction_ratio=reduction_ratio
+    )
+    
+    return optimal_tolerance
+
+# ---------------------------------
+# 7) line-fault detection & fixing
+def identify_failed_snap_lines(lines, snap_tolerance, snap_map=None):
+    """
+    ระบุสายที่อาจมีปัญหาในการ snap (เช่น สายที่สั้นกว่า tolerance หรือมีจุดต่อที่ไม่ตรงกัน)
+    
+    Args:
+        lines: list of line dictionaries with 'X' and 'Y' coordinates
+        snap_tolerance: ค่า tolerance ที่ใช้ในการ snap
+        snap_map: coordinate mapping จาก snap_coordinates_to_tolerance (optional)
+    
+    Returns:
+        dict: ข้อมูลสายที่มีปัญหา
+    """
+    failed_lines = []
+    short_lines = []
+    isolated_lines = []
+    problematic_connections = []
+    
+    # ถ้าไม่มี snap_map ให้สร้างใหม่
+    if snap_map is None:
+        all_coords = []
+        for line in lines:
+            coords = [(x, y) for x, y in zip(line['X'], line['Y']) 
+                      if not (np.isnan(x) or np.isnan(y))]
+            all_coords.extend(coords)
+        snap_map = snap_coordinates_to_tolerance(list(set(all_coords)), snap_tolerance)
+    
+    # วิเคราะห์แต่ละสาย
+    for idx, line in enumerate(lines):
+        coords = [(x, y) for x, y in zip(line['X'], line['Y']) 
+                  if not (np.isnan(x) or np.isnan(y))]
+        
+        if len(coords) < 2:
+            failed_lines.append({
+                'index': idx,
+                'type': 'invalid',
+                'reason': 'Less than 2 valid coordinates',
+                'line': line
+            })
+            continue
+        
+        # ตรวจสอบความยาวของสาย
+        total_length = 0
+        for i in range(len(coords) - 1):
+            dist = np.hypot(coords[i][0] - coords[i+1][0], 
+                           coords[i][1] - coords[i+1][1])
+            total_length += dist
+        
+        # สายสั้นเกินไป
+        if total_length < snap_tolerance * 2:
+            short_lines.append({
+                'index': idx,
+                'length': total_length,
+                'tolerance': snap_tolerance,
+                'start': coords[0],
+                'end': coords[-1],
+                'line': line
+            })
+        
+        # ตรวจสอบการ snap ของจุดเริ่มต้นและจุดสิ้นสุด
+        start_snapped = snap_map.get(coords[0], coords[0])
+        end_snapped = snap_map.get(coords[-1], coords[-1])
+        
+        # ตรวจสอบว่าจุดเริ่มต้นและสิ้นสุดถูก snap ไปที่จุดเดียวกันหรือไม่
+        if start_snapped == end_snapped and len(coords) > 2:
+            problematic_connections.append({
+                'index': idx,
+                'reason': 'Start and end snap to same point',
+                'original_start': coords[0],
+                'original_end': coords[-1],
+                'snapped_point': start_snapped,
+                'line': line
+            })
+    
+    # สร้างกราฟเพื่อตรวจสอบการเชื่อมต่อ
+    G = nx.Graph()
+    node_id_map = {}
+    node_counter = 0
+    
+    for line in lines:
+        coords = [(x, y) for x, y in zip(line['X'], line['Y']) 
+                  if not (np.isnan(x) or np.isnan(y))]
+        if len(coords) < 2:
+            continue
+            
+        snapped_coords = [snap_map.get(coord, coord) for coord in coords]
+        
+        for i in range(len(snapped_coords)):
+            if snapped_coords[i] not in node_id_map:
+                node_id_map[snapped_coords[i]] = node_counter
+                node_counter += 1
+        
+        for i in range(len(snapped_coords) - 1):
+            if snapped_coords[i] != snapped_coords[i+1]:
+                n1 = node_id_map[snapped_coords[i]]
+                n2 = node_id_map[snapped_coords[i+1]]
+                G.add_edge(n1, n2)
+    
+    # หาสายที่โดดเดี่ยว (isolated components)
+    if G.number_of_nodes() > 0:
+        components = list(nx.connected_components(G))
+        if len(components) > 1:
+            # หา component ที่ใหญ่ที่สุด
+            main_component = max(components, key=len)
+            
+            # ระบุสายที่อยู่ใน component เล็ก
+            for idx, line in enumerate(lines):
+                coords = [(x, y) for x, y in zip(line['X'], line['Y']) 
+                          if not (np.isnan(x) or np.isnan(y))]
+                if len(coords) < 2:
+                    continue
+                    
+                snapped_coords = [snap_map.get(coord, coord) for coord in coords]
+                line_nodes = set()
+                
+                for coord in snapped_coords:
+                    if coord in node_id_map:
+                        line_nodes.add(node_id_map[coord])
+                
+                # ถ้าไม่มี node ใดอยู่ใน main component
+                if not line_nodes.intersection(main_component):
+                    isolated_lines.append({
+                        'index': idx,
+                        'component_size': len([c for c in components 
+                                             if line_nodes.intersection(c)][0]),
+                        'line': line
+                    })
+    
+    result = {
+        'total_lines': len(lines),
+        'failed_lines': failed_lines,
+        'short_lines': short_lines,
+        'problematic_connections': problematic_connections,
+        'isolated_lines': isolated_lines,
+        'total_issues': len(failed_lines) + len(short_lines) + 
+                       len(problematic_connections) + len(isolated_lines)
+    }
+    
+    # Log summary
+    logging.info(f"Line snap analysis complete:")
+    logging.info(f"  Total lines: {result['total_lines']}")
+    logging.info(f"  Invalid lines: {len(failed_lines)}")
+    logging.info(f"  Short lines: {len(short_lines)}")
+    logging.info(f"  Problematic connections: {len(problematic_connections)}")
+    logging.info(f"  Isolated lines: {len(isolated_lines)}")
+    
+    return result
+
+
+def fix_failed_snap_lines(failed_analysis, lines, snap_tolerance):
+    """
+    พยายามแก้ไขสายที่มีปัญหาในการ snap
+    
+    Args:
+        failed_analysis: ผลลัพธ์จาก identify_failed_snap_lines()
+        lines: list ของสายทั้งหมด
+        snap_tolerance: ค่า tolerance
+    
+    Returns:
+        list: สายที่แก้ไขแล้ว
+    """
+    fixed_lines = lines.copy()
+    fix_log = []
+    
+    # แก้ไขสายสั้น - รวมกับสายใกล้เคียง
+    for short_line_info in failed_analysis['short_lines']:
+        idx = short_line_info['index']
+        start = short_line_info['start']
+        end = short_line_info['end']
+        
+        # หาสายที่มีจุดต่อใกล้เคียง
+        merge_candidate = None
+        min_dist = snap_tolerance * 3  # ขยายระยะการค้นหา
+        
+        for i, other_line in enumerate(lines):
+            if i == idx:
+                continue
+                
+            other_coords = [(x, y) for x, y in zip(other_line['X'], other_line['Y']) 
+                           if not (np.isnan(x) or np.isnan(y))]
+            if len(other_coords) < 2:
+                continue
+                
+            # ตรวจสอบระยะทางระหว่างจุดต่อ
+            for coord in [other_coords[0], other_coords[-1]]:
+                dist_to_start = np.hypot(coord[0] - start[0], coord[1] - start[1])
+                dist_to_end = np.hypot(coord[0] - end[0], coord[1] - end[1])
+                
+                if min(dist_to_start, dist_to_end) < min_dist:
+                    min_dist = min(dist_to_start, dist_to_end)
+                    merge_candidate = i
+        
+        if merge_candidate is not None:
+            fix_log.append({
+                'action': 'merge',
+                'line_index': idx,
+                'merged_with': merge_candidate,
+                'reason': 'Short line merged with nearby line'
+            })
+            # ในการใช้งานจริง อาจต้องรวมสายจริงๆ
+            # แต่ตอนนี้เพียงแค่บันทึกว่าควรรวม
+    
+    # แก้ไขสายที่มีจุดเริ่มต้นและสิ้นสุด snap ไปที่เดียวกัน
+    for prob_conn in failed_analysis['problematic_connections']:
+        idx = prob_conn['index']
+        line = lines[idx]
+        coords = [(x, y) for x, y in zip(line['X'], line['Y']) 
+                  if not (np.isnan(x) or np.isnan(y))]
+        
+        if len(coords) > 2:
+            # ใช้จุดกลางเป็นจุดแบ่ง
+            mid_idx = len(coords) // 2
+            
+            # สร้างสายใหม่ 2 เส้น
+            line1_x = [coord[0] for coord in coords[:mid_idx+1]]
+            line1_y = [coord[1] for coord in coords[:mid_idx+1]]
+            line2_x = [coord[0] for coord in coords[mid_idx:]]
+            line2_y = [coord[1] for coord in coords[mid_idx:]]
+            
+            fix_log.append({
+                'action': 'split',
+                'line_index': idx,
+                'split_point': coords[mid_idx],
+                'reason': 'Loop detected - split into two lines'
+            })
+    
+    return fixed_lines, fix_log
+
+
+def export_failed_lines_shapefile(failed_analysis, lines, output_path):
+    """
+    Export สายที่มีปัญหาเป็น shapefile เพื่อตรวจสอบ
+    
+    Args:
+        failed_analysis: ผลลัพธ์จาก identify_failed_snap_lines()
+        lines: list ของสายทั้งหมด
+        output_path: path สำหรับ output shapefile
+    """
+    import shapefile
+    
+    w = shapefile.Writer(output_path, shapeType=shapefile.POLYLINE)
+    w.field('FID', 'N')
+    w.field('Type', 'C', size=20)
+    w.field('Reason', 'C', size=100)
+    w.field('Length', 'F', decimal=6)
+    w.field('Index', 'N')
+    
+    fid = 0
+    
+    # Export สายที่มีปัญหาแต่ละประเภท
+    for failed in failed_analysis['failed_lines']:
+        idx = failed['index']
+        line = failed['line']
+        coords = [(x, y) for x, y in zip(line['X'], line['Y']) 
+                  if not (np.isnan(x) or np.isnan(y))]
+        if len(coords) >= 2:
+            w.line([coords])
+            w.record(fid, 'Failed', failed['reason'], 0, idx)
+            fid += 1
+    
+    for short in failed_analysis['short_lines']:
+        idx = short['index']
+        line = short['line']
+        coords = [(x, y) for x, y in zip(line['X'], line['Y']) 
+                  if not (np.isnan(x) or np.isnan(y))]
+        if len(coords) >= 2:
+            w.line([coords])
+            w.record(fid, 'Short', f'Length < 2*tolerance', 
+                    short['length'], idx)
+            fid += 1
+    
+    for prob in failed_analysis['problematic_connections']:
+        idx = prob['index']
+        line = prob['line']
+        coords = [(x, y) for x, y in zip(line['X'], line['Y']) 
+                  if not (np.isnan(x) or np.isnan(y))]
+        if len(coords) >= 2:
+            w.line([coords])
+            w.record(fid, 'Problematic', prob['reason'], 0, idx)
+            fid += 1
+    
+    for isolated in failed_analysis['isolated_lines']:
+        idx = isolated['index']
+        line = isolated['line']
+        coords = [(x, y) for x, y in zip(line['X'], line['Y']) 
+                  if not (np.isnan(x) or np.isnan(y))]
+        if len(coords) >= 2:
+            w.line([coords])
+            w.record(fid, 'Isolated', 
+                    f'Component size: {isolated["component_size"]}', 0, idx)
+            fid += 1
+    
+    w.close()
+    logging.info(f"Failed lines exported to: {output_path}")
+
+# ---------------------------------
+# 8) network validation
+def validate_network_after_snap(G, coord_mapping, meterNodes, transformerNode):
+    """
+    ตรวจสอบความสมบูรณ์ของ network หลังจาก snap
+    
+    Args:
+        G: NetworkX graph
+        coord_mapping: การ mapping พิกัดของ node
+        meterNodes: list ของ meter nodes
+        transformerNode: transformer node
+    
+    Returns:
+        dict: ผลการตรวจสอบ
+    """
+    validation_result = {
+        'is_connected': nx.is_connected(G),
+        'num_components': nx.number_connected_components(G),
+        'components': list(nx.connected_components(G)),
+        'unreachable_meters': [],
+        'meters_with_long_path': [],
+        'duplicate_edges': [],
+        'self_loops': list(nx.selfloop_edges(G)),
+        'isolated_nodes': list(nx.isolates(G))
+    }
+    
+    # ตรวจสอบ meter ที่เข้าไม่ถึง transformer
+    for meter in meterNodes:
+        try:
+            path_length = nx.shortest_path_length(G, transformerNode, meter, weight='weight')
+            if path_length > 1000:  # ระยะทางมากเกินไป
+                validation_result['meters_with_long_path'].append({
+                    'meter': meter,
+                    'distance': path_length
+                })
+        except nx.NetworkXNoPath:
+            validation_result['unreachable_meters'].append(meter)
+    
+    # ตรวจสอบ duplicate edges
+    seen_edges = set()
+    for u, v in G.edges():
+        edge = tuple(sorted([u, v]))
+        if edge in seen_edges:
+            validation_result['duplicate_edges'].append(edge)
+        seen_edges.add(edge)
+    
+    # สรุปผล
+    validation_result['summary'] = {
+        'total_nodes': G.number_of_nodes(),
+        'total_edges': G.number_of_edges(),
+        'total_meters': len(meterNodes),
+        'reachable_meters': len(meterNodes) - len(validation_result['unreachable_meters']),
+        'network_complete': validation_result['is_connected'] and 
+                           len(validation_result['unreachable_meters']) == 0
+    }
+    
+    # Log ผลการตรวจสอบ
+    logging.info("Network validation after snap:")
+    logging.info(f"  Connected: {validation_result['is_connected']}")
+    logging.info(f"  Components: {validation_result['num_components']}")
+    logging.info(f"  Unreachable meters: {len(validation_result['unreachable_meters'])}")
+    logging.info(f"  Self loops: {len(validation_result['self_loops'])}")
+    logging.info(f"  Isolated nodes: {len(validation_result['isolated_nodes'])}")
+    
+    return validation_result
+
+# ---------------------------------
+# 9) extract data from shapefile
 def extractLineData(lineData, snap_tolerance=0.1):
     """แก้ไขฟังก์ชันเดิมให้รองรับ coordinate snapping"""
     logging.info(f"Extracting line data with coordinate snapping (tolerance={snap_tolerance}m)")
@@ -695,11 +1320,8 @@ def extractMeterData(meterData):
     logging.info(f"Meter data extracted successfully. Total meters: {len(meterLocations)}")
     return meterLocations, initialVoltages, totalLoads, phase_loads, peano, phases
 
-
-########################################
-# 2. BUILDING THE NETWORK
-########################################
-
+# ---------------------------------
+# 10) build & analyze LV network
 def buildLVNetworkWithLoads(lvLines, mvLines, meterLocations, transformerLocation, phase_loads, conductorResistance, 
                           conductorReactance=None,*,svcLines=None, use_shape_length=False, lvData=None, 
                           length_field="Shape_Leng", snap_tolerance=0.1):
@@ -833,90 +1455,64 @@ def buildLVNetworkWithLoads(lvLines, mvLines, meterLocations, transformerLocatio
     for line in mvLines:
         add_line_to_network(line, is_lv=False)
 
+    logging.info("Connecting meters to network (KDTree)…")
+
     # เชื่อมต่อมิเตอร์
-    logging.info("Connecting meters to network...")
-    from scipy.spatial import cKDTree
-
-    # เตรียม service line lookup
-    svc_tol = max(0.05, snap_tolerance)  # ใช้ tolerance ที่ใหญ่กว่าเล็กน้อย
-    svc_ends = []
-    for line in svcLines:
-        pts = [(x, y) for x, y in zip(line['X'], line['Y']) if not np.isnan(x)]
-        if len(pts) >= 2:
-            # Snap service line endpoints ด้วย
-            start_snapped = coord_snap_map.get(tuple(pts[0]), tuple(pts[0]))
-            end_snapped = coord_snap_map.get(tuple(pts[-1]), tuple(pts[-1]))
-            svc_ends.append((np.array(start_snapped), np.array(end_snapped), pts))
-
-    # เตรียม KDTree สำหรับ LV nodes
+    if 'tk_progress' in globals():
+        tk_progress.start(len(meterLocations))
+    # ► เตรียมอาร์เรย์พิกัด LV-nodes
     if lv_nodes:
-        lv_coords = np.array([coord_mapping[n] for n in lv_nodes])
-        lv_kdtree = cKDTree(lv_coords)
-        lv_nodes_list = list(lv_nodes)
-        
-        def nearest_lv(pt):
-            dist, idx = lv_kdtree.query(pt)
-            return lv_nodes_list[idx], dist
+        lv_pts   = np.array([coord_mapping[n] for n in lv_nodes])
+        kdt_lv   = cKDTree(lv_pts)
+        lv_list  = list(lv_nodes)
     else:
-        def nearest_lv(pt): 
-            return None, float('inf')
-        
-    # เชื่อมต่อมิเตอร์แต่ละตัว
+        kdt_lv = None
+
+    # ► เตรียม service-endpoints
+    svc_endpts = []
+    for line in svcLines:
+        pts = [(x,y) for x,y in zip(line['X'], line['Y']) if not np.isnan(x)]
+        if len(pts) >= 2:
+            p0, p1 = coord_snap_map.get(tuple(pts[0]), tuple(pts[0])), \
+                     coord_snap_map.get(tuple(pts[-1]),tuple(pts[-1]))
+            svc_endpts.extend([p0, p1])
+    kdt_svc = cKDTree(svc_endpts) if svc_endpts else None
+
     meterNodes = []
     for idx, m_xy in enumerate(meterLocations):
-        meterNode = node_id
-        meter_coord = tuple(m_xy)
-        node_mapping[meter_coord] = meterNode
-        coord_mapping[meterNode] = meter_coord
+        meterNode               = node_id
+        node_mapping[tuple(m_xy)] = meterNode
+        coord_mapping[meterNode]  = tuple(m_xy)
         node_id += 1
         G.add_node(meterNode)
 
-        # เพิ่มโหลดให้แต่ละเฟส
+        # โหลด/เฟส
         for ph in 'ABC':
             G.nodes[meterNode][f'load_{ph}'] = phase_loads[ph][idx]
 
-        # หา service line ที่เชื่อมกับมิเตอร์นี้
-        svc_hit = None
-        for p0, p1, pts in svc_ends:
-            if np.linalg.norm(m_xy - p0) < svc_tol:
-                svc_hit = (p0, p1, pts)
-                break
-            if np.linalg.norm(m_xy - p1) < svc_tol:
-                svc_hit = (p1, p0, pts)
-                break
+        # --- หาโหนด LV ใกล้ที่สุด ---
+        if kdt_lv is None:
+            logging.error("No LV nodes to snap meter.")
+            continue
 
-        if svc_hit:
-            # ใช้ service line
-            m_end, lv_end, pts = svc_hit
-            lv_node, _ = nearest_lv(lv_end)
-            if lv_node is None:
-                logging.error("LV node not found for service line endpoint.")
-                continue
-            
-            svc_len = np.sum(np.hypot(np.diff([p[0] for p in pts]),
-                                    np.diff([p[1] for p in pts])))
-            R = svc_len/1000 * conductorResistance
-            X = svc_len/1000 * (conductorReactance if conductorReactance
-                                else 0.1*conductorResistance)
-            G.add_edge(meterNode, lv_node,
-                    weight=svc_len, resistance=R, reactance=X,
-                    is_service=True)
-        else:
-            # เชื่อมกับ LV node ที่ใกล้ที่สุด
-            lv_node, dist = nearest_lv(m_xy)
-            if lv_node is None:
-                logging.error(f"No LV line to snap meter {idx}")
-                continue
-            
-            R = dist/1000 * conductorResistance
-            X = dist/1000 * (conductorReactance if conductorReactance
-                            else 0.1*conductorResistance)
-            G.add_edge(meterNode, lv_node,
-                    weight=dist, resistance=R, reactance=X,
-                    is_service=False)
-        
+        d_lv, i_lv  = kdt_lv.query(m_xy)
+        lv_node     = lv_list[i_lv]
+
+        # --- ถ้ามี service-line ใกล้กว่า ใช้เป็น edge สั้น ๆ ---
+        use_service = False
+        if kdt_svc is not None:
+            d_svc, _ = kdt_svc.query(m_xy)
+            use_service = d_svc < d_lv
+
+        dist = d_svc if use_service else d_lv
+        R = dist/1000 * conductorResistance
+        X = dist/1000 * (conductorReactance if conductorReactance else 0.1*conductorResistance)
+        G.add_edge(meterNode, lv_node, weight=dist,
+                   resistance=R, reactance=X, is_service=use_service)
+
         meterNodes.append(meterNode)
-
+    if 'tk_progress' in globals():
+        tk_progress.finish()
     # เพิ่ม Transformer node
     transformerLocationTuple = tuple(transformerLocation)
     # Snap transformer location ด้วย
@@ -967,15 +1563,28 @@ def buildLVNetworkWithLoads(lvLines, mvLines, meterLocations, transformerLocatio
             logging.warning(f"Component {i+1}: {len(comp)} nodes")
     else:
         logging.info("Network is fully connected after coordinate snapping")
+    # ตรวจสอบ edge ที่อาจมีปัญหา
+    problem_edges = []
+    for u, v, data in G.edges(data=True):
+        if data['weight'] < snap_tolerance:
+            problem_edges.append((u, v, data['weight']))
+    
+    if problem_edges:
+        logging.warning(f"Found {len(problem_edges)} edges shorter than snap tolerance")
+        # อาจเพิ่มรายละเอียดถ้าต้องการ
+        for u, v, weight in problem_edges[:5]:  # แสดงแค่ 5 อันแรก
+            u_coord = coord_mapping.get(u, (0, 0))
+            v_coord = coord_mapping.get(v, (0, 0))
+            logging.debug(f"  Edge {u}-{v}: length={weight:.8f}, "
+                         f"coords: {u_coord} -> {v_coord}")
+        if len(problem_edges) > 5:
+            logging.debug(f"  ... and {len(problem_edges) - 5} more problem edges")
+    # ==================================
 
     logging.info(f"LV network built successfully: {G.number_of_nodes()} nodes, {G.number_of_edges()} edges")
     logging.info(f"Applied coordinate snapping with tolerance {snap_tolerance}m")
     
     return (G, transformerNode, meterNodes, node_mapping, coord_mapping)
-
-########################################
-# NEW: BUILD LV NETWORK USING LINE ATTRIBUTE
-########################################
 
 def buildLVNetworkUsingLineAttribute(lvData, length_field="Shape_Leng"):
     logging.info(f"Building LV network using line attribute '{length_field}' as distance...")
@@ -1031,16 +1640,14 @@ def snapPointToLVNetwork(G, node_mapping, coord_mapping, pointXY):
     G.add_edge(new_point_id, nearest_node, weight=min_dist)
     return new_point_id
 
-########################################
-# 3. NETWORK-BASED LOAD CENTER
-########################################
-
+# ---------------------------------
+# 11) Network load center
 def calculateNetworkLoadCenter(meterLocations, phase_loads, lvLines, mvLines, conductorResistance,
                               conductorReactance=None, lvData=None, svcLines=None, snap_tolerance=0.1):
     """
-    แก้ไขฟังก์ชันเดิมให้ใช้ coordinate snapping
+    แก้ไขฟังก์ชันเดิมให้ใช้ coordinate snapping และเพิ่มประสิทธิภาพสำหรับมิเตอร์จำนวนมาก
     """
-    logging.info("Calculating network load center with coordinate snapping...")
+    logging.info("Calculating network load center with coordinate snapping and optimizations...")
     if len(meterLocations) == 0:
         logging.warning("No meter locations; returning [0, 0].")
         return np.array([0, 0], dtype=float)
@@ -1052,103 +1659,186 @@ def calculateNetworkLoadCenter(meterLocations, phase_loads, lvLines, mvLines, co
         use_shape_length=lvData is not None,
         lvData=lvData,
         svcLines=svcLines,
-        snap_tolerance=snap_tolerance  # เพิ่มพารามิเตอร์นี้
+        snap_tolerance=snap_tolerance
     )
     
     # คำนวณโหลดรวมของแต่ละมิเตอร์
     total_loads = phase_loads['A'] + phase_loads['B'] + phase_loads['C']
     
     # สร้าง array สำหรับเก็บผลรวมระยะทาง
-    sum_distances = np.zeros(len(G.nodes))
-    node_id_to_index = {nid: idx for idx, nid in enumerate(G.nodes)}
-    
-    # ตรวจว่าเป็นโครงข่ายแบบต้นไม้หรือไม่ (ช่วยเลือกอัลกอริทึมที่เหมาะสม)
-    is_tree_like = len(G.edges()) <= len(G.nodes()) + 5  # ให้ tolerance นิดหน่อย
+    node_list = list(G.nodes())
+    node_id_to_index = {nid: idx for idx, nid in enumerate(node_list)}
+    sum_distances = np.zeros(len(node_list))
     
     # กรองมิเตอร์ที่ไม่มีโหลด
     valid_meters = [(i, meter_node) for i, meter_node in enumerate(mNodes) if total_loads[i] > 0]
     
-    # สร้าง distance cache
-    distance_cache = {}
+    if len(valid_meters) == 0:
+        logging.warning("No meters with non-zero loads")
+        return np.array([0, 0], dtype=float)
     
-    # ฟังก์ชันคำนวณระยะทางแบบเร็ว
-    def fast_distance_calc(graph, source, weight='weight'):
-        # กรณีกราฟเป็นแบบต้นไม้หรือใกล้เคียง
-        if is_tree_like:
-            # สร้าง spanning tree
-            T = nx.dfs_tree(graph, source=source)
-            
-            # เริ่มต้นด้วยค่าระยะทางเป็นอนันต์
-            distances = {node: float('inf') for node in graph.nodes()}
-            distances[source] = 0.0
-            
-            # ใช้ BFS คำนวณระยะทาง
-            queue = [source]
-            visited = {source}
-            
-            while queue:
-                current = queue.pop(0)
-                
-                for neighbor in T.successors(current):
-                    if neighbor not in visited:
-                        # คำนวณระยะทางสะสม
-                        edge_weight = graph[current][neighbor].get(weight, 1.0)
-                        distances[neighbor] = distances[current] + edge_weight
-                        
-                        # เพิ่มเข้า queue
-                        queue.append(neighbor)
-                        visited.add(neighbor)
-            
-            # ตรวจสอบโหนดที่ไม่สามารถเข้าถึงได้
-            unreachable = [node for node in graph.nodes() if distances[node] == float('inf')]
-            if unreachable:
-                # ใช้ Dijkstra เฉพาะกับโหนดที่เข้าไม่ถึง
-                dij_distances = nx.single_source_dijkstra_path_length(graph, source, weight=weight)
-                for node in unreachable:
-                    if node in dij_distances:
-                        distances[node] = dij_distances[node]
-            
-            return distances
-        else:
-            # ใช้ Dijkstra ถ้าไม่เป็นแบบต้นไม้ (เพื่อความถูกต้อง)
-            return nx.single_source_dijkstra_path_length(graph, source, weight=weight)
+    logging.info(f"Processing {len(valid_meters)} meters with non-zero loads out of {len(mNodes)} total meters")
     
-    # คำนวณระยะทาง
-    for i, meter_node in tqdm(valid_meters, desc="Calculating distances"):
-        load = total_loads[i]
+    # ตรวจสอบขนาดของปัญหาและเลือกวิธีการคำนวณ
+    num_valid_meters = len(valid_meters)
+    
+    if num_valid_meters <= 100:
+        # วิธีเดิมสำหรับมิเตอร์น้อย
+        if 'tk_progress' in globals():
+            tk_progress.start(num_valid_meters, stage="Distance calc")
         
-        try:
-            # ใช้ cache ถ้ามี
-            if meter_node in distance_cache:
-                distances = distance_cache[meter_node]
-            else:
-                # คำนวณระยะทางด้วยอัลกอริทึมที่เหมาะสม
-                distances = fast_distance_calc(G, meter_node, weight='weight')
-                # เก็บใน cache
-                distance_cache[meter_node] = distances
+        for i, (meter_idx, meter_node) in enumerate(valid_meters):
+            load = total_loads[meter_idx]
+            distances = nx.single_source_dijkstra_path_length(G, meter_node, weight='weight')
+            
+            for node, dist in distances.items():
+                if node in node_id_to_index:
+                    sum_distances[node_id_to_index[node]] += load * dist
+            
+            if 'tk_progress' in globals():
+                tk_progress.step()
+        
+        if 'tk_progress' in globals():
+            tk_progress.finish()
+    
+    else:
+        # วิธีที่เร็วขึ้นสำหรับมิเตอร์จำนวนมาก
+        logging.info(f"Using optimized calculation for {num_valid_meters} meters")
+        
+        # 1. จัดกลุ่มมิเตอร์ที่อยู่ใกล้กัน
+        meter_coords = np.array([coord_mapping[node] for _, node in valid_meters])
+        
+        # ใช้ k-means clustering แบบง่าย
+        num_clusters = min(50, num_valid_meters // 10)  # ประมาณ 10 มิเตอร์ต่อ cluster
+        
+        if num_clusters > 1:
+            # Simple k-means clustering
+            
+            try:
+                kmeans = MiniBatchKMeans(n_clusters=num_clusters, batch_size=100, random_state=42)
+                cluster_labels = kmeans.fit_predict(meter_coords)
+                cluster_centers = kmeans.cluster_centers_
+            except:
+                # Fallback ถ้าไม่มี sklearn
+                logging.info("sklearn not available, using grid-based clustering")
+                cluster_labels, cluster_centers = _simple_grid_clustering(meter_coords, num_clusters)
+        else:
+            cluster_labels = np.zeros(len(valid_meters), dtype=int)
+            cluster_centers = [np.mean(meter_coords, axis=0)]
+        
+        # 2. คำนวณ representative meters สำหรับแต่ละ cluster
+        if 'tk_progress' in globals():
+            tk_progress.start(num_clusters, stage="Optimized distance calc")
+        
+        for cluster_id in range(num_clusters):
+            cluster_mask = cluster_labels == cluster_id
+            cluster_meters = [vm for i, vm in enumerate(valid_meters) if cluster_mask[i]]
+            
+            if not cluster_meters:
+                continue
+            
+            # หา representative meter (มิเตอร์ที่มีโหลดมากที่สุดใน cluster)
+            max_load_idx = 0
+            max_load = 0
+            for i, (meter_idx, _) in enumerate(cluster_meters):
+                if total_loads[meter_idx] > max_load:
+                    max_load = total_loads[meter_idx]
+                    max_load_idx = i
+            
+            rep_meter_idx, rep_meter_node = cluster_meters[max_load_idx]
+            
+            # คำนวณ total load ของ cluster
+            cluster_total_load = sum(total_loads[meter_idx] for meter_idx, _ in cluster_meters)
+            
+            # คำนวณระยะทางจาก representative meter
+            try:
+                distances = nx.single_source_dijkstra_path_length(G, rep_meter_node, weight='weight')
                 
-            # คำนวณผลรวมระยะทาง
-            for n_id, dist in distances.items():
-                if n_id in node_id_to_index:
-                    sum_distances[node_id_to_index[n_id]] += load * dist
-                
-        except nx.NetworkXError:
-            logging.error(f"No path for meter_node={meter_node}, skipping.")
-            continue
+                # Apply ด้วย cluster load
+                for node, dist in distances.items():
+                    if node in node_id_to_index:
+                        sum_distances[node_id_to_index[node]] += cluster_total_load * dist
+            except:
+                logging.warning(f"Failed to calculate distances for cluster {cluster_id}")
+            
+            if 'tk_progress' in globals():
+                tk_progress.step()
+        
+        if 'tk_progress' in globals():
+            tk_progress.finish()
+        
+        # 3. Fine-tune ด้วยมิเตอร์ที่มีโหลดสูงมาก (top 10%)
+        high_load_threshold = np.percentile(total_loads[total_loads > 0], 90)
+        high_load_meters = [(i, node) for i, node in valid_meters 
+                           if total_loads[i] > high_load_threshold]
+        
+        if len(high_load_meters) < 50:  # ถ้ามีไม่มากเกินไป
+            logging.info(f"Fine-tuning with {len(high_load_meters)} high-load meters")
+            for meter_idx, meter_node in high_load_meters:
+                load = total_loads[meter_idx]
+                try:
+                    distances = nx.single_source_dijkstra_path_length(G, meter_node, weight='weight')
+                    for node, dist in distances.items():
+                        if node in node_id_to_index:
+                            # ลบค่าเดิมที่คำนวณจาก cluster และใส่ค่าที่แม่นยำ
+                            sum_distances[node_id_to_index[node]] += load * dist * 0.1  # weight adjustment
+                except:
+                    pass
     
     # หาโหนดที่มีผลรวมระยะทางต่ำสุด
     best_node_idx = np.argmin(sum_distances)
-    best_node_id = list(G.nodes)[best_node_idx]
+    best_node_id = node_list[best_node_idx]
     bestCoord = np.array(coord_mapping[best_node_id])
     
     logging.info(f"Best network load center: {bestCoord}")
     return bestCoord
 
 
-########################################
-# 4. POWER FLOW & LOSS CALCULATION
-########################################
+def _simple_grid_clustering(coords, n_clusters):
+    """
+    Simple grid-based clustering เมื่อไม่มี sklearn
+    """
+    # หาขอบเขตของพิกัด
+    min_x, min_y = coords.min(axis=0)
+    max_x, max_y = coords.max(axis=0)
+    
+    # คำนวณขนาด grid
+    grid_size = int(np.sqrt(n_clusters))
+    x_step = (max_x - min_x) / grid_size
+    y_step = (max_y - min_y) / grid_size
+    
+    # กำหนด cluster labels
+    labels = np.zeros(len(coords), dtype=int)
+    centers = []
+    
+    for i in range(len(coords)):
+        x, y = coords[i]
+        grid_x = int((x - min_x) / x_step) if x_step > 0 else 0
+        grid_y = int((y - min_y) / y_step) if y_step > 0 else 0
+        
+        # จำกัดไม่ให้เกิน grid
+        grid_x = min(grid_x, grid_size - 1)
+        grid_y = min(grid_y, grid_size - 1)
+        
+        labels[i] = grid_y * grid_size + grid_x
+    
+    # คำนวณ centers
+    for cluster_id in range(n_clusters):
+        mask = labels == cluster_id
+        if mask.any():
+            centers.append(coords[mask].mean(axis=0))
+        else:
+            # ถ้าไม่มีจุดใน cluster นี้ ใช้จุดกลางของ grid
+            grid_x = cluster_id % grid_size
+            grid_y = cluster_id // grid_size
+            center_x = min_x + (grid_x + 0.5) * x_step
+            center_y = min_y + (grid_y + 0.5) * y_step
+            centers.append([center_x, center_y])
+    
+    return labels, np.array(centers)
 
+# ---------------------------------
+# 12) Power-flow & loss
 def calculatePowerLoss(G, transformerNode, meterNodes, coord_mapping, powerFactor, initialVoltage):
     logging.info("Calculating power flow and losses using DFS tree method...")
     T = nx.dfs_tree(G, source=transformerNode)
@@ -1323,19 +2013,16 @@ def calculateUnbalancedPowerFlow(G, transformerNode, meterNodes, powerFactor, ba
         total_power_loss += loss
     
     return node_voltages, branch_currents, total_power_loss
-########################################
-# 5. OBJECTIVES & CONSTRAINTS
-########################################
 
+# ---------------------------------
+# 13) Objectives & Constraints
 def objectiveFunction(transformerLocation, meterLocations, phase_loads, initialVoltage,
                      conductorResistance, lvLines, powerFactor, load_center_only=False, 
                      conductorReactance=None, lvData=None, svcLines=None):
     """แก้ไขฟังก์ชันเดิมให้ใช้ coordinate snapping"""
     logging.debug(f"Evaluating objective function at location {transformerLocation}...")
     
-    # กำหนด snap tolerance
-    SNAP_TOLERANCE = 0.1
-    
+       
     # ใช้ฟังก์ชันที่แก้ไขแล้ว
     G, tNode, mNodes, nm, cm = buildLVNetworkWithLoads(
         lvLines, [], meterLocations, transformerLocation, phase_loads, conductorResistance,
@@ -1370,13 +2057,13 @@ def objectiveFunction(transformerLocation, meterLocations, phase_loads, initialV
     distanceFromNetworkCenter = np.linalg.norm(transformerLocation - netCenter)
     
     if load_center_only:
-        voltage_drop_weight = 1.0
-        power_loss_weight = 0.1
-        load_center_weight = 5000.0
+        voltage_drop_weight = 4.0
+        power_loss_weight = 0.5
+        load_center_weight = 60.0
     else:
-        voltage_drop_weight = 2.0
-        power_loss_weight = 0.2
-        load_center_weight = 1000.0
+        voltage_drop_weight = 8.0
+        power_loss_weight = 1.0
+        load_center_weight = 30.0
     score = (voltage_drop_weight * totalVoltageDrop) + (power_loss_weight * totalPowerLoss) + (load_center_weight * distanceFromNetworkCenter)
     logging.debug(f"Objective function value = {score:.4f}")
     return score
@@ -1387,9 +2074,7 @@ def voltageConstraint(transformerLocation, meterLocations, phase_loads, initialV
     """แก้ไขฟังก์ชันเดิมให้ใช้ coordinate snapping"""
     logging.debug(f"Checking voltage constraint at location={transformerLocation}...")
     
-    # กำหนด snap tolerance
-    SNAP_TOLERANCE = 0.1
-    
+  
     G, tNode, mNodes, nm, cm = buildLVNetworkWithLoads(
         lvLines, [], meterLocations, transformerLocation, phase_loads, conductorResistance,
         conductorReactance=conductorReactance,
@@ -1430,10 +2115,8 @@ def transformerOnLVWithCond3Constraint(transformerLocation, lvLines):
                 closestDistance = dist
     return epsilon - closestDistance
 
-########################################
-# 6. ADDITIONAL UTILS
-########################################
-
+# ---------------------------------
+# 14) Additional utility
 def snap_to_conductor(load_center, conductor_lines):
     logging.info("Snapping point to the nearest conductor...")
     min_distance = np.inf
@@ -1459,10 +2142,6 @@ def snap_to_conductor(load_center, conductor_lines):
     logging.debug(f"Snapped point: {snapped_point} (distance={min_distance:.2f})")
     return snapped_point
 
-########################################
-# 6B. NEW UTILS FOR JUNCTION CONSTRAINT
-########################################
-
 def get_junction_node_coords(G, coord_mapping, min_degree=3):
     logging.info(f"Collecting junction node coords (degree >= {min_degree})...")
     junction_coords = []
@@ -1482,13 +2161,8 @@ def notOnJunctionConstraint(x, junction_coords, epsilon=1.0):
             min_dist = dist
     return min_dist - epsilon
 
-########################################
-# 7. SPLITTING POINT & PARTITIONING
-########################################
-
-# Modified findSplittingPoint() now accepts candidate_index and returns candidate_edges
-
-
+# ---------------------------------
+# 15) Splitting & partitioning
 def findSplittingPoint(G, transformerNode, meterNodes, coord_mapping, powerFactor, initialVoltage, candidate_index=0):
     """
     ปรับปรุงฟังก์ชัน findSplittingPoint เพื่อเพิ่มประสิทธิภาพ:
@@ -1759,19 +2433,13 @@ def performForwardBackwardSweepAndDivideLoads(G, transformerNode, meterNodes, co
     
     return real_node_voltages, real_branch_currents, group1_meters, group2_meters
 
-########################################
-# 8. HELPER: GET BOUNDING BOX OF A SET OF POINTS
-########################################
-
 def get_bounding_box(points):
     min_x, max_x = np.min(points[:,0]), np.max(points[:,0])
     min_y, max_y = np.min(points[:,1]), np.max(points[:,1])
     return [(min_x, max_x), (min_y, max_y)]
 
-########################################
-# 9. OPTIMIZATION FUNCTIONS
-########################################
-
+# ---------------------------------
+# 16) Optimization functions
 def optimizeTransformerLocationOnLVCond3(meterLocations, phase_loads, initialTransformerLocation,
                                          lvLines, initialVoltage, conductorResistance, powerFactor,
                                          conductorReactance=None, lvData=None, svcLines=None,
@@ -1839,9 +2507,7 @@ def objectiveFunction(transformerLocation, meterLocations, phase_loads, initialV
     """แก้ไขฟังก์ชันเดิมให้ใช้ coordinate snapping"""
     logging.debug(f"Evaluating objective function at location {transformerLocation}...")
     
-    # กำหนด snap tolerance
-    SNAP_TOLERANCE = 0.1
-    
+      
     # ใช้ฟังก์ชันที่แก้ไขแล้ว
     G, tNode, mNodes, nm, cm = buildLVNetworkWithLoads(
         lvLines, [], meterLocations, transformerLocation, phase_loads, conductorResistance,
@@ -1893,9 +2559,6 @@ def voltageConstraint(transformerLocation, meterLocations, phase_loads, initialV
     """แก้ไขฟังก์ชันเดิมให้ใช้ coordinate snapping"""
     logging.debug(f"Checking voltage constraint at location={transformerLocation}...")
     
-    # กำหนด snap tolerance
-    SNAP_TOLERANCE = 0.1
-    
     G, tNode, mNodes, nm, cm = buildLVNetworkWithLoads(
         lvLines, [], meterLocations, transformerLocation, phase_loads, conductorResistance,
         conductorReactance=conductorReactance,
@@ -1924,10 +2587,18 @@ def optimizeGroup(meterLocations, phase_loads, initialTransformerLocation,
     if len(meterLocations) == 0:
         logging.info("No meters in this group => skip optimization.")
         return None
-
-    # กำหนด snap tolerance
-    SNAP_TOLERANCE = 0.1
-
+    # ใช้ get_bounding_box() ที่มีอยู่แล้ว
+    bounds = get_bounding_box(meterLocations)
+    min_x, max_x = bounds[0]
+    min_y, max_y = bounds[1]
+    
+    # เพิ่ม buffer 50 meters
+    buffer = 50
+    min_x -= buffer
+    max_x += buffer
+    min_y -= buffer
+    max_y += buffer
+    
     # Build a temporary graph for this group's meters + lines
     G_temp, tNode_temp, mNodes_temp, node_mapping_temp, coord_mapping_temp = buildLVNetworkWithLoads(
         lvLines, mvLines,
@@ -1955,7 +2626,9 @@ def optimizeGroup(meterLocations, phase_loads, initialTransformerLocation,
             continue
 
         node_xy = np.array(coord_mapping_temp[node_id], dtype=float)
-
+        # ตรวจสอบว่า node อยู่ใน bounding box + buffer หรือไม่
+        if not (min_x <= node_xy[0] <= max_x and min_y <= node_xy[1] <= max_y):
+            continue  # ข้าม node ที่อยู่นอกขอบเขต
         # Evaluate your existing objective function at this node
         score = objectiveFunction(
             node_xy,
@@ -1982,16 +2655,87 @@ def optimizeGroup(meterLocations, phase_loads, initialTransformerLocation,
     logging.info(f"Discrete node-based optimization picked node => {best_coord}, score={best_score:.2f}")
     return best_coord
 
-########################################
-# 10. ITERATIVE DISTANCE CHECK
-########################################
+def optimize_phase_balance(
+    meterLocations: np.ndarray,
+    totalLoads:     np.ndarray,
+    phase_loads:    dict,
+    peano:          np.ndarray,
+    lvData:         shapefile.Reader,
+    original_phases: list[str]
+):
+    # แผนที่โค้ด PHASEDESIG
+    code_map = {4: "A", 1: "C", 2: "B", 3: "BC", 5: "CA", 6: "AB", 7: "ABC"}
+
+    # อ่าน PHASEDESIG จาก lvData
+    fields    = [f[0] for f in lvData.fields[1:]]
+    recs      = lvData.records()
+    shapes    = lvData.shapes()
+    idx_phase = fields.index('PHASEDESIG')
+
+    mids = []
+    phase_designs = []
+    for rec, shp in zip(recs, shapes):
+        raw = rec[idx_phase]
+        phs = code_map.get(int(raw), "")
+        allowed = [c for c in phs if c in ('A','B','C')]
+        if not allowed:
+            continue
+        mids.append(np.mean(shp.points, axis=0))
+        phase_designs.append(allowed)
+
+    tree = cKDTree(np.vstack(mids)) if mids else None
+    N = len(meterLocations)
+    loads = totalLoads.copy()
+    new_phases = [''] * N
+    cum_load = {'A':0.0, 'B':0.0, 'C':0.0}
+
+    # ขั้นแรก: มิเตอร์ ABC คงไว้
+    for i, ph in enumerate(original_phases):
+        if set(ph.upper()) == {'A','B','C'}:
+            new_phases[i] = 'ABC'
+            for c in ('A','B','C'):
+                cum_load[c] += phase_loads[c][i]
+
+    order = np.argsort(-loads)
+    for i in order:
+        if new_phases[i]:
+            continue
+
+        # หา allowed phases ของสาย
+        if tree:
+            _, seg_i = tree.query(meterLocations[i])
+            allowed = phase_designs[seg_i]
+        else:
+            allowed = []
+
+        if not allowed:
+            logging.warning(f"Meter Peano={peano[i]} ไม่มีเฟสที่สายรองรับเลย")
+            continue
+
+        # ถ้าสายรองรับแค่เฟสเดียว ให้เซ็ตเลย
+        if len(allowed) == 1:
+            pick = allowed[0]
+        else:
+            # เลือกเฟสที่ cum_load ต่ำสุดใน allowed
+            pick = min(allowed, key=lambda ph: cum_load[ph])
+
+        new_phases[i] = pick
+        cum_load[pick] += loads[i]
+
+    # สร้าง phase_loads ใหม่
+    new_phase_loads = { 'A':np.zeros(N), 'B':np.zeros(N), 'C':np.zeros(N) }
+    for i, ph in enumerate(new_phases):
+        if ph == 'ABC':
+            for c in ('A','B','C'):
+                new_phase_loads[c][i] = phase_loads[c][i]
+        elif ph:
+            new_phase_loads[ph][i] = loads[i]
+
+    return new_phases, new_phase_loads
 
 
-
-########################################
-# 11. EXPORT & PLOTTING
-########################################
-
+# ---------------------------------
+# 17) Export & plotting
 def exportPointsToShapefile(point_coords, shapefile_path, attributes_list=None):
     logging.info(f"Exporting {len(point_coords)} point(s) to shapefile: {shapefile_path}...")
     w = shapefile.Writer(shapefile_path, shapeType=shapefile.POINT)
@@ -2039,6 +2783,10 @@ def exportResultDFtoShapefile(result_df, shapefile_path="output_meters.shp"):
     w.field('VoltC', 'F', decimal=2)
     w.field('Group', 'C', size=10)
     w.field('Phases', 'C', size=5)
+    w.field('NewPhs','C',size=5)      # new_phases
+    w.field('LoadA','F',decimal=2)    # new load A
+    w.field('LoadB','F',decimal=2)    # new load B
+    w.field('LoadC','F',decimal=2)    # new load C
     w.field('MeterX', 'F', decimal=8)
     w.field('MeterY', 'F', decimal=8)
 
@@ -2056,7 +2804,11 @@ def exportResultDFtoShapefile(result_df, shapefile_path="output_meters.shp"):
             row.get('Final Voltage B (V)', 0),      # final voltage B
             row.get('Final Voltage C (V)', 0),      # final voltage C
             row.get('Group', ''),                   # group label
-            row.get('Phases', ''),                  # e.g. 'A', 'B', 'C'
+            row.get('Phases', ''), 
+            row.get('New Phase',''),          # ใส่ค่าจาก new_phases
+            row.get('New Load A', 0.0),       # ใส่ new_phase_loads['A']
+            row.get('New Load B', 0.0),
+            row.get('New Load C', 0.0),                 # e.g. 'A', 'B', 'C'
             x_coord,
             y_coord
         )
@@ -2069,12 +2821,10 @@ def plotResults(lvLinesX, lvLinesY, mvLinesX, mvLinesY, eserviceLinesX, eservice
                 meterLocations, initialTransformerLocation, optimizedTransformerLocation,
                 group1_indices, group2_indices, splitting_point_coords=None, coord_mapping=None,
                 optimizedTransformerLocationGroup1=None, optimizedTransformerLocationGroup2=None,
-                transformer_losses=None, phases=None, result_df=None,G=None):
+                transformer_losses=None, phases=None, result_df=None, G=None):
     logging.info("Plotting final results...")
-    ##################  GUI  ########################################################
     plot_path = "output_plot.png"
 
-    
     # Delete existing file to prevent conflicts
     if os.path.exists(plot_path):
         os.remove(plot_path)
@@ -2082,18 +2832,25 @@ def plotResults(lvLinesX, lvLinesY, mvLinesX, mvLinesY, eserviceLinesX, eservice
     # สร้างหน้าต่าง Toplevel
     plot_window = tk.Toplevel()
     plot_window.title("Meter Locations, Lines, and Transformers")
-    plot_window.geometry("1000x800")
+    plot_window.geometry("1200x900")
     
-    # สร้าง frame สำหรับใส่ canvas และ toolbar
-    frame = tk.Frame(plot_window)
-    frame.pack(fill=tk.BOTH, expand=True)
+    # สร้าง main frame
+    main_frame = tk.Frame(plot_window)
+    main_frame.pack(fill=tk.BOTH, expand=True)
     
-    # สร้าง figure และ embed ใน Tkinter window
+    # สร้าง frame สำหรับปุ่มควบคุม (อยู่ด้านบน)
+    control_frame = tk.Frame(main_frame, bg='lightgray', height=40)
+    control_frame.pack(side=tk.TOP, fill=tk.X, pady=2)
+    control_frame.pack_propagate(False)
+    
+    # สร้าง frame สำหรับ plot
+    plot_frame = tk.Frame(main_frame)
+    plot_frame.pack(fill=tk.BOTH, expand=True)
+    
+    # สร้าง figure และ canvas
     fig = plt.Figure(figsize=(12, 8))
     ax = fig.add_subplot(111)
-    canvas = FigureCanvasTkAgg(fig, master=frame)
-    canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
-    ##################  GUI  ########################################################
+    canvas = FigureCanvasTkAgg(fig, master=plot_frame)
 
     # Step 1: โปรเจกชัน TM3 48N (ใส่พิกัดเริ่มต้นตามของคุณ)
     # TM3 Thailand 48N = EPSG:32648, หรือใช้ Proj string
@@ -2108,10 +2865,10 @@ def plotResults(lvLinesX, lvLinesY, mvLinesX, mvLinesY, eserviceLinesX, eservice
     # สมมุติว่า lvLinesX = [[x1, x2], [x3, x4]], lvLinesY = [[y1, y2], [y3, y4]]
     featuresLV = []
     
-    # วาดข้อมูลทั้งหมด (เหมือนเดิมทุกประการ) ##################  GUI  ########################################################
+    # วาดข้อมูลทั้งหมด
     for x, y in zip(lvLinesX, lvLinesY):
         ax.plot(x, y, color='lime', linewidth=1, linestyle='--', label='LV Line' if 'LV Line' not in ax.get_legend_handles_labels()[1] else "")
-    ##################  GUI  ########################################################
+
     for x_list, y_list in zip(lvLinesX, lvLinesY):
         latlons = [transformer.transform(x, y) for x, y in zip(x_list, y_list)]
         
@@ -2135,13 +2892,12 @@ def plotResults(lvLinesX, lvLinesY, mvLinesX, mvLinesY, eserviceLinesX, eservice
     # เขียนลงไฟล์หรือ return
     output_path = os.path.join(output_dir, "lv_lines.geojson")
     with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(geojson_output, f, indent=2)
+        json.dump(geojson_output, f, indent=2)    
 
     featuresMV = []
-    ##################  GUI  ########################################################
     for x, y in zip(mvLinesX, mvLinesY):
         ax.plot(x, y, color='maroon', linewidth=1, linestyle='-.', label='MV Line' if 'MV Line' not in ax.get_legend_handles_labels()[1] else "")
-    ##################  GUI  ########################################################
+
     for mvx_list, mvy_list in zip(mvLinesX, mvLinesY):
         latlons = [transformer.transform(x, y) for x, y in zip(mvx_list, mvy_list)]
         
@@ -2166,13 +2922,15 @@ def plotResults(lvLinesX, lvLinesY, mvLinesX, mvLinesY, eserviceLinesX, eservice
     output_path = os.path.join(output_dir, "mv_lines.geojson")
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(geojson_output, f, indent=2)
-    
+
     for x, y in zip(eserviceLinesX, eserviceLinesY):
         ax.plot(x, y, 'm-', linewidth=2, label='Eservice Line to TR' if 'Eservice Line' not in ax.get_legend_handles_labels()[1] else "")
+    
     if len(group1_indices) > 0:
         ax.plot(meterLocations[group1_indices, 0], meterLocations[group1_indices, 1], 'b.', markersize=10, label='Group 1 Meters')
     if len(group2_indices) > 0:
         ax.plot(meterLocations[group2_indices, 0], meterLocations[group2_indices, 1], 'r.', markersize=10, label='Group 2 Meters')
+
     # 1. สร้าง transformer สำหรับแปลงจาก TM3 Zone 48N → WGS84
     proj_tm3 = pyproj.CRS.from_proj4("+proj=utm +zone=47 +datum=WGS84 +units=m +no_defs")
     proj_wgs84 = pyproj.CRS("EPSG:4326")
@@ -2271,22 +3029,46 @@ def plotResults(lvLinesX, lvLinesY, mvLinesX, mvLinesY, eserviceLinesX, eservice
             if voltage_text.strip():
                 ax.text(x, y, voltage_text.strip(), fontsize=6, color='black',
                          bbox=dict(facecolor='white', alpha=0.5, edgecolor='none', pad=1))
-    ##################  GUI  ########################################################
+
+    
+    
+    if result_df is not None:
+        for i in range(len(meterLocations)):
+            x = meterLocations[i, 0]
+            y = meterLocations[i, 1]
+            connected_phases = phases[i].upper().strip()
+            voltage_text = ''
+            for ph in ['A','B','C']:
+                if ph in connected_phases:
+                    colname = f'Final Voltage {ph} (V)'
+                    if colname in result_df.columns:
+                        vval = result_df.iloc[i][colname]
+                        voltage_text += f'{ph}:{vval:.1f}V\n'
+                    else:
+                        voltage_text += f'{ph}:N/A\n'
+            if voltage_text.strip():
+                ax.text(x, y, voltage_text.strip(), fontsize=6, color='black',
+                         bbox=dict(facecolor='white', alpha=0.5, edgecolor='none', pad=1))
+    
     ax.plot(initialTransformerLocation[0], initialTransformerLocation[1], 'ko', markersize=10, label='Initial Transformer')
     ax.text(initialTransformerLocation[0], initialTransformerLocation[1], ' Initial Transformer',
              verticalalignment='top', horizontalalignment='left', fontsize=10, fontweight='bold')
+    
     if splitting_point_coords is not None:
         ax.plot(splitting_point_coords[0], splitting_point_coords[1], 'ys', markersize=12, label='Splitting Point')
         ax.text(splitting_point_coords[0], splitting_point_coords[1], ' Splitting Point',
                  verticalalignment='bottom', horizontalalignment='left', fontsize=10, fontweight='bold')
+    
     if optimizedTransformerLocationGroup1 is not None:
         ax.plot(optimizedTransformerLocationGroup1[0], optimizedTransformerLocationGroup1[1], 'b*', markersize=15, label='Group 1 Transformer')
         ax.text(optimizedTransformerLocationGroup1[0], optimizedTransformerLocationGroup1[1], ' Group 1 Transformer',
                  verticalalignment='bottom', horizontalalignment='right', fontsize=10, fontweight='bold', color='blue')
+    
     if optimizedTransformerLocationGroup2 is not None:
         ax.plot(optimizedTransformerLocationGroup2[0], optimizedTransformerLocationGroup2[1], 'r*', markersize=15, label='Group 2 Transformer')
         ax.text(optimizedTransformerLocationGroup2[0], optimizedTransformerLocationGroup2[1], ' Group 2 Transformer',
                  verticalalignment='bottom', horizontalalignment='right', fontsize=10, fontweight='bold', color='red')
+    
     if transformer_losses is not None and coord_mapping is not None:
         for tx, loss in transformer_losses.items():
             if tx == 'Group 1 Transformer' and optimizedTransformerLocationGroup1 is not None:
@@ -2297,43 +3079,76 @@ def plotResults(lvLinesX, lvLinesY, mvLinesX, mvLinesY, eserviceLinesX, eservice
                 continue
             ax.text(x, y, f"{tx}\nLoss: {loss/1000:.2f} kW", fontsize=8, color='black',
                      bbox=dict(facecolor='yellow', alpha=0.5, edgecolor='none', pad=1))
-    ##################  GUI  ########################################################
+
+
+    # # ตรวจสอบว่า initialTransformerLocation มีข้อมูล
+    # if initialTransformerLocation is not None:
+    #     # สร้าง Feature
+    #     transformer_feature = Feature(
+    #         geometry=Point(initialTransformerLocation.tolist()),
+    #         properties={
+    #             "name": "Initial Transformer"
+    #         }
+    #     )
+
+    #     # สร้าง FeatureCollection
+    #     feature_collection = FeatureCollection([transformer_feature])
+
+    #     # กำหนด path สำหรับบันทึก
+    #     output_path = os.path.join(output_dir, "initial_transformer.geojson")
+
+    #     # บันทึกเป็น .geojson
+    #     with open(output_path, "w", encoding="utf-8") as f:
+    #         json.dump(feature_collection, f, ensure_ascii=False, indent=2)
+
+    #     print(f"GeoJSON saved to {output_path}")
+    # else:
+    #     print("Initial Transformer Location is None")
 
     features = []
 
-    if initialTransformerLocation:
-        features.append(geojson.Feature(
-            geometry=geojson.Point(initialTransformerLocation),
-            properties={"name": "Initial Transformer"}
+    # Initial Transformer
+    if initialTransformerLocation is not None:
+        lon, lat = transformer.transform(initialTransformerLocation[0], initialTransformerLocation[1])
+        features.append(Feature(
+            geometry=Point((lon, lat)),
+            properties={"name": "Initial Transformer", "group": "initial"}
         ))
 
-    if splitting_point_coords:
-        features.append(geojson.Feature(
-            geometry=geojson.Point(splitting_point_coords),
-            properties={"name": "Splitting Point"}
+    # Splitting Point
+    if splitting_point_coords is not None:
+        lon, lat = transformer.transform(splitting_point_coords[0], splitting_point_coords[1])
+        features.append(Feature(
+            geometry=Point((lon, lat)),
+            properties={"name": "Splitting Point", "group": "splitting"}
         ))
 
-    if optimizedTransformerLocationGroup1:
-        features.append(geojson.Feature(
-            geometry=geojson.Point(optimizedTransformerLocationGroup1),
-            properties={"name": "Group 1 Transformer"}
+    # Group 1 Transformer
+    if optimizedTransformerLocationGroup1 is not None:
+        lon, lat = transformer.transform(optimizedTransformerLocationGroup1[0], optimizedTransformerLocationGroup1[1])
+        features.append(Feature(
+            geometry=Point((lon, lat)),
+            properties={"name": "Group 1 Transformer", "group": "group1"}
         ))
 
-    if optimizedTransformerLocationGroup2:
-        features.append(geojson.Feature(
-            geometry=geojson.Point(optimizedTransformerLocationGroup2),
-            properties={"name": "Group 2 Transformer"}
+    # Group 2 Transformer
+    if optimizedTransformerLocationGroup2 is not None:
+        lon, lat = transformer.transform(optimizedTransformerLocationGroup2[0], optimizedTransformerLocationGroup2[1])
+        features.append(Feature(
+            geometry=Point((lon, lat)),
+            properties={"name": "Group 2 Transformer", "group": "group2"}
         ))
 
     # สร้าง FeatureCollection
-    feature_collection = geojson.FeatureCollection(features)
+    feature_collection = FeatureCollection(features)
 
-    # บันทึกลงไฟล์ .geojson
-    # บันทึกลงไฟล์
+    # บันทึกไฟล์
     output_path = os.path.join(output_dir, "feature_groups.geojson")
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(feature_collection, f, ensure_ascii=False, indent=2)
-            
+
+    print(f"GeoJSON saved to {output_path}")
+    
     if G is not None and coord_mapping is not None:
         svc_edges = [(u, v) for u, v, d in G.edges(data=True) if d.get('is_service')]
         for u, v in svc_edges:
@@ -2343,6 +3158,7 @@ def plotResults(lvLinesX, lvLinesY, mvLinesX, mvLinesY, eserviceLinesX, eservice
                     label='Eserviceline Meter to LVLines' if 'Service‑Line'
                     not in ax.get_legend_handles_labels()[1] else "")
     
+    # ปรับ legend/title/axes
     handles, labels = ax.get_legend_handles_labels()
     by_label = dict(zip(labels, handles))
     ax.legend(by_label.values(), by_label.keys(), loc='best')
@@ -2351,107 +3167,207 @@ def plotResults(lvLinesX, lvLinesY, mvLinesX, mvLinesY, eserviceLinesX, eservice
     ax.set_ylabel('Y')
     ax.grid(True)
     ax.set_aspect('equal')
+
+    # pack canvas ใน plot_frame
+    canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
     
-    # ตั้งค่าเริ่มต้นและบันทึกไว้
-    ax.autoscale(True)
-    # บันทึกขอบเขตเริ่มต้นไว้
+    # วาดครั้งแรกเพื่อเก็บขอบเขตเดิม
+    canvas.draw()
     original_xlim = ax.get_xlim()
     original_ylim = ax.get_ylim()
     
+    # ใช้ tight_layout
     fig.tight_layout()
-    canvas.draw()
+
+    # สร้าง matplotlib toolbar
+    try:
+        toolbar = NavigationToolbar2Tk(canvas, plot_frame)
+        toolbar.update()
+        toolbar.pack(side=tk.BOTTOM, fill=tk.X)
+        has_toolbar = True
+    except Exception as e:
+        logging.warning(f"Could not create matplotlib toolbar: {e}")
+        has_toolbar = False
+
+    # ตัวแปรสำหรับเก็บสถานะ
+    is_pan_mode = False
+    is_zoom_mode = False
     
-    # ฟังก์ชันสำหรับรีเซ็ตมุมมอง
+    # ฟังก์ชัน reset view
     def reset_view():
         ax.set_xlim(original_xlim)
         ax.set_ylim(original_ylim)
         ax.set_aspect('equal')
         canvas.draw()
-    
-    # เพิ่ม NavigationToolbar2Tk แบบกำหนดเอง
-    class CustomToolbar(NavigationToolbar2Tk):
-        def home(self, *args):
-            # เมื่อกดปุ่ม Home ให้เรียกใช้ฟังก์ชัน reset_view
-            reset_view()
-    
-    toolbar = CustomToolbar(canvas, frame)
-    toolbar.update()
-    
-      
-    # เพิ่มความสามารถ pan/zoom ด้วย mouse (เสริมจากปุ่มใน toolbar)
-    pan_enabled = False
-    pan_start = None
-    
-    def on_button_press(event):
-        nonlocal pan_enabled, pan_start
-        if event.xdata is not None and event.ydata is not None:
-            if event.button == 1:  # คลิกซ้าย - เริ่ม pan
-                pan_enabled = True
-                pan_start = (event.xdata, event.ydata)
-            elif event.button == 3:  # คลิกขวา - ยกเลิก pan
-                pan_enabled = False
-                pan_start = None
-    
-    def on_button_release(event):
-        nonlocal pan_enabled, pan_start
-        if event.button == 1:  # คลิกซ้าย
-            pan_enabled = False
-            pan_start = None
-    
-    def on_mouse_move(event):
-        nonlocal pan_enabled, pan_start
-        if pan_enabled and pan_start is not None:
-            if event.xdata is not None and event.ydata is not None:
-                # คำนวณระยะทางที่เลื่อน
-                dx = event.xdata - pan_start[0]
-                dy = event.ydata - pan_start[1]
-                
-                # ปรับขอบเขตใหม่
-                xmin, xmax = ax.get_xlim()
-                ymin, ymax = ax.get_ylim()
-                ax.set_xlim(xmin - dx, xmax - dx)
-                ax.set_ylim(ymin - dy, ymax - dy)
-                
-                canvas.draw()
-                pan_start = (event.xdata, event.ydata)
-    
-    def on_scroll(event):
-        if event.xdata is not None and event.ydata is not None:
-            # ทิศทางของ scroll
-            if event.button == 'up':
-                scale_factor = 0.9  # zoom in
+        if has_toolbar:
+            try:
+                toolbar.push_current()
+            except:
+                pass
+
+    # ฟังก์ชัน pan
+    def activate_pan():
+        nonlocal is_pan_mode, is_zoom_mode
+        if has_toolbar:
+            if not is_pan_mode:
+                toolbar.pan()
+                is_pan_mode = True
+                is_zoom_mode = False
+                pan_btn.config(relief='sunken', bg='lightblue')
+                zoom_btn.config(relief='raised', bg='SystemButtonFace')
             else:
-                scale_factor = 1.1  # zoom out
-                
-            # คำนวณขอบเขตใหม่สำหรับ zoom
-            xmin, xmax = ax.get_xlim()
-            ymin, ymax = ax.get_ylim()
-            xmin = event.xdata - (event.xdata - xmin) * scale_factor
-            xmax = event.xdata + (xmax - event.xdata) * scale_factor
-            ymin = event.ydata - (event.ydata - ymin) * scale_factor
-            ymax = event.ydata + (ymax - event.ydata) * scale_factor
-            
-            ax.set_xlim(xmin, xmax)
-            ax.set_ylim(ymin, ymax)
-            canvas.draw()
-    
-    # ลงทะเบียน event handlers
-    canvas.mpl_connect('button_press_event', on_button_press)
-    canvas.mpl_connect('button_release_event', on_button_release)
-    canvas.mpl_connect('motion_notify_event', on_mouse_move)
+                toolbar.pan()
+                is_pan_mode = False
+                pan_btn.config(relief='raised', bg='SystemButtonFace')
+
+    # ฟังก์ชัน zoom
+    def activate_zoom():
+        nonlocal is_pan_mode, is_zoom_mode
+        if has_toolbar:
+            if not is_zoom_mode:
+                toolbar.zoom()
+                is_zoom_mode = True
+                is_pan_mode = False
+                zoom_btn.config(relief='sunken', bg='lightgreen')
+                pan_btn.config(relief='raised', bg='SystemButtonFace')
+            else:
+                toolbar.zoom()
+                is_zoom_mode = False
+                zoom_btn.config(relief='raised', bg='SystemButtonFace')
+
+    # ฟังก์ชัน back
+    def go_back():
+        if has_toolbar:
+            try:
+                toolbar.back()
+            except:
+                pass
+
+    # ฟังก์ชัน forward
+    def go_forward():
+        if has_toolbar:
+            try:
+                toolbar.forward()
+            except:
+                pass
+
+    # สร้างปุ่มควบคุมใน control_frame
+    home_btn = tk.Button(control_frame, text="🏠 Home", command=reset_view, 
+                        width=8, bg='lightcoral', relief='raised', bd=2, font=('Arial', 9, 'bold'))
+    home_btn.pack(side=tk.LEFT, padx=3, pady=3)
+
+    pan_btn = tk.Button(control_frame, text="✋ Pan", command=activate_pan, 
+                       width=6, bg='SystemButtonFace', relief='raised', bd=2, font=('Arial', 9, 'bold'))
+    pan_btn.pack(side=tk.LEFT, padx=3, pady=3)
+
+    zoom_btn = tk.Button(control_frame, text="🔍 Zoom", command=activate_zoom, 
+                        width=7, bg='SystemButtonFace', relief='raised', bd=2, font=('Arial', 9, 'bold'))
+    zoom_btn.pack(side=tk.LEFT, padx=3, pady=3)
+
+    # ปุ่ม back และ forward (เฉพาะเมื่อมี toolbar)
+    if has_toolbar:
+        back_btn = tk.Button(control_frame, text="⬅️ Back", command=go_back, 
+                            width=7, bg='lightgray', relief='raised', bd=2, font=('Arial', 9, 'bold'))
+        back_btn.pack(side=tk.LEFT, padx=3, pady=3)
+
+        forward_btn = tk.Button(control_frame, text="➡️ Forward", command=go_forward, 
+                               width=9, bg='lightgray', relief='raised', bd=2, font=('Arial', 9, 'bold'))
+        forward_btn.pack(side=tk.LEFT, padx=3, pady=3)
+
+    # เพิ่ม mouse wheel zoom (ทำงานแม้ไม่มี toolbar)
+    def on_scroll(event):
+        if event.inaxes != ax:
+            return
+        
+        scale_factor = 1.2
+        if event.button == 'up':
+            scale = 1 / scale_factor
+        elif event.button == 'down':
+            scale = scale_factor
+        else:
+            return
+        
+        xlim = ax.get_xlim()
+        ylim = ax.get_ylim()
+        xdata = event.xdata if event.xdata is not None else (xlim[0] + xlim[1])/2
+        ydata = event.ydata if event.ydata is not None else (ylim[0] + ylim[1])/2
+        
+        x_left = xdata - (xdata - xlim[0]) * scale
+        x_right = xdata + (xlim[1] - xdata) * scale
+        y_bottom = ydata - (ydata - ylim[0]) * scale
+        y_top = ydata + (ylim[1] - ydata) * scale
+        
+        ax.set_xlim([x_left, x_right])
+        ax.set_ylim([y_bottom, y_top])
+        
+        canvas.draw()
+        if has_toolbar:
+            try:
+                toolbar.push_current()
+            except:
+                pass
+
+    # เชื่อมต่อ scroll event
     canvas.mpl_connect('scroll_event', on_scroll)
+
+    # เพิ่ม simple pan ด้วย mouse (สำรอง)
+    last_x, last_y = None, None
+    def on_press(event):
+        nonlocal last_x, last_y
+        if event.button == 2:  # middle mouse button
+            last_x, last_y = event.x, event.y
+
+    def on_drag(event):
+        nonlocal last_x, last_y
+        if event.button == 2 and last_x is not None and last_y is not None:
+            dx = event.x - last_x
+            dy = event.y - last_y
+            
+            xlim = ax.get_xlim()
+            ylim = ax.get_ylim()
+            scale_x = (xlim[1] - xlim[0]) / canvas.get_tk_widget().winfo_width()
+            scale_y = (ylim[1] - ylim[0]) / canvas.get_tk_widget().winfo_height()
+            
+            ax.set_xlim(xlim[0] - dx * scale_x, xlim[1] - dx * scale_x)
+            ax.set_ylim(ylim[0] + dy * scale_y, ylim[1] + dy * scale_y)
+            
+            canvas.draw()
+            last_x, last_y = event.x, event.y
+
+    def on_release(event):
+        nonlocal last_x, last_y
+        if event.button == 2:
+            last_x, last_y = None, None
+
+    canvas.mpl_connect('button_press_event', on_press)
+    canvas.mpl_connect('motion_notify_event', on_drag)
+    canvas.mpl_connect('button_release_event', on_release)
+
+    # เพิ่ม label แสดงคำแนะนำ
+    if has_toolbar:
+        info_text = "💡 Use buttons above | Mouse wheel = zoom | Middle mouse = pan | Full toolbar below"
+    else:
+        info_text = "💡 Use buttons above | Mouse wheel = zoom | Middle mouse = pan"
     
-    # คงการบันทึกไฟล์เหมือนเดิม
+    info_label = tk.Label(control_frame, text=info_text, 
+                         bg='lightyellow', font=('Arial', 8))
+    info_label.pack(side=tk.RIGHT, padx=5, pady=3)
+
+    # บันทึกไฟล์
     folder_path = './testpy'
     ensure_folder_exists(folder_path)
     plot_path = f"{folder_path}/output_plot.png"
     fig.savefig(plot_path, dpi=300, bbox_inches='tight')
     logging.info(f"Plot saved to {plot_path}")
 
-########################################
-# 12. TRANSFORMER SIZING FUNCTION
-########################################
+    # ข้อมูลการทำงาน
+    if has_toolbar:
+        logging.info("Navigation toolbar created successfully")
+    else:
+        logging.info("Using basic navigation controls only")
 
+# ---------------------------------
+# 18) Transformer sizing & losses
 def growthRate(g2_load, annual_growth=0.04, years=4):
     logging.debug(f"Calculating growth rate for load={g2_load:.2f}, annual={annual_growth}, years={years}")
     future_g2_load = g2_load
@@ -2509,10 +3425,8 @@ def get_transformer_losses(group_load_kW):
     total_tx_loss_kW = no_load_loss_kW + actual_copper_loss_kW
     return total_tx_loss_kW
 
-########################################
-# 13. NODE LABELS & GRAPH PLOTTING
-########################################
-
+# ---------------------------------
+# 19) Graph labeling & plotting
 def addNodeLabels(G, splitting_point_node, best_edge_diff):
     logging.info("Adding labels to nodes in graph G.")
     for node in G.nodes():
@@ -2522,6 +3436,7 @@ def addNodeLabels(G, splitting_point_node, best_edge_diff):
             G.nodes[node]['label'] = f"Node {node}"
     return G
 
+# plt close ไว้อยู่
 def plotGraphWithLabels(G, coord_mapping, best_edge_diff=None, best_edge=None):
     logging.info("Plotting graph with node labels...")
     node_colors = ['red' if node in best_edge else 'lightblue' for node in G.nodes()]
@@ -2541,32 +3456,110 @@ def plotGraphWithLabels(G, coord_mapping, best_edge_diff=None, best_edge=None):
     
     logging.info("Graph plotted with labels.")
 
-########################################
-# 14. RE-EXECUTION FUNCTION (POST-PROCESS)
-########################################
+# ---------------------------------
+# 20) Re-execution & nested split
+def rerun_process(candidate_index,
+                  G, transformerNode, meterNodes, node_mapping, coord_mapping,
+                  meterLocations, totalLoads, phase_loads,    # ← insert totalLoads here
+                  lvLines, mvLines, filteredEserviceLines,
+                  initialTransformerLocation, powerFactor,
+                  initialVoltage, conductorResistance,
+                  peano, phases,
+                  conductorReactance=None, lvData=None, svcLines=None, snap_tolerance=0.1):
 
-def rerun_process(candidate_index, G, transformerNode, meterNodes, node_mapping, coord_mapping,
-                  meterLocations, phase_loads, lvLines, mvLines, filteredEserviceLines,
-                  initialTransformerLocation, powerFactor, initialVoltage, conductorResistance,
-                  peano, phases, conductorReactance=None, lvData=None, svcLines=None, snap_tolerance=0.1):
     global SNAP_TOLERANCE
+    if globals().get('tk_progress'):
+        tk_progress.start(4, stage="Re-execute")
     logging.info(f"Re-executing post-process steps with new splitting candidate index: {candidate_index}")
+    
+        
     best_edge, sp_coord, sp_edge_diff, candidate_edges = findSplittingPoint(G, transformerNode, meterNodes,
                                                                            coord_mapping, powerFactor, initialVoltage,
                                                                            candidate_index)
     if best_edge is None:
         logging.error("No valid splitting edge found with candidate index {}.".format(candidate_index))
         return None
+    if globals().get('tk_progress'): tk_progress.step()
     
     group1_nodes, group2_nodes = partitionNetworkAtPoint(G, transformerNode, meterNodes, best_edge)
+    if globals().get('tk_progress'): tk_progress.step()
+    
     voltages, branch_curr, group1_nodes, group2_nodes = performForwardBackwardSweepAndDivideLoads(
         G, transformerNode, meterNodes, coord_mapping, powerFactor, initialVoltage, best_edge
     )
+    if globals().get('tk_progress'): tk_progress.step()
+    
     nodeToIndex = {mn: i for i, mn in enumerate(meterNodes)}
     group1_meter_nodes = [n for n in group1_nodes if n in nodeToIndex]
     group2_meter_nodes = [n for n in group2_nodes if n in nodeToIndex]
     g1_idx = [nodeToIndex[n] for n in group1_meter_nodes]
     g2_idx = [nodeToIndex[n] for n in group2_meter_nodes]
+
+     # 1) สร้างข้อมูลเฉพาะกลุ่ม 1
+    group1_meterLocs = meterLocations[g1_idx]
+    loads_g1 = totalLoads[g1_idx]
+    # โหลดตามเฟสของ มิเตอร์กลุ่ม 1
+    group1_phase_loads = {
+        'A': phase_loads['A'][g1_idx],
+        'B': phase_loads['B'][g1_idx],
+        'C': phase_loads['C'][g1_idx],
+    }
+        # ข้อมูล peano และ phases ตามกลุ่ม
+    peano_g1  = peano[g1_idx]
+    phases_g1 = phases[g1_idx]
+
+    # เรียก balance Group 1
+    new_phases_g1, new_phase_loads_g1 = optimize_phase_balance(
+    group1_meterLocs,
+    loads_g1,
+    group1_phase_loads,
+    peano[g1_idx],
+    lvData,
+    phases[g1_idx]
+)
+    logging.info(
+        "Group 1 load balance before -> A: %.1f kW, B: %.1f kW, C: %.1f kW",
+        group1_phase_loads['A'].sum(),
+        group1_phase_loads['B'].sum(),
+        group1_phase_loads['C'].sum()
+    )
+    logging.info(
+        "Group 1 load balance after  -> A: %.1f kW, B: %.1f kW, C: %.1f kW",
+        new_phase_loads_g1['A'].sum(),
+        new_phase_loads_g1['B'].sum(),
+        new_phase_loads_g1['C'].sum()
+    )
+    # 2) กลุ่ม 2
+    group2_meterLocs = meterLocations[g2_idx]
+    loads_g2 = totalLoads[g2_idx]
+    group2_phase_loads = {
+        'A': phase_loads['A'][g2_idx],
+        'B': phase_loads['B'][g2_idx],
+        'C': phase_loads['C'][g2_idx],
+    }
+    peano_g2  = peano[g2_idx]
+    phases_g2 = phases[g2_idx]
+
+    new_phases_g2, new_phase_loads_g2 = optimize_phase_balance(
+    group2_meterLocs,
+    loads_g2,
+    group2_phase_loads,
+    peano[g2_idx],
+    lvData,
+    phases[g2_idx]
+    )
+    logging.info(
+    "Group 2 load balance before -> A: %.1f kW, B: %.1f kW, C: %.1f kW",
+    group2_phase_loads['A'].sum(),
+    group2_phase_loads['B'].sum(),
+    group2_phase_loads['C'].sum()
+    )
+    logging.info(
+        "Group 2 load balance after  -> A: %.1f kW, B: %.1f kW, C: %.1f kW",
+        new_phase_loads_g2['A'].sum(),
+        new_phase_loads_g2['B'].sum(),
+        new_phase_loads_g2['C'].sum()
+    )
     dist_arr = []
     for n in meterNodes:
         try:
@@ -2577,6 +3570,7 @@ def rerun_process(candidate_index, G, transformerNode, meterNodes, node_mapping,
     voltA = {n: voltages[n]['A'] for n in voltages}
     voltB = {n: voltages[n]['B'] for n in voltages}
     voltC = {n: voltages[n]['C'] for n in voltages}
+    
     result_df = pd.DataFrame({
         'Peano Meter': peano,
         'Distance to Transformer (m)': dist_arr,
@@ -2591,6 +3585,18 @@ def rerun_process(candidate_index, G, transformerNode, meterNodes, node_mapping,
     })
     result_df["Meter X"] = meterLocations[:, 0]
     result_df["Meter Y"] = meterLocations[:, 1]
+     # 3) เอาค่าที่ได้ไปอัปเดตใน result_df
+    for local_i, global_i in enumerate(g1_idx):
+        result_df.at[global_i, 'New Phase']  = new_phases_g1[local_i]
+        result_df.at[global_i, 'New Load A'] = new_phase_loads_g1['A'][local_i]
+        result_df.at[global_i, 'New Load B'] = new_phase_loads_g1['B'][local_i]
+        result_df.at[global_i, 'New Load C'] = new_phase_loads_g1['C'][local_i]
+
+    for local_i, global_i in enumerate(g2_idx):
+        result_df.at[global_i, 'New Phase']  = new_phases_g2[local_i]
+        result_df.at[global_i, 'New Load A'] = new_phase_loads_g2['A'][local_i]
+        result_df.at[global_i, 'New Load B'] = new_phase_loads_g2['B'][local_i]
+        result_df.at[global_i, 'New Load C'] = new_phase_loads_g2['C'][local_i]
 
     for n in G.nodes():
         if n in group1_nodes:
@@ -2666,7 +3672,7 @@ def rerun_process(candidate_index, G, transformerNode, meterNodes, node_mapping,
         lvData=lvData,
         svcLines=svcLines
     )
-   
+    
     if optimizedTransformerLocationGroup1 is not None:
         G_g1, tNode_g1, mNodes_g1, nm_g1, cm_g1 = buildLVNetworkWithLoads(
             lvLines, mvLines,
@@ -2827,10 +3833,8 @@ def rerun_process(candidate_index, G, transformerNode, meterNodes, node_mapping,
     }
     
     return result
-##############################################################################
-# SECOND‑LEVEL SPLIT + OPTIMISE  (re‑use existing primitives)
-##############################################################################
 
+# SECOND‑LEVEL SPLIT + OPTIMISE  (re‑use existing primitives)
 def refine_group_by_nested_split(group_name, meter_locs, phase_loads,
                                  lv_lines, mv_lines,
                                  init_tx_location, initial_voltage,
@@ -3100,15 +4104,18 @@ def gui_candidate_input(G, transformerNode, meterNodes,
             break
 
         tmp = rerun_process(cand_idx,
-                            G, transformerNode, meterNodes,
-                            node_mapping, coord_mapping,
-                            meterLocations, phase_loads,
-                            lvLines, mvLines, filteredEserviceLines,
-                            initialTransformerLocation,
-                            powerFactor, initialVoltage,
-                            conductorResistance,
-                            peano, phases,
-                            conductorReactance, lvData, svcLines,snap_tolerance=SNAP_TOLERANCE)
+                    G, transformerNode, meterNodes,
+                    node_mapping, coord_mapping,
+                    meterLocations, totalLoads,    
+                    phase_loads,
+                    lvLines, mvLines, filteredEserviceLines,
+                    initialTransformerLocation,
+                    powerFactor, initialVoltage,
+                    conductorResistance,
+                    peano, phases,
+                    conductorReactance, lvData, svcLines,
+                    snap_tolerance=SNAP_TOLERANCE)
+
         if tmp is not None:
             last_result = tmp
 
@@ -3120,25 +4127,38 @@ def gui_candidate_input(G, transformerNode, meterNodes,
 
     temp_root.destroy()
 
-
-########################################
-# 15. MAIN + TKINTER UI
-########################################
-
+# ---------------------------------
+# 21) main, runProcess, createGUI, helper
 def main():
+    global meterLocations, initialVoltages, totalLoads, phase_loads, peano, phases
     global lvLines, mvLines, initialVoltage, conductorResistance, powerFactor
     global conductorReactance, lvData, svcLines, latest_split_result, reopt_btn, SNAP_TOLERANCE
     
     logging.info("Program started with coordinate snapping.")
     
-  
-    
+     
     try:
         meterLocations, initialVoltages, totalLoads, phase_loads, peano, phases = extractMeterData(meterData)
         
-        # ใช้ฟังก์ชันที่แก้ไขแล้ว (ชื่อเดิม แต่มี coordinate snapping)
+        # Extract line data first (without snapping)
+        lvLinesX, lvLinesY, lvLines = extractLineData(lvData, 0.0)
+        mvLinesX, mvLinesY, mvLines = extractLineData(mvData, 0.0)
+        
+        # Auto-determine optimal snap tolerance
+        SNAP_TOLERANCE = auto_determine_snap_tolerance(
+            meterLocations, 
+            lvLines, 
+            mvLines,
+            reduction_ratio=0.98,  # ลดจำนวนพิกัดเหลือ 98%
+            use_analysis=True
+        )
+        logging.info(f"Automatically determined SNAP_TOLERANCE: {SNAP_TOLERANCE:.8f}m")
+        
+        # Re-extract with optimal tolerance
         lvLinesX, lvLinesY, lvLines = extractLineData(lvData, SNAP_TOLERANCE)
         mvLinesX, mvLinesY, mvLines = extractLineData(mvData, SNAP_TOLERANCE)
+        # ==================================
+        
         svcLinesX, svcLinesY, svcLines = extractLineDataWithAttributes(eserviceData, 'SUBTYPECOD', 5, SNAP_TOLERANCE)
         
         logging.info(f"Applied coordinate snapping with tolerance: {SNAP_TOLERANCE}m")
@@ -3147,7 +4167,36 @@ def main():
     except Exception as e:
         logging.error(f"An error occurred: {e}")
         return
+        # ตรวจสอบสายที่อาจมีปัญหา
+    logging.info("Checking for problematic lines after snap...")
+    
+    # วิเคราะห์ LV lines
+    lv_analysis = identify_failed_snap_lines(lvLines, SNAP_TOLERANCE)
+    if lv_analysis['total_issues'] > 0:
+        logging.warning(f"Found {lv_analysis['total_issues']} problematic LV lines")
         
+        # Export สายที่มีปัญหาเพื่อตรวจสอบ
+        folder_path = './testpy'
+        ensure_folder_exists(folder_path)
+        export_failed_lines_shapefile(
+            lv_analysis, 
+            lvLines, 
+            f"{folder_path}/problematic_lv_lines.shp"
+        )
+        
+        # พยายามแก้ไข
+        fixed_lv_lines, fix_log = fix_failed_snap_lines(lv_analysis, lvLines, SNAP_TOLERANCE)
+        logging.info(f"Attempted {len(fix_log)} fixes on LV lines")
+    
+    # วิเคราะห์ MV lines
+    # mv_analysis = identify_failed_snap_lines(mvLines, SNAP_TOLERANCE)
+    # if mv_analysis['total_issues'] > 0:
+    #     logging.warning(f"Found {mv_analysis['total_issues']} problematic MV lines")
+    #     export_failed_lines_shapefile(
+    #         mv_analysis, 
+    #         mvLines, 
+    #         f"{folder_path}/problematic_mv_lines.shp"
+    #     ) 
     # ส่วนการตั้งค่า transformer ต่างๆ ยังคงเหมือนเดิม
     try:
         transformerRecords = transformerData.records()
@@ -3224,13 +4273,24 @@ def main():
         svcLines=svcLines,
         snap_tolerance=SNAP_TOLERANCE  # เพิ่มพารามิเตอร์นี้
     )
-    
-    if not nx.is_connected(G):
-        logging.warning("Post-optimization network not fully connected.")
-        components = list(nx.connected_components(G))
-        logging.warning(f"Network has {len(components)} connected components")
-    else:
-        logging.info("Post-optimization network is connected.")
+    # ตรวจสอบความสมบูรณ์ของ network
+    validation = validate_network_after_snap(G, coord_mapping, meterNodes, transformerNode)
+
+    if not validation['summary']['network_complete']:
+        logging.error("Network is incomplete after snap!")
+        logging.error(f"Unreachable meters: {len(validation['unreachable_meters'])}")
+        
+        # อาจต้องปรับ tolerance หรือแก้ไขข้อมูล
+        if len(validation['unreachable_meters']) > 0:
+            # ลองใช้ tolerance ที่สูงขึ้น
+            new_tolerance = SNAP_TOLERANCE * 2
+            logging.info(f"Retrying with higher tolerance: {new_tolerance}")
+        if not nx.is_connected(G):
+            logging.warning("Post-optimization network not fully connected.")
+            components = list(nx.connected_components(G))
+            logging.warning(f"Network has {len(components)} connected components")
+        else:
+            logging.info("Post-optimization network is connected.")
     
     splitting_edge, sp_coord, sp_edge_diff, candidate_edges = findSplittingPoint(
         G, transformerNode, meterNodes, coord_mapping,
@@ -3242,6 +4302,7 @@ def main():
         return
         
     group1_nodes, group2_nodes = partitionNetworkAtPoint(G, transformerNode, meterNodes, splitting_edge)
+    
     voltages, branch_curr, group1_nodes, group2_nodes = performForwardBackwardSweepAndDivideLoads(
         G, transformerNode, meterNodes, coord_mapping, powerFactor, initialVoltage, splitting_edge
     )
@@ -3252,6 +4313,71 @@ def main():
     g1_idx = [nodeToIndex[n] for n in group1_meter_nodes]
     g2_idx = [nodeToIndex[n] for n in group2_meter_nodes]
 
+    # 1) สร้างข้อมูลเฉพาะกลุ่ม 1
+    group1_meterLocs = meterLocations[g1_idx]
+    loads_g1 = totalLoads[g1_idx]
+    # โหลดตามเฟสของ มิเตอร์กลุ่ม 1
+    group1_phase_loads = {
+        'A': phase_loads['A'][g1_idx],
+        'B': phase_loads['B'][g1_idx],
+        'C': phase_loads['C'][g1_idx],
+    }
+        # ข้อมูล peano และ phases ตามกลุ่ม
+    peano_g1  = peano[g1_idx]
+    phases_g1 = phases[g1_idx]
+
+    # เรียก balance Group 1
+    new_phases_g1, new_phase_loads_g1 = optimize_phase_balance(
+    group1_meterLocs,
+    loads_g1,
+    group1_phase_loads,
+    peano[g1_idx],
+    lvData,
+    phases[g1_idx]
+)
+    logging.info(
+        "Group 1 load balance before -> A: %.1f kW, B: %.1f kW, C: %.1f kW",
+        group1_phase_loads['A'].sum(),
+        group1_phase_loads['B'].sum(),
+        group1_phase_loads['C'].sum()
+    )
+    logging.info(
+        "Group 1 load balance after  -> A: %.1f kW, B: %.1f kW, C: %.1f kW",
+        new_phase_loads_g1['A'].sum(),
+        new_phase_loads_g1['B'].sum(),
+        new_phase_loads_g1['C'].sum()
+    )
+    # 2) กลุ่ม 2
+    group2_meterLocs = meterLocations[g2_idx]
+    loads_g2 = totalLoads[g2_idx]
+    group2_phase_loads = {
+        'A': phase_loads['A'][g2_idx],
+        'B': phase_loads['B'][g2_idx],
+        'C': phase_loads['C'][g2_idx],
+    }
+    peano_g2  = peano[g2_idx]
+    phases_g2 = phases[g2_idx]
+
+    new_phases_g2, new_phase_loads_g2 = optimize_phase_balance(
+    group2_meterLocs,
+    loads_g2,
+    group2_phase_loads,
+    peano[g2_idx],
+    lvData,
+    phases[g2_idx]
+    )
+    logging.info(
+    "Group 2 load balance before -> A: %.1f kW, B: %.1f kW, C: %.1f kW",
+    group2_phase_loads['A'].sum(),
+    group2_phase_loads['B'].sum(),
+    group2_phase_loads['C'].sum()
+    )
+    logging.info(
+        "Group 2 load balance after  -> A: %.1f kW, B: %.1f kW, C: %.1f kW",
+        new_phase_loads_g2['A'].sum(),
+        new_phase_loads_g2['B'].sum(),
+        new_phase_loads_g2['C'].sum()
+    )
     dist_arr = []
     for n in meterNodes:
         try:
@@ -3263,6 +4389,7 @@ def main():
     voltA = {n: voltages[n]['A'] for n in voltages}
     voltB = {n: voltages[n]['B'] for n in voltages}
     voltC = {n: voltages[n]['C'] for n in voltages}
+    
     result_df = pd.DataFrame({
         'Peano Meter': peano,
         'Final Voltage A (V)': [voltA.get(n, np.nan) for n in meterNodes],
@@ -3277,6 +4404,18 @@ def main():
     })
     result_df["Meter X"] = meterLocations[:, 0]
     result_df["Meter Y"] = meterLocations[:, 1]
+    # 3) เอาค่าที่ได้ไปอัปเดตใน result_df
+    for local_i, global_i in enumerate(g1_idx):
+        result_df.at[global_i, 'New Phase']  = new_phases_g1[local_i]
+        result_df.at[global_i, 'New Load A'] = new_phase_loads_g1['A'][local_i]
+        result_df.at[global_i, 'New Load B'] = new_phase_loads_g1['B'][local_i]
+        result_df.at[global_i, 'New Load C'] = new_phase_loads_g1['C'][local_i]
+
+    for local_i, global_i in enumerate(g2_idx):
+        result_df.at[global_i, 'New Phase']  = new_phases_g2[local_i]
+        result_df.at[global_i, 'New Load A'] = new_phase_loads_g2['A'][local_i]
+        result_df.at[global_i, 'New Load B'] = new_phase_loads_g2['B'][local_i]
+        result_df.at[global_i, 'New Load C'] = new_phase_loads_g2['C'][local_i]
 
     for n in G.nodes():
         if n in group1_nodes:
@@ -3353,7 +4492,7 @@ def main():
         lvData=lvData,
         svcLines=svcLines
     )
-        
+      
     if optimizedTransformerLocationGroup1 is not None:
         G_g1, tNode_g1, mNodes_g1, nm_g1, cm_g1 = buildLVNetworkWithLoads(
             lvLines, mvLines,
@@ -3585,6 +4724,23 @@ def createGUI():
     # Configure the scrollbar to scroll the text widget
     scrollbar.config(command=log_text.yview)
     
+    # ---------- Progress bar -------------
+    progress_frame = tk.Frame(root)
+    progress_frame.pack(side=tk.TOP, fill=tk.X, padx=5, pady=3)
+
+    progress_bar = ttk.Progressbar(progress_frame, orient='horizontal',
+                                   mode='determinate', length=400)
+    progress_bar.pack(side=tk.LEFT, padx=(0, 8), fill=tk.X, expand=True)
+
+    progress_label = tk.Label(progress_frame, text="", anchor="w")
+    progress_label.pack(side=tk.LEFT)
+
+    # ทำให้ทุกที่เรียกใช้ได้
+    global tk_progress
+    tk_progress = TkProgress(progress_bar, progress_label)
+
+
+       
     if 'transformerFileName' in globals() and transformerFileName:
         base_name = os.path.splitext(os.path.basename(transformerFileName))[0]
         folder_path = './testpy'
@@ -3598,7 +4754,7 @@ def createGUI():
     # Configure the logger to log messages to the text widget
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
-    fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
+    fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
     text_handler = TextHandler(log_text)
     text_handler.setFormatter(fmt)
     text_handler.setLevel(logging.INFO)
@@ -3614,9 +4770,6 @@ def createGUI():
 
     root.mainloop()
 
-#############################################################################################
-# Other Functions                                                                            
-#############################################################################################
 
 # Create folder 
 def ensure_folder_exists(folder_path):
@@ -3629,7 +4782,6 @@ def ensure_folder_exists(folder_path):
         print(f"Create a new folder: {folder_path}")
     else:
         print(f"folder {folder_path} already exists.")
-
 
 
 def run_process_from_project_folder(project_id, folder_path):

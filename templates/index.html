@@ -33,7 +33,7 @@
           <td>{{ project.project_detail[:100] }}{% if project.project_detail|length > 100 %}...{% endif %}</td>
           <td>{{ project.created_at.strftime('%Y-%m-%d %H:%M') if project.created_at else '-' }}</td>
           <td>
-            {% if project.file_count == 5 %}
+            {% if project.file_count >= 5 %}
             <span class="badge bg-success">ครบ</span>
             {% else %}
             <span class="badge bg-danger">ไม่ครบ</span>
@@ -42,7 +42,7 @@
           <td>
             <a href="{{ url_for('edit', project_id=project.id) }}" class="btn btn-sm btn-warning">แก้ไข</a>
             <button class="btn btn-sm btn-danger" onclick="confirmDelete({{ project.id }})">ลบ</button>
-            {% if project.file_count == 5 %}
+            {% if project.file_count >= 5 %}
             <button class="btn btn-sm btn-primary" onclick="runProject({{ project.id }})">Run</button>
             {% endif %}
           </td>

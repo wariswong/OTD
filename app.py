@@ -1,12 +1,15 @@
-from flask import Flask, request, jsonify, render_template, redirect, url_for
+from flask import Flask, request, jsonify, render_template, redirect, url_for, render_template
 from werkzeug.utils import secure_filename
 import os, shutil
 import mysql.connector
-from process import run_process_from_project_folder
+from processNew import run_process_from_project_folder
 import logging
 
-app = Flask(__name__)
+app = Flask(__name__,
+            static_folder="output",      # บอกให้ static folder ชื่อ output
+            static_url_path="/output")
 app.config['UPLOAD_FOLDER'] = './uploads'
+app.config['OUTPUT_FOLDER'] = './output'
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
 ALLOWED_EXTENSIONS = {'shp'}
 
@@ -73,35 +76,44 @@ def upload():
     conn = get_db()
     cur = conn.cursor()
 
-    # ถ้าแก้ไข ให้ update
     if project_id:
         cur.execute("UPDATE projects SET project_name=%s, project_detail=%s WHERE id=%s",
                     (name, detail, project_id))
-        # ลบไฟล์เก่า เพื่อ replace ใหม่
         cur.execute("DELETE FROM project_files WHERE project_id=%s", (project_id,))
     else:
         cur.execute("INSERT INTO projects (project_name, project_detail) VALUES (%s, %s)",
                     (name, detail))
-        project_id = str(cur.lastrowid)  # แปลงให้เป็น string ทันที
+        project_id = str(cur.lastrowid)
 
-    # ✅ ย้ายมาสร้างโฟลเดอร์หลังจากได้ project_id แน่นอน
-    folder = secure_filename(project_id)
-    folder_path = os.path.join(app.config['UPLOAD_FOLDER'], folder)
+    folder_name = secure_filename(project_id)
+    folder_path = os.path.join(app.config['UPLOAD_FOLDER'], folder_name)
     try:
         os.makedirs(folder_path, exist_ok=True)
     except Exception as e:
         conn.rollback()
         cur.close(); conn.close()
-        return jsonify({'error': f'ไม่สามารถสร้างโฟลเดอร์ได้: {e}'}), 500
+        return jsonify({'error': f'ไม่สามารถสร้างโฟลเดอร์: {e}'}), 500
 
-    # บันทึกไฟล์ .shp
-    for key in ['file_meter', 'file_lv', 'file_mv', 'file_eservice', 'file_tr']:
-        f = request.files.get(key)
-        if f and allowed_file(f.filename):
-            file_type = key.replace('file_', '')
-            filename = f"{file_type}.shp"
-            filepath = os.path.join(folder_path, filename)
+    uploaded_files = request.files.getlist('folder_files')
+    print("RECEIVED FILES:")
+    for f in uploaded_files:
+        print(f.filename)
+    allowed_exts = ['.shp', '.shx', '.dbf', '.prj', '.cpg', '.sbn', '.sbx']
+    valid_prefixes = ['meter', 'lv', 'mv', 'tr', 'eservice']
+
+    for f in uploaded_files:
+        filename = os.path.basename(f.filename)  # ✅ ชื่อไฟล์อย่างเดียว
+        ext = os.path.splitext(filename)[1].lower()
+        # prefix = filename.split('.')[0].lower()
+        prefix = next((p for p in valid_prefixes if filename.lower().startswith(p)), None)
+
+        # ถ้าเป็นไฟล์นามสกุลที่อนุญาต และมี prefix ที่ตรง
+        if ext in allowed_exts and prefix:
+            new_filename = f"{prefix}{ext}"
+            filepath = os.path.join(folder_path, new_filename)
             f.save(filepath)
+
+            file_type = prefix  # เช่น 'meter', 'lv'
             cur.execute("""
                 INSERT INTO project_files(project_id, file_type, filename, filepath)
                 VALUES(%s, %s, %s, %s)
@@ -109,7 +121,8 @@ def upload():
 
     conn.commit()
     cur.close(); conn.close()
-    return jsonify({'message': 'บันทึกสำเร็จ'}), 200
+    return jsonify({'message': 'อัปโหลดสำเร็จ'}), 200
+
 
 @app.route('/update', methods=['POST'])
 def update():
@@ -176,26 +189,35 @@ def update():
 
 @app.route('/delete/<int:project_id>', methods=['POST'])
 def delete(project_id):
-    # ดึงชื่อ project_name เพื่อกำหนดโฟลเดอร์
+    # ใช้ project_id เป็นชื่อโฟลเดอร์โดยตรง
+    folder = secure_filename(str(project_id))  # เป็น string เสมอ
+
+    upload_folder_path = os.path.join(app.config['UPLOAD_FOLDER'], folder)
+    output_folder_path = os.path.join(app.config['OUTPUT_FOLDER'], folder)
+
+    # เชื่อมต่อ DB และลบข้อมูล
     conn = get_db()
     cur = conn.cursor()
-    cur.execute("SELECT project_name FROM projects WHERE id=%s", (project_id,))
-    row = cur.fetchone()
-    if row:
-        folder = secure_filename(row[0])
-        folder_path = os.path.join(app.config['UPLOAD_FOLDER'], folder)
-
-        # ลบ DB
-        cur.execute("DELETE FROM project_files WHERE project_id=%s", (project_id,))
-        cur.execute("DELETE FROM projects WHERE id=%s", (project_id,))
-        conn.commit()
-
-        # ลบโฟลเดอร์จริง
-        if os.path.isdir(folder_path):
-            shutil.rmtree(folder_path)
-
+    cur.execute("DELETE FROM project_files WHERE project_id=%s", (project_id,))
+    cur.execute("DELETE FROM projects WHERE id=%s", (project_id,))
+    conn.commit()
     cur.close(); conn.close()
-    return jsonify({'message':'ลบสำเร็จ'}), 200
+
+    # ลบโฟลเดอร์จริง
+    try:
+        if os.path.isdir(upload_folder_path):
+            shutil.rmtree(upload_folder_path)
+        if os.path.isdir(output_folder_path):
+            shutil.rmtree(output_folder_path)
+    except Exception as e:
+        # ถ้ามี error ระหว่างลบ ให้ log ไว้ (ไม่หยุดการทำงานหลัก)
+        logging.error(f"เกิดข้อผิดพลาดในการลบโฟลเดอร์: {e}")
+
+    return jsonify({'message': 'ลบสำเร็จ'}), 200
+
+@app.route('/map/<int:project_id>', methods=['GET'])
+def map_view(project_id):
+    return render_template('testmap.html', project=str(project_id))
 
 @app.route('/run/<int:project_id>', methods=['POST'])
 def run_project(project_id):

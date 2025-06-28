@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <title>แสดง LV Lines ด้วย GeoJSONLayer</title>
+  <!-- ArcGIS CSS -->
+  <link rel="stylesheet" href="https://js.arcgis.com/4.29/esri/themes/light/main.css">
+  <style>
+    html, body, #viewDiv {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      width: 100%;
+    }
+  </style>
+</head>
+<body>
+  <div id="viewDiv"></div>
+
+  <!-- ArcGIS JS API -->
+  <script src="https://js.arcgis.com/4.29/"></script>
+  <script>
+    require([
+  "esri/Map",
+  "esri/views/MapView",
+  "esri/layers/GeoJSONLayer"
+], function(Map, MapView, GeoJSONLayer) {
+
+  const map = new Map({
+    basemap: "streets-navigation-vector"
+  });
+
+  const view = new MapView({
+    container: "viewDiv",
+    map: map,
+    center: [102.5, 16.0],
+    zoom: 7
+  });
+
+  // const project = '{{ project }}'';
+
+  // LV Lines
+  const lvLineLayer = new GeoJSONLayer({
+    url: "/output/{{project}}/lv_lines.geojson",
+    renderer: {
+      type: "simple",
+      symbol: {
+        type: "simple-line",
+        color: "#5fd918",
+        width: 2,
+        style: "dash"
+      }
+    },
+    popupTemplate: {
+      title: "LV Line",
+      content: "คุณสมบัติ: {type}"
+    }
+  });
+
+  // // MV Lines
+  const mvLineLayer = new GeoJSONLayer({
+    url: "/output/{{project}}/mv_lines.geojson",
+    renderer: {
+      type: "simple",
+      symbol: {
+        type: "simple-line",
+        color: "#8a8a8a",
+        width: 2,
+        style: "dash"
+      }
+    },
+    popupTemplate: {
+      title: "MV Line",
+      content: "คุณสมบัติ: {type}"
+    }
+  });
+
+  // Meters (Points)
+  const meterLayer = new GeoJSONLayer({
+    url: "/output/{{project}}/meter_groups.geojson",
+    renderer: {
+      type: "unique-value",        // หรือ simple ถ้าต้องการสีเดียว
+      field: "group",               // แยกสีตามกลุ่ม ถ้ามี
+      uniqueValueInfos: [
+        {
+          value: 1,
+          symbol: {
+            type: "simple-marker",
+            color: "#2b73b3",
+            size: 8,
+            outline: { color: "white", width: 1 }
+          },
+          label: "Group 1"
+        },
+        {
+          value: 2,
+          symbol: {
+            type: "simple-marker",
+            color: "#d41571",
+            size: 8,
+            outline: { color: "white", width: 1 }
+          },
+          label: "Group 2"
+        }
+      ]
+    },    
+    labelingInfo: [
+      {
+        labelExpressionInfo: {
+          expression: "$feature.voltage_text"
+        },
+        labelPlacement: "above-right",
+        symbol: {
+          type: "text",
+          color: "black",
+          font: {
+            size: 10,
+            family: "Arial"
+          },
+          haloColor: "white",
+          haloSize: 1
+        }
+      }
+    ],
+    popupTemplate: {
+      title: "Meter (Group {group})",
+      content: "พิกัด: [{geometry.longitude}, {geometry.latitude}]"
+    }
+  });
+
+  const featureGroups = new GeoJSONLayer({
+    url: "/output/{{project}}/feature_groups.geojson",
+    title: "Transformers",
+    renderer: {
+      type: "unique-value",
+      field: "group",
+      uniqueValueInfos: [
+        {
+          value: "initial",
+          label: "Initial Transformer",
+          symbol: {
+            type: "simple-marker",
+            style: "square",
+            color: "black",
+            size: 10,
+            outline: { color: "white", width: 1 }
+          }
+        },
+        {
+          value: "splitting",
+          label: "Splitting Point",
+          symbol: {
+            type: "simple-marker",
+            style: "diamond",
+            color: "yellow",
+            size: 12,
+            outline: { color: "black", width: 1 }
+          }
+        },
+        {
+          value: "group1",
+          label: "Group 1 Transformer",
+          symbol: {
+            type: "simple-marker",
+            style: "x",
+            color: "blue",
+            size: 14,
+            outline: { color: "white", width: 1 }
+          }
+        },
+        {
+          value: "group2",
+          label: "Group 2 Transformer",
+          symbol: {
+            type: "simple-marker",
+            style: "cross",
+            color: "red",
+            size: 14,
+            outline: { color: "white", width: 1 }
+          }
+        }
+      ]
+    },
+    labelingInfo: [{
+      labelExpressionInfo: { expression: "$feature.name" },
+      labelPlacement: "above-right",
+      symbol: {
+        type: "text",
+        color: "black",
+        haloColor: "white",
+        haloSize: 1,
+        font: {
+          size: 10,
+          family: "Arial"
+        }
+      }
+    }],
+    popupTemplate: {
+      title: "{name}",
+      content: "กลุ่ม: {group}<br>ตำแหน่ง: [{geometry.longitude}, {geometry.latitude}]"
+    }
+  });
+
+  // map.add(featureGroups);
+
+  
+  meterLayer.when(() => {
+    meterLayer.queryExtent().then((response) => {
+      if (response.extent) {
+        view.goTo(response.extent.expand(2.5));  // ขยายเล็กน้อยเพื่อให้มองเห็นทั้งหมด
+      }
+    });
+  });
+
+  map.addMany([ lvLineLayer, mvLineLayer, meterLayer, featureGroups ]);
+  // map.addMany([ lvLineLayer, mvLineLayer, meterLayer]);
+
+});
+  </script>
+</body>
+</html>
