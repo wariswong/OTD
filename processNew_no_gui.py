@@ -5589,6 +5589,29 @@ def main_pipeline(data):
     logging.info(f"Group 1 => Load={g1_load:.2f} kW | LineLoss={line_loss_g1_kW:.2f} kW | TxLoss={tx_loss_g1_kW:.2f} kW => TOTAL={total_system_loss_g1:.2f} kW")
     logging.info(f"Group 2 => Load={g2_load:.2f} kW | LineLoss={line_loss_g2_kW:.2f} kW | TxLoss={tx_loss_g2_kW:.2f} kW => TOTAL={total_system_loss_g2:.2f} kW")
 
+    output_folder = f"output/{projectID}"
+
+    # สร้าง dict สำหรับข้อมูลผลลัพธ์
+    results = {
+        "g1_load": round(g1_load, 2),
+        "future_g1_load": round(future_g1_load, 2),
+        "rating_g1": rating_g1,
+        "line_loss_g1_kW": round(line_loss_g1_kW, 2),
+        "tx_loss_g1_kW": round(tx_loss_g1_kW, 2),
+        "total_system_loss_g1": round(total_system_loss_g1, 2),
+
+        "g2_load": round(g2_load, 2),
+        "future_g2_load": round(future_g2_load, 2),
+        "rating_g2": rating_g2,
+        "line_loss_g2_kW": round(line_loss_g2_kW, 2),
+        "tx_loss_g2_kW": round(tx_loss_g2_kW, 2),
+        "total_system_loss_g2": round(total_system_loss_g2, 2)
+    }
+
+    # บันทึกลงไฟล์ results.json
+    with open(os.path.join(output_folder, "results.json"), "w", encoding="utf-8") as f:
+        json.dump(results, f, ensure_ascii=False, indent=2)
+
     # Export Splitting Point, Transformer Group Point to Shapefile #
     point_coords = []
     attributes_list = []

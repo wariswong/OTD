@@ -4,6 +4,8 @@ import os, shutil
 import mysql.connector
 from processNew_no_gui import run_process_from_project_folder
 import logging
+from collections import defaultdict
+import json
 
 app = Flask(__name__,
             static_folder="output",      # บอกให้ static folder ชื่อ output
@@ -38,6 +40,11 @@ def index():
     """)
     projects = cur.fetchall()
     cur.close(); conn.close()
+
+    for project in projects:
+        output_path = os.path.join("output", str(project["id"]))
+        project["has_output"] = os.path.exists(output_path) and len(os.listdir(output_path)) > 0
+
     return render_template('index.html', projects=projects)
 
 @app.route('/create')
@@ -59,7 +66,9 @@ def edit(project_id):
     cur.close(); conn.close()
 
     # สร้าง dict { 'meter':'meter.shp', ... }
-    existing_files = { f['file_type']: f['filename'] for f in files }
+    existing_files = defaultdict(list)
+    for f in files:
+        existing_files[f['file_type']].append(f['filename'])
     if not project:
         return "ไม่พบโปรเจค", 404
     return render_template('form.html', mode='edit', project=project, existing_files=existing_files)
@@ -217,7 +226,10 @@ def delete(project_id):
 
 @app.route('/map/<int:project_id>', methods=['GET'])
 def map_view(project_id):
-    return render_template('testmap.html', project=str(project_id))
+    with open(f"output/{project_id}/results.json", "r", encoding="utf-8") as f:
+        result_data = json.load(f)
+
+    return render_template("testmap.html", project=project_id, result=result_data)
 
 @app.route('/run/<int:project_id>', methods=['POST'])
 def run_project(project_id):
@@ -230,6 +242,7 @@ def run_project(project_id):
     except Exception as e:
         logging.exception("Error in running project")
         return jsonify({'error': str(e)}), 500
+    
 
 if __name__ == '__main__':
     app.run(debug=True)

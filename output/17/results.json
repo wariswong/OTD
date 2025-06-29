@@ -1,0 +1,14 @@
+{
+  "g1_load": 48.65,
+  "future_g1_load": 56.91,
+  "rating_g1": 100,
+  "line_loss_g1_kW": 1.87,
+  "tx_loss_g1_kW": 0.6,
+  "total_system_loss_g1": 2.47,
+  "g2_load": 49.83,
+  "future_g2_load": 58.29,
+  "rating_g2": 100,
+  "line_loss_g2_kW": 0.84,
+  "tx_loss_g2_kW": 0.62,
+  "total_system_loss_g2": 1.46
+}

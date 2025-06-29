@@ -4,36 +4,109 @@
 <head>
   <meta charset="UTF-8">
   <title>{{ 'แก้ไขโปรเจค' if mode == 'edit' else 'สร้างโปรเจค' }}</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <style>
+    body {
+      background-color: #f8f9fa;
+    }
+
+    .navbar-custom {
+      background-image: linear-gradient(0deg, #690089, #7e468f);
+      color: white;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+    }
+
+    .navbar-custom .nav-link,
+    .navbar-custom .navbar-brand {
+      color: white;
+    }
+
+    .navbar-custom .nav-link:hover {
+      color: #f8f9fa;
+    }
+
+    .btn-custom-primary {
+      background-color: #7e468f;
+      border-color: #7e468f;
+      color: #fff;
+    }
+
+    .btn-custom-primary:hover {
+      background-color: #690089;
+      border-color: #690089;
+      color: #fff;
+    }
+
+    .card {
+      background-color: #ffffff;
+      border-color: #dfd2e3;
+    }
+  </style>
 </head>
 
-<body class="p-4">
+<body>
+  <!-- Navbar -->
+  <nav class="navbar navbar-expand-lg navbar-custom mb-4">
+    <div class="container">
+      <a class="navbar-brand" href="#"><i class="bi bi-geo-alt-fill"></i> GIS</a>
+      <div class="collapse navbar-collapse">
+        <ul class="navbar-nav ms-auto">
+          <li class="nav-item"><a class="nav-link" href="{{ url_for('index') }}"><i class="bi bi-house-door-fill"></i> หน้าแรก</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Form Card -->
   <div class="container">
-    <h3>{{ 'แก้ไขโปรเจค' if mode == 'edit' else 'สร้างโปรเจคใหม่' }}</h3>
-    <form id="uploadForm" enctype="multipart/form-data">
-      <input type="hidden" name="project_id" value="{{ project.id if project else '' }}">
-      <div class="mb-3">
-        <label>ชื่อของงาน</label>
-        <input type="text" name="project_name" class="form-control" required
-          value="{{ project.project_name if project else '' }}">
-      </div>
-      <div class="mb-3">
-        <label>รายละเอียดงาน</label>
-        <textarea name="project_detail" class="form-control">{{ project.project_detail if project else '' }}</textarea>
-      </div>
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <h4 class="mb-4">{{ 'แก้ไขโปรเจค' if mode == 'edit' else 'สร้างโปรเจคใหม่' }}</h4>
+        <form id="uploadForm" enctype="multipart/form-data">
+          <input type="hidden" name="project_id" value="{{ project.id if project else '' }}">
 
-      <div class="mb-3">
-        <label>เลือกโฟลเดอร์ไฟล์</label>
-        <input type="file" name="folder_files" class="form-control" webkitdirectory directory multiple required>
-        <div class="form-text">ไฟล์ในโฟลเดอร์ควรขึ้นต้นด้วย Meter, Lv, Tr, Mv, Eservice</div>
-      </div>
+          <div class="mb-3">
+            <label>ชื่อของงาน</label>
+            <input type="text" name="project_name" class="form-control" required value="{{ project.project_name if project else '' }}">
+          </div>
 
-      <button type="submit" class="btn btn-primary">{{ 'อัปเดต' if mode == 'edit' else 'บันทึก' }}</button>
-      <a href="/" class="btn btn-secondary">กลับ</a>
-    </form>
+          <div class="mb-3">
+            <label>รายละเอียดงาน</label>
+            <textarea name="project_detail" class="form-control" rows="3">{{ project.project_detail if project else '' }}</textarea>
+          </div>
+
+          <div class="mb-3">
+            <label>เลือกโฟลเดอร์ไฟล์</label>
+            <input type="file" name="folder_files" class="form-control" webkitdirectory directory multiple {{ '' if mode == 'edit' else 'required' }}>
+            <div class="form-text">ไฟล์ในโฟลเดอร์ควรขึ้นต้นด้วย Meter, Lv, Tr, Mv, Eservice</div>
+          </div>
+
+          {% if existing_files %}
+          <div class="mt-3 mb-3">
+            <label>ไฟล์ที่อัปโหลดแล้ว:</label>
+            <ul class="list-group">
+              {% for type, filelist in existing_files.items() %}
+                <li class="list-group-item">
+                  <strong>{{ type|capitalize }}</strong>:
+                  {{ filelist | join(', ') }}
+                </li>
+              {% endfor %}
+            </ul>
+          </div>
+          {% endif %}
+
+          <div class="d-flex justify-content-between">
+            <a href="/" class="btn btn-secondary"><i class="bi bi-arrow-left"></i> กลับ</a>
+            <button type="submit" class="btn btn-custom-primary"><i class="bi bi-check-circle"></i> {{ 'อัปเดต' if mode == 'edit' else 'บันทึก' }}</button>
+          </div>
+        </form>
+      </div>
+    </div>
   </div>
 
+  <!-- JS -->
   <script>
     const form = document.getElementById('uploadForm');
 

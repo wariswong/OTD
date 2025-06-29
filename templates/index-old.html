@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+  <meta charset="UTF-8">
+  <title>รายการโปรเจค</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+
+<body class="p-4">
+  <div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h3>รายการโปรเจค</h3>
+      <a href="{{ url_for('create') }}" class="btn btn-success">+ สร้างโปรเจคใหม่</a>
+    </div>
+    <table class="table table-bordered table-hover">
+      <thead class="table-light">
+        <tr>
+          <th>ลำดับ</th>
+          <th>ชื่อโปรเจค</th>
+          <th>รายละเอียด</th>
+          <th>วันที่สร้าง</th>
+          <th>สถานะไฟล์</th>
+          <th>จัดการ</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for project in projects %}
+        <tr>
+          <td>{{ loop.index }}</td>
+          <td>{{ project.project_name }}</td>
+          <td>{{ project.project_detail[:100] }}{% if project.project_detail|length > 100 %}...{% endif %}</td>
+          <td>{{ project.created_at.strftime('%Y-%m-%d %H:%M') if project.created_at else '-' }}</td>
+          <td>
+            {% if project.file_count >= 5 %}
+            <span class="badge bg-success">ครบ</span>
+            {% else %}
+            <span class="badge bg-danger">ไม่ครบ</span>
+            {% endif %}
+          </td>
+          <td>
+            <a href="{{ url_for('edit', project_id=project.id) }}" class="btn btn-sm btn-warning">แก้ไข</a>
+            <button class="btn btn-sm btn-danger" onclick="confirmDelete({{ project.id }})">ลบ</button>
+            {% if project.file_count >= 5 %}
+            <button class="btn btn-sm btn-primary" onclick="runProject({{ project.id }})">Run</button>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    function confirmDelete(projectId) {
+      Swal.fire({
+        title: 'แน่ใจหรือไม่?',
+        text: "การลบนี้จะไม่สามารถย้อนกลับได้!",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'ใช่, ลบเลย!',
+        cancelButtonText: 'ยกเลิก'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          fetch(`/delete/${projectId}`, {
+            method: 'POST'
+          }).then(response => {
+            if (response.ok) {
+              Swal.fire('ลบแล้ว!', 'โปรเจคถูกลบเรียบร้อย', 'success')
+                .then(() => location.reload());
+            } else {
+              Swal.fire('ผิดพลาด', 'ไม่สามารถลบโปรเจคได้', 'error');
+            }
+          });
+        }
+      });
+    }
+
+    function runProject(projectId) {
+      Swal.fire({
+        title: 'กำลังจำลองระบบ...',
+        didOpen: () => {
+          Swal.showLoading()
+        },
+        allowOutsideClick: false
+      });
+
+      fetch(`/run/${projectId}`, {
+        method: 'POST'
+      })
+        .then(response => response.json())
+        .then(data => {
+          console.log(data);  // ดูข้อมูลใน console ก่อน
+          if (data.error) {
+            Swal.fire('ผิดพลาด', data.error, 'error');
+          } else {
+            let fileList = Object.values(data.files).join('\n');
+            Swal.fire('สำเร็จ', `${data.message}\n\nไฟล์ที่พบ:\n${fileList}`, 'success');
+          }
+        })
+        .catch(error => {
+          Swal.fire('ผิดพลาด', 'ไม่สามารถจำลองระบบได้', 'error');
+          console.error(error);
+        });
+    }
+  </script>
+</body>
+
+</html>
