@@ -1,0 +1,310 @@
+2025-06-29 14:33:28 [INFO] All shapefiles loaded from project 47. Starting main_pipeline...
+2025-06-29 14:33:28 [INFO] Extracting meter data from shapefile records...
+2025-06-29 14:33:28 [INFO] Meter data extracted successfully. Total meters: 40
+2025-06-29 14:33:28 [INFO] Extracting line data with coordinate snapping (tolerance=0.0m)
+2025-06-29 14:33:28 [INFO] Processed 50 lines with coordinate snapping
+2025-06-29 14:33:28 [INFO] Extracting line data with coordinate snapping (tolerance=0.0m)
+2025-06-29 14:33:28 [INFO] Processed 34 lines with coordinate snapping
+2025-06-29 14:33:28 [INFO] Coordinate distribution analysis:
+2025-06-29 14:33:28 [INFO]   Total points: 213
+2025-06-29 14:33:28 [INFO]   Min nearest distance: 0.26601692
+2025-06-29 14:33:28 [INFO]   Mean nearest distance: 15.74746550
+2025-06-29 14:33:28 [INFO]   Suggested tolerance: 0.96475411
+2025-06-29 14:33:28 [INFO] Finding optimal tolerance for 213 unique coordinates
+2025-06-29 14:33:28 [INFO] Target reduction ratio: 0.98
+2025-06-29 14:33:28 [INFO] Optimal tolerance found: 0.69341702
+2025-06-29 14:33:28 [INFO] Original coordinates: 213, Snapped coordinates: 210
+2025-06-29 14:33:28 [INFO] Reduction ratio: 0.986
+2025-06-29 14:33:28 [INFO] Average snap distance: 0.511778 units
+2025-06-29 14:33:28 [INFO] Automatically determined SNAP_TOLERANCE: 0.69341702m
+2025-06-29 14:33:28 [INFO] Extracting line data with coordinate snapping (tolerance=0.6934170192107383m)
+2025-06-29 14:33:28 [INFO] Processed 50 lines with coordinate snapping
+2025-06-29 14:33:28 [INFO] Extracting line data with coordinate snapping (tolerance=0.6934170192107383m)
+2025-06-29 14:33:28 [INFO] Processed 34 lines with coordinate snapping
+2025-06-29 14:33:28 [INFO] Extracting line data with attribute filter: SUBTYPECOD == 5 and snapping tolerance 0.6934170192107383m
+2025-06-29 14:33:28 [INFO] Found 40 lines matching SUBTYPECOD=5 with coordinate snapping.
+2025-06-29 14:33:28 [INFO] Applied coordinate snapping with tolerance: 0.6934170192107383m
+2025-06-29 14:33:28 [INFO] Checking for problematic lines after snap...
+2025-06-29 14:33:28 [INFO] Line snap analysis complete:
+2025-06-29 14:33:28 [INFO]   Total lines: 50
+2025-06-29 14:33:28 [INFO]   Invalid lines: 0
+2025-06-29 14:33:28 [INFO]   Short lines: 1
+2025-06-29 14:33:28 [INFO]   Problematic connections: 0
+2025-06-29 14:33:28 [INFO]   Isolated lines: 0
+2025-06-29 14:33:28 [WARNING] Found 1 problematic LV lines
+2025-06-29 14:33:28 [INFO] Failed lines exported to: ./testpy/problematic_lv_lines.shp
+2025-06-29 14:33:28 [INFO] Attempted 1 fixes on LV lines
+2025-06-29 14:33:28 [INFO] Extracting line data with attribute filter: SUBTYPECOD == 2 and snapping tolerance 0.6934170192107383m
+2025-06-29 14:33:28 [INFO] Found 1 lines matching SUBTYPECOD=2 with coordinate snapping.
+2025-06-29 14:33:28 [INFO] Initial transformer location => [ 962756.2261085 1720429.916549 ]
+2025-06-29 14:33:28 [INFO] Building LV network with coordinate snapping (tolerance=0.6934170192107383m)...
+2025-06-29 14:33:28 [INFO] Created mapping for 50 line segments using field 'Shape_Leng'.
+2025-06-29 14:33:28 [INFO] Connecting meters to network (KDTree)…
+2025-06-29 14:33:28 [INFO] Network is fully connected after coordinate snapping
+2025-06-29 14:33:28 [WARNING] Found 40 edges shorter than snap tolerance
+2025-06-29 14:33:28 [INFO] LV network built successfully: 138 nodes, 137 edges
+2025-06-29 14:33:28 [INFO] Applied coordinate snapping with tolerance 0.6934170192107383m
+2025-06-29 14:33:28 [INFO] Initial network is connected.
+2025-06-29 14:33:28 [INFO] Optimizing Transformer location on LV cond=3 lines...
+2025-06-29 14:33:28 [INFO] Calculating network load center with coordinate snapping and optimizations...
+2025-06-29 14:33:28 [INFO] Building LV network with coordinate snapping (tolerance=0.1m)...
+2025-06-29 14:33:28 [INFO] Created mapping for 50 line segments using field 'Shape_Leng'.
+2025-06-29 14:33:28 [INFO] Connecting meters to network (KDTree)…
+2025-06-29 14:33:28 [INFO] Network is fully connected after coordinate snapping
+2025-06-29 14:33:28 [WARNING] Found 40 edges shorter than snap tolerance
+2025-06-29 14:33:28 [INFO] LV network built successfully: 137 nodes, 136 edges
+2025-06-29 14:33:28 [INFO] Applied coordinate snapping with tolerance 0.1m
+2025-06-29 14:33:28 [INFO] Processing 35 meters with non-zero loads out of 40 total meters
+2025-06-29 14:33:28 [INFO] Best network load center: [ 962776.3661085 1720345.465549 ]
+2025-06-29 14:33:28 [INFO] Building LV network with coordinate snapping (tolerance=0.1m)...
+2025-06-29 14:33:28 [INFO] Created mapping for 50 line segments using field 'Shape_Leng'.
+2025-06-29 14:33:28 [INFO] Connecting meters to network (KDTree)…
+2025-06-29 14:33:28 [INFO] Network is fully connected after coordinate snapping
+2025-06-29 14:33:28 [WARNING] Found 40 edges shorter than snap tolerance
+2025-06-29 14:33:28 [INFO] LV network built successfully: 137 nodes, 136 edges
+2025-06-29 14:33:28 [INFO] Applied coordinate snapping with tolerance 0.1m
+2025-06-29 14:33:28 [INFO] Unbalanced loadflow converged in 4 iterations (max voltage change 0.0001 V).
+2025-06-29 14:33:28 [INFO] Building LV network with coordinate snapping (tolerance=0.1m)...
+2025-06-29 14:33:28 [INFO] Created mapping for 50 line segments using field 'Shape_Leng'.
+2025-06-29 14:33:28 [INFO] Connecting meters to network (KDTree)…
+2025-06-29 14:33:28 [INFO] Network is fully connected after coordinate snapping
+2025-06-29 14:33:28 [WARNING] Found 40 edges shorter than snap tolerance
+2025-06-29 14:33:28 [INFO] LV network built successfully: 137 nodes, 136 edges
+2025-06-29 14:33:28 [INFO] Applied coordinate snapping with tolerance 0.1m
+2025-06-29 14:33:28 [INFO] Unbalanced loadflow converged in 4 iterations (max voltage change 0.0001 V).
+2025-06-29 14:33:28 [INFO] Calculating network load center with coordinate snapping and optimizations...
+2025-06-29 14:33:28 [INFO] Building LV network with coordinate snapping (tolerance=0.1m)...
+2025-06-29 14:33:28 [INFO] Created mapping for 50 line segments using field 'Shape_Leng'.
+2025-06-29 14:33:28 [INFO] Connecting meters to network (KDTree)…
+2025-06-29 14:33:28 [INFO] Network is fully connected after coordinate snapping
+2025-06-29 14:33:28 [WARNING] Found 40 edges shorter than snap tolerance
+2025-06-29 14:33:28 [INFO] LV network built successfully: 137 nodes, 136 edges
+2025-06-29 14:33:28 [INFO] Applied coordinate snapping with tolerance 0.1m
+2025-06-29 14:33:28 [INFO] Processing 35 meters with non-zero loads out of 40 total meters
+2025-06-29 14:33:28 [INFO] Best network load center: [ 962776.3661085 1720345.465549 ]
+2025-06-29 14:33:28 [INFO] Building LV network with coordinate snapping (tolerance=0.1m)...
+2025-06-29 14:33:28 [INFO] Created mapping for 50 line segments using field 'Shape_Leng'.
+2025-06-29 14:33:28 [INFO] Connecting meters to network (KDTree)…
+2025-06-29 14:33:28 [INFO] Network is fully connected after coordinate snapping
+2025-06-29 14:33:28 [WARNING] Found 41 edges shorter than snap tolerance
+2025-06-29 14:33:28 [INFO] LV network built successfully: 138 nodes, 137 edges
+2025-06-29 14:33:28 [INFO] Applied coordinate snapping with tolerance 0.1m
+2025-06-29 14:33:28 [INFO] Unbalanced loadflow converged in 4 iterations (max voltage change 0.0001 V).
+2025-06-29 14:33:28 [INFO] Calculating network load center with coordinate snapping and optimizations...
+2025-06-29 14:33:28 [INFO] Building LV network with coordinate snapping (tolerance=0.1m)...
+2025-06-29 14:33:28 [INFO] Created mapping for 50 line segments using field 'Shape_Leng'.
+2025-06-29 14:33:28 [INFO] Connecting meters to network (KDTree)…
+2025-06-29 14:33:28 [INFO] Network is fully connected after coordinate snapping
+2025-06-29 14:33:28 [WARNING] Found 40 edges shorter than snap tolerance
+2025-06-29 14:33:28 [INFO] LV network built successfully: 137 nodes, 136 edges
+2025-06-29 14:33:28 [INFO] Applied coordinate snapping with tolerance 0.1m
+2025-06-29 14:33:28 [INFO] Processing 35 meters with non-zero loads out of 40 total meters
+2025-06-29 14:33:28 [INFO] Best network load center: [ 962776.3661085 1720345.465549 ]
+2025-06-29 14:33:28 [INFO] Building LV network with coordinate snapping (tolerance=0.1m)...
+2025-06-29 14:33:28 [INFO] Created mapping for 50 line segments using field 'Shape_Leng'.
+2025-06-29 14:33:28 [INFO] Connecting meters to network (KDTree)…
+2025-06-29 14:33:28 [INFO] Network is fully connected after coordinate snapping
+2025-06-29 14:33:29 [WARNING] Found 41 edges shorter than snap tolerance
+2025-06-29 14:33:29 [INFO] LV network built successfully: 138 nodes, 137 edges
+2025-06-29 14:33:29 [INFO] Applied coordinate snapping with tolerance 0.1m
+2025-06-29 14:33:29 [INFO] Unbalanced loadflow converged in 4 iterations (max voltage change 0.0001 V).
+2025-06-29 14:33:29 [INFO] Calculating network load center with coordinate snapping and optimizations...
+2025-06-29 14:33:29 [INFO] Building LV network with coordinate snapping (tolerance=0.1m)...
+2025-06-29 14:33:29 [INFO] Created mapping for 50 line segments using field 'Shape_Leng'.
+2025-06-29 14:33:29 [INFO] Connecting meters to network (KDTree)…
+2025-06-29 14:33:29 [INFO] Network is fully connected after coordinate snapping
+2025-06-29 14:33:29 [WARNING] Found 40 edges shorter than snap tolerance
+2025-06-29 14:33:29 [INFO] LV network built successfully: 137 nodes, 136 edges
+2025-06-29 14:33:29 [INFO] Applied coordinate snapping with tolerance 0.1m
+2025-06-29 14:33:29 [INFO] Processing 35 meters with non-zero loads out of 40 total meters
+2025-06-29 14:33:29 [INFO] Best network load center: [ 962776.3661085 1720345.465549 ]
+2025-06-29 14:33:29 [INFO] Building LV network with coordinate snapping (tolerance=0.1m)...
+2025-06-29 14:33:29 [INFO] Created mapping for 50 line segments using field 'Shape_Leng'.
+2025-06-29 14:33:29 [INFO] Connecting meters to network (KDTree)…
+2025-06-29 14:33:29 [INFO] Network is fully connected after coordinate snapping
+2025-06-29 14:33:29 [WARNING] Found 40 edges shorter than snap tolerance
+2025-06-29 14:33:29 [INFO] LV network built successfully: 137 nodes, 136 edges
+2025-06-29 14:33:29 [INFO] Applied coordinate snapping with tolerance 0.1m
+2025-06-29 14:33:29 [INFO] Unbalanced loadflow converged in 4 iterations (max voltage change 0.0001 V).
+2025-06-29 14:33:29 [INFO] Building LV network with coordinate snapping (tolerance=0.1m)...
+2025-06-29 14:33:29 [INFO] Created mapping for 50 line segments using field 'Shape_Leng'.
+2025-06-29 14:33:29 [INFO] Connecting meters to network (KDTree)…
+2025-06-29 14:33:29 [INFO] Network is fully connected after coordinate snapping
+2025-06-29 14:33:29 [WARNING] Found 40 edges shorter than snap tolerance
+2025-06-29 14:33:29 [INFO] LV network built successfully: 137 nodes, 136 edges
+2025-06-29 14:33:29 [INFO] Applied coordinate snapping with tolerance 0.1m
+2025-06-29 14:33:29 [INFO] Unbalanced loadflow converged in 4 iterations (max voltage change 0.0001 V).
+2025-06-29 14:33:29 [INFO] Building LV network with coordinate snapping (tolerance=0.1m)...
+2025-06-29 14:33:29 [INFO] Created mapping for 50 line segments using field 'Shape_Leng'.
+2025-06-29 14:33:29 [INFO] Connecting meters to network (KDTree)…
+2025-06-29 14:33:29 [INFO] Network is fully connected after coordinate snapping
+2025-06-29 14:33:29 [WARNING] Found 41 edges shorter than snap tolerance
+2025-06-29 14:33:29 [INFO] LV network built successfully: 138 nodes, 137 edges
+2025-06-29 14:33:29 [INFO] Applied coordinate snapping with tolerance 0.1m
+2025-06-29 14:33:29 [INFO] Unbalanced loadflow converged in 4 iterations (max voltage change 0.0001 V).
+2025-06-29 14:33:29 [INFO] Building LV network with coordinate snapping (tolerance=0.1m)...
+2025-06-29 14:33:29 [INFO] Created mapping for 50 line segments using field 'Shape_Leng'.
+2025-06-29 14:33:29 [INFO] Connecting meters to network (KDTree)…
+2025-06-29 14:33:29 [INFO] Network is fully connected after coordinate snapping
+2025-06-29 14:33:29 [WARNING] Found 41 edges shorter than snap tolerance
+2025-06-29 14:33:29 [INFO] LV network built successfully: 138 nodes, 137 edges
+2025-06-29 14:33:29 [INFO] Applied coordinate snapping with tolerance 0.1m
+2025-06-29 14:33:29 [INFO] Unbalanced loadflow converged in 4 iterations (max voltage change 0.0001 V).
+2025-06-29 14:33:29 [INFO] Building LV network with coordinate snapping (tolerance=0.1m)...
+2025-06-29 14:33:29 [INFO] Created mapping for 50 line segments using field 'Shape_Leng'.
+2025-06-29 14:33:29 [INFO] Connecting meters to network (KDTree)…
+2025-06-29 14:33:29 [INFO] Network is fully connected after coordinate snapping
+2025-06-29 14:33:29 [WARNING] Found 40 edges shorter than snap tolerance
+2025-06-29 14:33:29 [INFO] LV network built successfully: 138 nodes, 137 edges
+2025-06-29 14:33:29 [INFO] Applied coordinate snapping with tolerance 0.1m
+2025-06-29 14:33:29 [INFO] Unbalanced loadflow converged in 5 iterations (max voltage change 0.0001 V).
+2025-06-29 14:33:29 [INFO] Calculating network load center with coordinate snapping and optimizations...
+2025-06-29 14:33:29 [INFO] Building LV network with coordinate snapping (tolerance=0.1m)...
+2025-06-29 14:33:29 [INFO] Created mapping for 50 line segments using field 'Shape_Leng'.
+2025-06-29 14:33:29 [INFO] Connecting meters to network (KDTree)…
+2025-06-29 14:33:29 [INFO] Network is fully connected after coordinate snapping
+2025-06-29 14:33:29 [WARNING] Found 40 edges shorter than snap tolerance
+2025-06-29 14:33:29 [INFO] LV network built successfully: 137 nodes, 136 edges
+2025-06-29 14:33:29 [INFO] Applied coordinate snapping with tolerance 0.1m
+2025-06-29 14:33:29 [INFO] Processing 35 meters with non-zero loads out of 40 total meters
+2025-06-29 14:33:29 [INFO] Best network load center: [ 962776.3661085 1720345.465549 ]
+2025-06-29 14:33:29 [INFO] Building LV network with coordinate snapping (tolerance=0.1m)...
+2025-06-29 14:33:29 [INFO] Created mapping for 50 line segments using field 'Shape_Leng'.
+2025-06-29 14:33:29 [INFO] Connecting meters to network (KDTree)…
+2025-06-29 14:33:29 [INFO] Network is fully connected after coordinate snapping
+2025-06-29 14:33:29 [WARNING] Found 40 edges shorter than snap tolerance
+2025-06-29 14:33:29 [INFO] LV network built successfully: 138 nodes, 137 edges
+2025-06-29 14:33:29 [INFO] Applied coordinate snapping with tolerance 0.1m
+2025-06-29 14:33:29 [INFO] Unbalanced loadflow converged in 5 iterations (max voltage change 0.0001 V).
+2025-06-29 14:33:29 [INFO] Building LV network with coordinate snapping (tolerance=0.1m)...
+2025-06-29 14:33:29 [INFO] Created mapping for 50 line segments using field 'Shape_Leng'.
+2025-06-29 14:33:29 [INFO] Connecting meters to network (KDTree)…
+2025-06-29 14:33:29 [INFO] Network is fully connected after coordinate snapping
+2025-06-29 14:33:29 [WARNING] Found 40 edges shorter than snap tolerance
+2025-06-29 14:33:29 [INFO] LV network built successfully: 138 nodes, 137 edges
+2025-06-29 14:33:29 [INFO] Applied coordinate snapping with tolerance 0.1m
+2025-06-29 14:33:29 [INFO] Unbalanced loadflow converged in 4 iterations (max voltage change 0.0002 V).
+2025-06-29 14:33:29 [INFO] Calculating network load center with coordinate snapping and optimizations...
+2025-06-29 14:33:29 [INFO] Building LV network with coordinate snapping (tolerance=0.1m)...
+2025-06-29 14:33:29 [INFO] Created mapping for 50 line segments using field 'Shape_Leng'.
+2025-06-29 14:33:29 [INFO] Connecting meters to network (KDTree)…
+2025-06-29 14:33:29 [INFO] Network is fully connected after coordinate snapping
+2025-06-29 14:33:29 [WARNING] Found 40 edges shorter than snap tolerance
+2025-06-29 14:33:29 [INFO] LV network built successfully: 137 nodes, 136 edges
+2025-06-29 14:33:29 [INFO] Applied coordinate snapping with tolerance 0.1m
+2025-06-29 14:33:29 [INFO] Processing 35 meters with non-zero loads out of 40 total meters
+2025-06-29 14:33:29 [INFO] Best network load center: [ 962776.3661085 1720345.465549 ]
+2025-06-29 14:33:29 [INFO] Building LV network with coordinate snapping (tolerance=0.1m)...
+2025-06-29 14:33:29 [INFO] Created mapping for 50 line segments using field 'Shape_Leng'.
+2025-06-29 14:33:29 [INFO] Connecting meters to network (KDTree)…
+2025-06-29 14:33:29 [INFO] Network is fully connected after coordinate snapping
+2025-06-29 14:33:29 [WARNING] Found 40 edges shorter than snap tolerance
+2025-06-29 14:33:29 [INFO] LV network built successfully: 138 nodes, 137 edges
+2025-06-29 14:33:29 [INFO] Applied coordinate snapping with tolerance 0.1m
+2025-06-29 14:33:29 [INFO] Unbalanced loadflow converged in 4 iterations (max voltage change 0.0002 V).
+2025-06-29 14:33:29 [INFO] Building LV network with coordinate snapping (tolerance=0.1m)...
+2025-06-29 14:33:29 [INFO] Created mapping for 50 line segments using field 'Shape_Leng'.
+2025-06-29 14:33:29 [INFO] Connecting meters to network (KDTree)…
+2025-06-29 14:33:29 [INFO] Network is fully connected after coordinate snapping
+2025-06-29 14:33:29 [WARNING] Found 40 edges shorter than snap tolerance
+2025-06-29 14:33:29 [INFO] LV network built successfully: 138 nodes, 137 edges
+2025-06-29 14:33:29 [INFO] Applied coordinate snapping with tolerance 0.1m
+2025-06-29 14:33:29 [INFO] Unbalanced loadflow converged in 4 iterations (max voltage change 0.0001 V).
+2025-06-29 14:33:29 [INFO] Calculating network load center with coordinate snapping and optimizations...
+2025-06-29 14:33:29 [INFO] Building LV network with coordinate snapping (tolerance=0.1m)...
+2025-06-29 14:33:29 [INFO] Created mapping for 50 line segments using field 'Shape_Leng'.
+2025-06-29 14:33:29 [INFO] Connecting meters to network (KDTree)…
+2025-06-29 14:33:29 [INFO] Network is fully connected after coordinate snapping
+2025-06-29 14:33:29 [WARNING] Found 40 edges shorter than snap tolerance
+2025-06-29 14:33:29 [INFO] LV network built successfully: 137 nodes, 136 edges
+2025-06-29 14:33:29 [INFO] Applied coordinate snapping with tolerance 0.1m
+2025-06-29 14:33:29 [INFO] Processing 35 meters with non-zero loads out of 40 total meters
+2025-06-29 14:33:29 [INFO] Best network load center: [ 962776.3661085 1720345.465549 ]
+2025-06-29 14:33:29 [INFO] Building LV network with coordinate snapping (tolerance=0.1m)...
+2025-06-29 14:33:29 [INFO] Created mapping for 50 line segments using field 'Shape_Leng'.
+2025-06-29 14:33:29 [INFO] Connecting meters to network (KDTree)…
+2025-06-29 14:33:29 [INFO] Network is fully connected after coordinate snapping
+2025-06-29 14:33:29 [WARNING] Found 40 edges shorter than snap tolerance
+2025-06-29 14:33:29 [INFO] LV network built successfully: 138 nodes, 137 edges
+2025-06-29 14:33:29 [INFO] Applied coordinate snapping with tolerance 0.1m
+2025-06-29 14:33:29 [INFO] Unbalanced loadflow converged in 4 iterations (max voltage change 0.0001 V).
+2025-06-29 14:33:29 [INFO] Building LV network with coordinate snapping (tolerance=0.1m)...
+2025-06-29 14:33:29 [INFO] Created mapping for 50 line segments using field 'Shape_Leng'.
+2025-06-29 14:33:29 [INFO] Connecting meters to network (KDTree)…
+2025-06-29 14:33:29 [INFO] Network is fully connected after coordinate snapping
+2025-06-29 14:33:29 [WARNING] Found 40 edges shorter than snap tolerance
+2025-06-29 14:33:29 [INFO] LV network built successfully: 138 nodes, 137 edges
+2025-06-29 14:33:29 [INFO] Applied coordinate snapping with tolerance 0.1m
+2025-06-29 14:33:29 [INFO] Unbalanced loadflow converged in 4 iterations (max voltage change 0.0001 V).
+2025-06-29 14:33:29 [INFO] Calculating network load center with coordinate snapping and optimizations...
+2025-06-29 14:33:29 [INFO] Building LV network with coordinate snapping (tolerance=0.1m)...
+2025-06-29 14:33:29 [INFO] Created mapping for 50 line segments using field 'Shape_Leng'.
+2025-06-29 14:33:29 [INFO] Connecting meters to network (KDTree)…
+2025-06-29 14:33:29 [INFO] Network is fully connected after coordinate snapping
+2025-06-29 14:33:29 [WARNING] Found 40 edges shorter than snap tolerance
+2025-06-29 14:33:29 [INFO] LV network built successfully: 137 nodes, 136 edges
+2025-06-29 14:33:29 [INFO] Applied coordinate snapping with tolerance 0.1m
+2025-06-29 14:33:29 [INFO] Processing 35 meters with non-zero loads out of 40 total meters
+2025-06-29 14:33:29 [INFO] Best network load center: [ 962776.3661085 1720345.465549 ]
+2025-06-29 14:33:29 [INFO] Building LV network with coordinate snapping (tolerance=0.1m)...
+2025-06-29 14:33:29 [INFO] Created mapping for 50 line segments using field 'Shape_Leng'.
+2025-06-29 14:33:29 [INFO] Connecting meters to network (KDTree)…
+2025-06-29 14:33:29 [INFO] Network is fully connected after coordinate snapping
+2025-06-29 14:33:29 [WARNING] Found 40 edges shorter than snap tolerance
+2025-06-29 14:33:29 [INFO] LV network built successfully: 138 nodes, 137 edges
+2025-06-29 14:33:29 [INFO] Applied coordinate snapping with tolerance 0.1m
+2025-06-29 14:33:29 [INFO] Unbalanced loadflow converged in 4 iterations (max voltage change 0.0001 V).
+2025-06-29 14:33:29 [INFO] Building LV network with coordinate snapping (tolerance=0.1m)...
+2025-06-29 14:33:29 [INFO] Created mapping for 50 line segments using field 'Shape_Leng'.
+2025-06-29 14:33:29 [INFO] Connecting meters to network (KDTree)…
+2025-06-29 14:33:29 [INFO] Network is fully connected after coordinate snapping
+2025-06-29 14:33:29 [WARNING] Found 40 edges shorter than snap tolerance
+2025-06-29 14:33:29 [INFO] LV network built successfully: 138 nodes, 137 edges
+2025-06-29 14:33:29 [INFO] Applied coordinate snapping with tolerance 0.1m
+2025-06-29 14:33:29 [INFO] Unbalanced loadflow converged in 4 iterations (max voltage change 0.0001 V).
+2025-06-29 14:33:29 [INFO] Calculating network load center with coordinate snapping and optimizations...
+2025-06-29 14:33:29 [INFO] Building LV network with coordinate snapping (tolerance=0.1m)...
+2025-06-29 14:33:29 [INFO] Created mapping for 50 line segments using field 'Shape_Leng'.
+2025-06-29 14:33:29 [INFO] Connecting meters to network (KDTree)…
+2025-06-29 14:33:29 [INFO] Network is fully connected after coordinate snapping
+2025-06-29 14:33:29 [WARNING] Found 40 edges shorter than snap tolerance
+2025-06-29 14:33:29 [INFO] LV network built successfully: 137 nodes, 136 edges
+2025-06-29 14:33:29 [INFO] Applied coordinate snapping with tolerance 0.1m
+2025-06-29 14:33:29 [INFO] Processing 35 meters with non-zero loads out of 40 total meters
+2025-06-29 14:33:29 [INFO] Best network load center: [ 962776.3661085 1720345.465549 ]
+2025-06-29 14:33:29 [INFO] Building LV network with coordinate snapping (tolerance=0.1m)...
+2025-06-29 14:33:29 [INFO] Created mapping for 50 line segments using field 'Shape_Leng'.
+2025-06-29 14:33:29 [INFO] Connecting meters to network (KDTree)…
+2025-06-29 14:33:29 [INFO] Network is fully connected after coordinate snapping
+2025-06-29 14:33:29 [WARNING] Found 40 edges shorter than snap tolerance
+2025-06-29 14:33:29 [INFO] LV network built successfully: 138 nodes, 137 edges
+2025-06-29 14:33:29 [INFO] Applied coordinate snapping with tolerance 0.1m
+2025-06-29 14:33:29 [INFO] Unbalanced loadflow converged in 4 iterations (max voltage change 0.0001 V).
+2025-06-29 14:33:29 [INFO] Building LV network with coordinate snapping (tolerance=0.1m)...
+2025-06-29 14:33:29 [INFO] Created mapping for 50 line segments using field 'Shape_Leng'.
+2025-06-29 14:33:29 [INFO] Connecting meters to network (KDTree)…
+2025-06-29 14:33:29 [INFO] Network is fully connected after coordinate snapping
+2025-06-29 14:33:29 [WARNING] Found 40 edges shorter than snap tolerance
+2025-06-29 14:33:29 [INFO] LV network built successfully: 138 nodes, 137 edges
+2025-06-29 14:33:29 [INFO] Applied coordinate snapping with tolerance 0.1m
+2025-06-29 14:33:29 [INFO] Unbalanced loadflow converged in 4 iterations (max voltage change 0.0001 V).
+2025-06-29 14:33:29 [INFO] Calculating network load center with coordinate snapping and optimizations...
+2025-06-29 14:33:29 [INFO] Building LV network with coordinate snapping (tolerance=0.1m)...
+2025-06-29 14:33:29 [INFO] Created mapping for 50 line segments using field 'Shape_Leng'.
+2025-06-29 14:33:29 [INFO] Connecting meters to network (KDTree)…
+2025-06-29 14:33:29 [INFO] Network is fully connected after coordinate snapping
+2025-06-29 14:33:29 [WARNING] Found 40 edges shorter than snap tolerance
+2025-06-29 14:33:29 [INFO] LV network built successfully: 137 nodes, 136 edges
+2025-06-29 14:33:29 [INFO] Applied coordinate snapping with tolerance 0.1m
+2025-06-29 14:33:29 [INFO] Processing 35 meters with non-zero loads out of 40 total meters
+2025-06-29 14:33:29 [INFO] Best network load center: [ 962776.3661085 1720345.465549 ]
+2025-06-29 14:33:29 [INFO] Building LV network with coordinate snapping (tolerance=0.1m)...
+2025-06-29 14:33:29 [INFO] Created mapping for 50 line segments using field 'Shape_Leng'.
+2025-06-29 14:33:29 [INFO] Connecting meters to network (KDTree)…
+2025-06-29 14:33:29 [INFO] Network is fully connected after coordinate snapping
+2025-06-29 14:33:29 [WARNING] Found 40 edges shorter than snap tolerance
+2025-06-29 14:33:29 [INFO] LV network built successfully: 138 nodes, 137 edges
+2025-06-29 14:33:29 [INFO] Applied coordinate snapping with tolerance 0.1m
+2025-06-29 14:33:29 [INFO] Unbalanced loadflow converged in 4 iterations (max voltage change 0.0001 V).
+2025-06-29 14:33:29 [INFO] Building LV network with coordinate snapping (tolerance=0.1m)...
+2025-06-29 14:33:29 [INFO] Created mapping for 50 line segments using field 'Shape_Leng'.

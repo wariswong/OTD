@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify, render_template, redirect, url_for, r
 from werkzeug.utils import secure_filename
 import os, shutil
 import mysql.connector
-from processNew import run_process_from_project_folder
+from processNew_no_gui import run_process_from_project_folder
 import logging
 
 app = Flask(__name__,

@@ -3366,6 +3366,204 @@ def plotResults(lvLinesX, lvLinesY, mvLinesX, mvLinesY, eserviceLinesX, eservice
     else:
         logging.info("Using basic navigation controls only")
 
+def plotResults_NGUI(lvLinesX, lvLinesY, mvLinesX, mvLinesY, eserviceLinesX, eserviceLinesY,
+                projectID, meterLocations, initialTransformerLocation, optimizedTransformerLocation,
+                group1_indices, group2_indices, splitting_point_coords=None, coord_mapping=None,
+                optimizedTransformerLocationGroup1=None, optimizedTransformerLocationGroup2=None,
+                transformer_losses=None, phases=None, result_df=None, G=None):
+
+    # Step 1: โปรเจกชัน TM3 48N (ใส่พิกัดเริ่มต้นตามของคุณ)
+    # TM3 Thailand 48N = EPSG:32648, หรือใช้ Proj string
+    proj_tm3 = pyproj.CRS.from_proj4("+proj=utm +zone=47 +datum=WGS84 +units=m +no_defs")
+    proj_wgs84 = pyproj.CRS("EPSG:4326")
+    transformer = pyproj.Transformer.from_crs(proj_tm3, proj_wgs84, always_xy=True)
+
+    output_dir = f"output/{projectID}"
+    os.makedirs(output_dir, exist_ok=True)
+
+    # ตัวอย่างข้อมูลจาก lvLinesX, lvLinesY (list of list)
+    # สมมุติว่า lvLinesX = [[x1, x2], [x3, x4]], lvLinesY = [[y1, y2], [y3, y4]]
+    featuresLV = []
+    
+    
+    for x_list, y_list in zip(lvLinesX, lvLinesY):
+        latlons = [transformer.transform(x, y) for x, y in zip(x_list, y_list)]
+        
+        feature = {
+            "type": "Feature",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": latlons
+            },
+            "properties": {
+                "type": "LV Line"
+            }
+        }
+        featuresLV.append(feature)
+
+    geojson_output = {
+        "type": "FeatureCollection",
+        "features": featuresLV
+    }
+
+    # เขียนลงไฟล์หรือ return
+    output_path = os.path.join(output_dir, "lv_lines.geojson")
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(geojson_output, f, indent=2)    
+
+    featuresMV = []
+
+    for mvx_list, mvy_list in zip(mvLinesX, mvLinesY):
+        latlons = [transformer.transform(x, y) for x, y in zip(mvx_list, mvy_list)]
+        
+        feature = {
+            "type": "Feature",
+            "geometry": {
+                "type": "LineString",
+                "coordinates": latlons
+            },
+            "properties": {
+                "type": "MV Line"
+            }
+        }
+        featuresMV.append(feature)
+
+    geojson_output = {
+        "type": "FeatureCollection",
+        "features": featuresMV
+    }
+
+    # เขียนลงไฟล์หรือ return
+    output_path = os.path.join(output_dir, "mv_lines.geojson")
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(geojson_output, f, indent=2)
+
+    # 1. สร้าง transformer สำหรับแปลงจาก TM3 Zone 48N → WGS84
+    proj_tm3 = pyproj.CRS.from_proj4("+proj=utm +zone=47 +datum=WGS84 +units=m +no_defs")
+    proj_wgs84 = pyproj.CRS("EPSG:4326")
+    transformer = pyproj.Transformer.from_crs(proj_tm3, proj_wgs84, always_xy=True)
+
+    # 2. สมมุติว่ามีตัวแปรเหล่านี้จากโค้ดเดิม
+    # meterLocations: numpy array shape (N,2)
+    # group1_indices, group2_indices: list of indices
+
+    # 3. แปลงพิกัดแต่ละกลุ่ม
+    group1_lonlat = [
+        transformer.transform(x, y)
+        for x, y in zip(
+            meterLocations[group1_indices, 0],
+            meterLocations[group1_indices, 1]
+        )
+    ]
+
+    group2_lonlat = [
+        transformer.transform(x, y)
+        for x, y in zip(
+            meterLocations[group2_indices, 0],
+            meterLocations[group2_indices, 1]
+        )
+    ]
+
+    # สร้างฟังก์ชันช่วยสร้าง voltage_text ต่อมิเตอร์
+    def get_voltage_text(i):
+        connected_phases = phases[i].upper().strip()
+        voltage_text = ''
+        for ph in ['A', 'B', 'C']:
+            if ph in connected_phases:
+                colname = f'Final Voltage {ph} (V)'
+                if colname in result_df.columns:
+                    vval = result_df.iloc[i][colname]
+                    if pd.notnull(vval):
+                        voltage_text += f'{ph}:{vval:.1f}V\n'
+                    else:
+                        voltage_text += f'{ph}:N/A\n'
+        return voltage_text.strip()
+
+    # แปลงพิกัดและเพิ่ม voltage text
+
+    # 4. สร้าง GeoJSON FeatureCollection
+    features = []
+
+    for idx in group1_indices:
+        x, y = meterLocations[idx]
+        lon, lat = transformer.transform(x, y)
+        voltage_text = get_voltage_text(idx)
+        features.append({
+            "type": "Feature",
+            "geometry": {"type": "Point", "coordinates": [lon, lat]},
+            "properties": {
+                "group": 1,
+                "voltage_text": voltage_text
+            }
+        })
+
+    for idx in group2_indices:
+        x, y = meterLocations[idx]
+        lon, lat = transformer.transform(x, y)
+        voltage_text = get_voltage_text(idx)
+        features.append({
+            "type": "Feature",
+            "geometry": {"type": "Point", "coordinates": [lon, lat]},
+            "properties": {
+                "group": 2,
+                "voltage_text": voltage_text
+            }
+        })
+
+    geojson = {
+        "type": "FeatureCollection",
+        "features": features
+    }
+
+    # บันทึกลงไฟล์
+    output_path = os.path.join(output_dir, "meter_groups.geojson")
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(geojson, f, ensure_ascii=False, indent=2)
+
+    features = []
+
+    # Initial Transformer
+    if initialTransformerLocation is not None:
+        lon, lat = transformer.transform(initialTransformerLocation[0], initialTransformerLocation[1])
+        features.append(Feature(
+            geometry=Point((lon, lat)),
+            properties={"name": "Initial Transformer", "group": "initial"}
+        ))
+
+    # Splitting Point
+    if splitting_point_coords is not None:
+        lon, lat = transformer.transform(splitting_point_coords[0], splitting_point_coords[1])
+        features.append(Feature(
+            geometry=Point((lon, lat)),
+            properties={"name": "Splitting Point", "group": "splitting"}
+        ))
+
+    # Group 1 Transformer
+    if optimizedTransformerLocationGroup1 is not None:
+        lon, lat = transformer.transform(optimizedTransformerLocationGroup1[0], optimizedTransformerLocationGroup1[1])
+        features.append(Feature(
+            geometry=Point((lon, lat)),
+            properties={"name": "Group 1 Transformer", "group": "group1"}
+        ))
+
+    # Group 2 Transformer
+    if optimizedTransformerLocationGroup2 is not None:
+        lon, lat = transformer.transform(optimizedTransformerLocationGroup2[0], optimizedTransformerLocationGroup2[1])
+        features.append(Feature(
+            geometry=Point((lon, lat)),
+            properties={"name": "Group 2 Transformer", "group": "group2"}
+        ))
+
+    # สร้าง FeatureCollection
+    feature_collection = FeatureCollection(features)
+
+    # บันทึกไฟล์
+    output_path = os.path.join(output_dir, "feature_groups.geojson")
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(feature_collection, f, ensure_ascii=False, indent=2)
+
+    
+
 # ---------------------------------
 # 18) Transformer sizing & losses
 def growthRate(g2_load, annual_growth=0.04, years=4):
@@ -4334,7 +4532,7 @@ def main():
     peano[g1_idx],
     lvData,
     phases[g1_idx]
-)
+    )
     logging.info(
         "Group 1 load balance before -> A: %.1f kW, B: %.1f kW, C: %.1f kW",
         group1_phase_loads['A'].sum(),
@@ -4784,72 +4982,701 @@ def ensure_folder_exists(folder_path):
         print(f"folder {folder_path} already exists.")
 
 
+# def run_process_from_project_folder(project_id, folder_path):
+#     """Load SHP files from project folder and run the main process."""
+#     global meterData, lvData, mvData, transformerData, eserviceData
+#     global projectID
+#     projectID = project_id
+
+#     base_path = os.path.join(folder_path, str(project_id))
+
+#     required_files = {
+#         'meterData': 'meter.shp',
+#         'lvData': 'lv.shp',
+#         'mvData': 'mv.shp',
+#         'transformerData': 'tr.shp',
+#         'eserviceData': 'eservice.shp',
+#     }
+
+#     encodings = {
+#         'meterData': 'cp874',
+#         'transformerData': 'cp874',
+#         'lvData': 'utf-8',
+#         'mvData': 'utf-8',
+#         'eserviceData': 'utf-8',
+#     }
+
+#     found_files = {}
+
+#     # Load all required shapefiles
+#     for key, filename in required_files.items():
+#         shp_path = os.path.join(base_path, filename)
+#         if not os.path.exists(shp_path):
+#             logging.error(f"{filename} not found in {base_path}")
+#             return {'error': f"{filename} not found in project folder."}
+#         try:
+#             globals()[key] = shapefile.Reader(shp_path, encoding=encodings[key])
+#             found_files[key] = shp_path
+#             logging.info(f"{filename} loaded successfully.")
+#         except Exception as e:
+#             logging.error(f"Failed to read {filename}: {str(e)}")
+#             return {'error': f"Failed to read {filename}: {str(e)}"}
+
+#     # Setup logger for this project
+#     base_name = os.path.splitext(os.path.basename(required_files['transformerData']))[0]
+#     log_folder = os.path.join("logs", str(project_id))
+#     os.makedirs(log_folder, exist_ok=True)
+#     log_filename = os.path.join(log_folder, f"Optimization_{base_name}_log.txt")
+
+#     logger = logging.getLogger()
+#     for handler in logger.handlers[:]:
+#         if isinstance(handler, logging.FileHandler):
+#             logger.removeHandler(handler)
+
+#     fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+#     file_handler = logging.FileHandler(log_filename, mode="w", encoding="utf-8")
+#     file_handler.setFormatter(fmt)
+#     file_handler.setLevel(logging.INFO)
+#     logger.addHandler(file_handler)
+
+#     logging.info(f"All shapefiles loaded from project {project_id}. Starting main process...")
+
+#     try:
+#         main()  # Call the main process
+#         logging.info("Main process completed successfully.")
+#         return {'message': 'Process completed', 'log': log_filename, 'files': found_files}
+#     except Exception as e:
+#         logging.error(f"Error during processing: {str(e)}")
+#         return {'error': f"Error during processing: {str(e)}"}
+    
 def run_process_from_project_folder(project_id, folder_path):
-    """Load SHP files from project folder and run the main process."""
-    global meterData, lvData, mvData, transformerData, eserviceData
-    global projectID
-    projectID = project_id
-
-    base_path = os.path.join(folder_path, str(project_id))
-
-    required_files = {
-        'meterData': 'meter.shp',
-        'lvData': 'lv.shp',
-        'mvData': 'mv.shp',
-        'transformerData': 'tr.shp',
-        'eserviceData': 'eservice.shp',
-    }
-
-    encodings = {
-        'meterData': 'cp874',
-        'transformerData': 'cp874',
-        'lvData': 'utf-8',
-        'mvData': 'utf-8',
-        'eserviceData': 'utf-8',
-    }
-
-    found_files = {}
-
-    # Load all required shapefiles
-    for key, filename in required_files.items():
-        shp_path = os.path.join(base_path, filename)
-        if not os.path.exists(shp_path):
-            logging.error(f"{filename} not found in {base_path}")
-            return {'error': f"{filename} not found in project folder."}
-        try:
-            globals()[key] = shapefile.Reader(shp_path, encoding=encodings[key])
-            found_files[key] = shp_path
-            logging.info(f"{filename} loaded successfully.")
-        except Exception as e:
-            logging.error(f"Failed to read {filename}: {str(e)}")
-            return {'error': f"Failed to read {filename}: {str(e)}"}
-
-    # Setup logger for this project
-    base_name = os.path.splitext(os.path.basename(required_files['transformerData']))[0]
-    log_folder = os.path.join("logs", str(project_id))
-    os.makedirs(log_folder, exist_ok=True)
-    log_filename = os.path.join(log_folder, f"Optimization_{base_name}_log.txt")
-
-    logger = logging.getLogger()
-    for handler in logger.handlers[:]:
-        if isinstance(handler, logging.FileHandler):
-            logger.removeHandler(handler)
-
-    fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
-    file_handler = logging.FileHandler(log_filename, mode="w", encoding="utf-8")
-    file_handler.setFormatter(fmt)
-    file_handler.setLevel(logging.INFO)
-    logger.addHandler(file_handler)
-
-    logging.info(f"All shapefiles loaded from project {project_id}. Starting main process...")
-
+    """
+    โหลด SHP ทั้งหมดจาก project_id ที่อยู่ใน folder_path และรัน main_pipeline
+    แล้วบันทึกผลลัพธ์ใน output/{project_id}/
+    """
     try:
-        main()  # Call the main process
-        logging.info("Main process completed successfully.")
-        return {'message': 'Process completed', 'log': log_filename, 'files': found_files}
+        base_path = os.path.join(folder_path, str(project_id))
+
+        required_files = {
+            'meterData': 'meter.shp',
+            'lvData': 'lv.shp',
+            'mvData': 'mv.shp',
+            'transformerData': 'tr.shp',
+            'eserviceData': 'eservice.shp',
+        }
+
+        encodings = {
+            'meterData': 'cp874',
+            'transformerData': 'cp874',
+            'lvData': 'utf-8',
+            'mvData': 'utf-8',
+            'eserviceData': 'utf-8',
+        }
+
+        data = {}
+        for key, filename in required_files.items():
+            shp_path = os.path.join(base_path, filename)
+            if not os.path.exists(shp_path):
+                return {'error': f"{filename} not found in project folder."}
+            data[key] = shapefile.Reader(shp_path, encoding=encodings[key])
+
+        # เพิ่ม project metadata
+        data['project_id'] = project_id
+        data['output_dir'] = os.path.join('output', str(project_id))
+        os.makedirs(data['output_dir'], exist_ok=True)
+
+        # Setup logging
+        log_folder = os.path.join("logs", str(project_id))
+        os.makedirs(log_folder, exist_ok=True)
+        log_filename = os.path.join(log_folder, f"Optimization_log.txt")
+
+        logger = logging.getLogger()
+        for handler in logger.handlers[:]:
+            if isinstance(handler, logging.FileHandler):
+                logger.removeHandler(handler)
+
+        file_handler = logging.FileHandler(log_filename, mode="w", encoding="utf-8")
+        file_handler.setFormatter(logging.Formatter(
+            "%(asctime)s [%(levelname)s] %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S"
+        ))
+        logger.addHandler(file_handler)
+        logger.setLevel(logging.INFO)
+
+        logging.info(f"All shapefiles loaded from project {project_id}. Starting main_pipeline...")
+
+        result = main_pipeline(data)  # เรียก pipeline ที่แทน main() เดิม
+
+        # เขียน summary.json
+        summary_path = os.path.join(data['output_dir'], 'summary.json')
+        with open(summary_path, 'w', encoding='utf-8') as f:
+            json.dump(result, f, indent=2, ensure_ascii=False)
+
+        return {
+            'message': 'Process completed successfully',
+            'summary_path': summary_path,
+            'geojson_files': [
+                os.path.join(data['output_dir'], 'meter_groups.geojson'),
+                os.path.join(data['output_dir'], 'feature_groups.geojson'),
+            ],
+            'log_file': log_filename
+        }
+
     except Exception as e:
-        logging.error(f"Error during processing: {str(e)}")
-        return {'error': f"Error during processing: {str(e)}"}
+        logging.exception("Error running process:")
+        return {'error': str(e)}
+
+def main_pipeline(data):
+    import numpy as np
+    import pandas as pd
+    import logging
+    import networkx as nx
+
+    from collections import defaultdict
+
+    # --- Load input data from `data` dictionary ---
+    meterData = data['meterData']
+    lvData = data['lvData']
+    mvData = data['mvData']
+    transformerData = data['transformerData']
+    eserviceData = data['eserviceData']
+    output_dir = data['output_dir']
+    projectID = data['project_id']
+
+    # --- Initial global-like variables ---
+    SNAP_TOLERANCE = None
+    
+     
+    try:
+        meterLocations, initialVoltages, totalLoads, phase_loads, peano, phases = extractMeterData(meterData)
+        
+        # Extract line data first (without snapping)
+        lvLinesX, lvLinesY, lvLines = extractLineData(lvData, 0.0)
+        mvLinesX, mvLinesY, mvLines = extractLineData(mvData, 0.0)
+        
+        # Auto-determine optimal snap tolerance
+        SNAP_TOLERANCE = auto_determine_snap_tolerance(
+            meterLocations, 
+            lvLines, 
+            mvLines,
+            reduction_ratio=0.98,  # ลดจำนวนพิกัดเหลือ 98%
+            use_analysis=True
+        )
+        logging.info(f"Automatically determined SNAP_TOLERANCE: {SNAP_TOLERANCE:.8f}m")
+        
+        # Re-extract with optimal tolerance
+        lvLinesX, lvLinesY, lvLines = extractLineData(lvData, SNAP_TOLERANCE)
+        mvLinesX, mvLinesY, mvLines = extractLineData(mvData, SNAP_TOLERANCE)
+        # ==================================
+        
+        svcLinesX, svcLinesY, svcLines = extractLineDataWithAttributes(eserviceData, 'SUBTYPECOD', 5, SNAP_TOLERANCE)
+        
+        logging.info(f"Applied coordinate snapping with tolerance: {SNAP_TOLERANCE}m")
+        
+        numbercond_priority = [3, 2, 1]
+    except Exception as e:
+        logging.error(f"An error occurred: {e}")
+        return
+        # ตรวจสอบสายที่อาจมีปัญหา
+    logging.info("Checking for problematic lines after snap...")
+    
+    # วิเคราะห์ LV lines
+    lv_analysis = identify_failed_snap_lines(lvLines, SNAP_TOLERANCE)
+    if lv_analysis['total_issues'] > 0:
+        logging.warning(f"Found {lv_analysis['total_issues']} problematic LV lines")
+        
+        # Export สายที่มีปัญหาเพื่อตรวจสอบ
+        folder_path = './testpy'
+        ensure_folder_exists(folder_path)
+        export_failed_lines_shapefile(
+            lv_analysis, 
+            lvLines, 
+            f"{folder_path}/problematic_lv_lines.shp"
+        )
+        
+        # พยายามแก้ไข
+        fixed_lv_lines, fix_log = fix_failed_snap_lines(lv_analysis, lvLines, SNAP_TOLERANCE)
+        logging.info(f"Attempted {len(fix_log)} fixes on LV lines")
+    
+    # วิเคราะห์ MV lines
+    # mv_analysis = identify_failed_snap_lines(mvLines, SNAP_TOLERANCE)
+    # if mv_analysis['total_issues'] > 0:
+    #     logging.warning(f"Found {mv_analysis['total_issues']} problematic MV lines")
+    #     export_failed_lines_shapefile(
+    #         mv_analysis, 
+    #         mvLines, 
+    #         f"{folder_path}/problematic_mv_lines.shp"
+    #     ) 
+    # ส่วนการตั้งค่า transformer ต่างๆ ยังคงเหมือนเดิม
+    try:
+        transformerRecords = transformerData.records()
+        transformerFields = [f[0] for f in transformerData.fields[1:]]
+        transformer_df = pd.DataFrame(transformerRecords, columns=transformerFields)
+        if 'OPSA_TRS_3' in transformerFields:
+            transformerCapacity_kVA = transformer_df['OPSA_TRS_3'].values[0]
+        else:
+            raise KeyError("Field 'OPSA_TRS_3' not found in transformer shapefile.")
+        powerFactor = 0.875
+        transformerCapacity = transformerCapacity_kVA * powerFactor
+    except Exception as e:
+        logging.error(e)
+        return
+    
+    conductorResistance = 0.77009703
+    conductorReactance = 0.3497764 
+    initialVoltage = 230
+    
+    try:
+        # ใช้ฟังก์ชันที่แก้ไขแล้ว
+        eserviceLinesX, eserviceLinesY, filteredEserviceLines = extractLineDataWithAttributes(eserviceData, 'SUBTYPECOD', 2, SNAP_TOLERANCE)
+        if not filteredEserviceLines:
+            logging.warning("No Eservice lines with SUBTYPECOD=2 found.")
+    except Exception as e:
+        logging.error(f"Error processing Eservice lines: {e}")
+        return
+    
+    try:
+        t_shapes = transformerData.shapes()
+        if not t_shapes:
+            logging.error("Transformer shapefile has no shapes.")
+            return
+        initialTransformerLocation = np.array([t_shapes[0].points[0][0], t_shapes[0].points[0][1]])
+        logging.info(f"Initial transformer location => {initialTransformerLocation}")
+    except Exception as e:
+        logging.error(f"Error extracting transformer location: {e}")
+        return
+    
+    G_init, tNode_init, mNodes_init, nm_init, cm_init = buildLVNetworkWithLoads(
+        lvLines, filteredEserviceLines, meterLocations, initialTransformerLocation, phase_loads, conductorResistance,
+        conductorReactance=conductorReactance,
+        use_shape_length=True,
+        lvData=lvData,
+        svcLines=svcLines,
+        snap_tolerance=SNAP_TOLERANCE  # เพิ่มพารามิเตอร์นี้
+    )
+    
+    if not nx.is_connected(G_init):
+        logging.warning("Initial network not fully connected.")
+        components = list(nx.connected_components(G_init))
+        logging.warning(f"Network has {len(components)} connected components")
+    else:
+        logging.info("Initial network is connected.")
+    
+    # For this run we use LV-based optimization
+    optimizedTransformerLocation_LV = optimizeTransformerLocationOnLVCond3(
+        meterLocations, phase_loads, initialTransformerLocation,
+        lvLines, initialVoltage, conductorResistance, powerFactor,
+        conductorReactance=conductorReactance,
+        lvData=lvData,
+        svcLines=svcLines
+    )
+    
+    logging.info(f"Optimized (LV) => {optimizedTransformerLocation_LV}")
+    optimizedTransformerLocation = optimizedTransformerLocation_LV
+    
+    # ใช้ฟังก์ชันที่แก้ไขแล้ว พร้อม coordinate snapping
+    G, transformerNode, meterNodes, node_mapping, coord_mapping = buildLVNetworkWithLoads(
+        lvLines, filteredEserviceLines, meterLocations, optimizedTransformerLocation, phase_loads, conductorResistance,
+        conductorReactance=conductorReactance,
+        use_shape_length=True,
+        lvData=lvData,
+        svcLines=svcLines,
+        snap_tolerance=SNAP_TOLERANCE  # เพิ่มพารามิเตอร์นี้
+    )
+    # ตรวจสอบความสมบูรณ์ของ network
+    validation = validate_network_after_snap(G, coord_mapping, meterNodes, transformerNode)
+
+    if not validation['summary']['network_complete']:
+        logging.error("Network is incomplete after snap!")
+        logging.error(f"Unreachable meters: {len(validation['unreachable_meters'])}")
+        
+        # อาจต้องปรับ tolerance หรือแก้ไขข้อมูล
+        if len(validation['unreachable_meters']) > 0:
+            # ลองใช้ tolerance ที่สูงขึ้น
+            new_tolerance = SNAP_TOLERANCE * 2
+            logging.info(f"Retrying with higher tolerance: {new_tolerance}")
+        if not nx.is_connected(G):
+            logging.warning("Post-optimization network not fully connected.")
+            components = list(nx.connected_components(G))
+            logging.warning(f"Network has {len(components)} connected components")
+        else:
+            logging.info("Post-optimization network is connected.")
+    
+    splitting_edge, sp_coord, sp_edge_diff, candidate_edges = findSplittingPoint(
+        G, transformerNode, meterNodes, coord_mapping,
+        powerFactor, initialVoltage, candidate_index=0
+    )
+    
+    if splitting_edge is None:
+        logging.warning("No splitting edge found; single group only. End.")
+        return
+        
+    group1_nodes, group2_nodes = partitionNetworkAtPoint(G, transformerNode, meterNodes, splitting_edge)
+    
+    voltages, branch_curr, group1_nodes, group2_nodes = performForwardBackwardSweepAndDivideLoads(
+        G, transformerNode, meterNodes, coord_mapping, powerFactor, initialVoltage, splitting_edge
+    )
+
+    nodeToIndex = {mn: i for i, mn in enumerate(meterNodes)}
+    group1_meter_nodes = [n for n in group1_nodes if n in nodeToIndex]
+    group2_meter_nodes = [n for n in group2_nodes if n in nodeToIndex]
+    g1_idx = [nodeToIndex[n] for n in group1_meter_nodes]
+    g2_idx = [nodeToIndex[n] for n in group2_meter_nodes]
+
+    # 1) สร้างข้อมูลเฉพาะกลุ่ม 1
+    group1_meterLocs = meterLocations[g1_idx]
+    loads_g1 = totalLoads[g1_idx]
+    # โหลดตามเฟสของ มิเตอร์กลุ่ม 1
+    group1_phase_loads = {
+        'A': phase_loads['A'][g1_idx],
+        'B': phase_loads['B'][g1_idx],
+        'C': phase_loads['C'][g1_idx],
+    }
+        # ข้อมูล peano และ phases ตามกลุ่ม
+    peano_g1  = peano[g1_idx]
+    phases_g1 = phases[g1_idx]
+
+    # เรียก balance Group 1
+    new_phases_g1, new_phase_loads_g1 = optimize_phase_balance(
+    group1_meterLocs,
+    loads_g1,
+    group1_phase_loads,
+    peano[g1_idx],
+    lvData,
+    phases[g1_idx]
+    )
+    logging.info(
+        "Group 1 load balance before -> A: %.1f kW, B: %.1f kW, C: %.1f kW",
+        group1_phase_loads['A'].sum(),
+        group1_phase_loads['B'].sum(),
+        group1_phase_loads['C'].sum()
+    )
+    logging.info(
+        "Group 1 load balance after  -> A: %.1f kW, B: %.1f kW, C: %.1f kW",
+        new_phase_loads_g1['A'].sum(),
+        new_phase_loads_g1['B'].sum(),
+        new_phase_loads_g1['C'].sum()
+    )
+    # 2) กลุ่ม 2
+    group2_meterLocs = meterLocations[g2_idx]
+    loads_g2 = totalLoads[g2_idx]
+    group2_phase_loads = {
+        'A': phase_loads['A'][g2_idx],
+        'B': phase_loads['B'][g2_idx],
+        'C': phase_loads['C'][g2_idx],
+    }
+    peano_g2  = peano[g2_idx]
+    phases_g2 = phases[g2_idx]
+
+    new_phases_g2, new_phase_loads_g2 = optimize_phase_balance(
+    group2_meterLocs,
+    loads_g2,
+    group2_phase_loads,
+    peano[g2_idx],
+    lvData,
+    phases[g2_idx]
+    )
+    logging.info(
+    "Group 2 load balance before -> A: %.1f kW, B: %.1f kW, C: %.1f kW",
+    group2_phase_loads['A'].sum(),
+    group2_phase_loads['B'].sum(),
+    group2_phase_loads['C'].sum()
+    )
+    logging.info(
+        "Group 2 load balance after  -> A: %.1f kW, B: %.1f kW, C: %.1f kW",
+        new_phase_loads_g2['A'].sum(),
+        new_phase_loads_g2['B'].sum(),
+        new_phase_loads_g2['C'].sum()
+    )
+    dist_arr = []
+    for n in meterNodes:
+        try:
+            dval = nx.shortest_path_length(G, transformerNode, n, weight='weight')
+        except nx.NetworkXNoPath:
+            dval = float('inf')
+        dist_arr.append(dval)
+        
+    voltA = {n: voltages[n]['A'] for n in voltages}
+    voltB = {n: voltages[n]['B'] for n in voltages}
+    voltC = {n: voltages[n]['C'] for n in voltages}
+    
+    result_df = pd.DataFrame({
+        'Peano Meter': peano,
+        'Final Voltage A (V)': [voltA.get(n, np.nan) for n in meterNodes],
+        'Final Voltage B (V)': [voltB.get(n, np.nan) for n in meterNodes],
+        'Final Voltage C (V)': [voltC.get(n, np.nan) for n in meterNodes],
+        'Distance to Transformer (m)': dist_arr,
+        'Load A (kW)': phase_loads['A'],
+        'Load B (kW)': phase_loads['B'],
+        'Load C (kW)': phase_loads['C'],
+        'Group': ['Group 1' if n in group1_nodes else 'Group 2' for n in meterNodes],
+        'Phases': phases
+    })
+    result_df["Meter X"] = meterLocations[:, 0]
+    result_df["Meter Y"] = meterLocations[:, 1]
+    # 3) เอาค่าที่ได้ไปอัปเดตใน result_df
+    for local_i, global_i in enumerate(g1_idx):
+        result_df.at[global_i, 'New Phase']  = new_phases_g1[local_i]
+        result_df.at[global_i, 'New Load A'] = new_phase_loads_g1['A'][local_i]
+        result_df.at[global_i, 'New Load B'] = new_phase_loads_g1['B'][local_i]
+        result_df.at[global_i, 'New Load C'] = new_phase_loads_g1['C'][local_i]
+
+    for local_i, global_i in enumerate(g2_idx):
+        result_df.at[global_i, 'New Phase']  = new_phases_g2[local_i]
+        result_df.at[global_i, 'New Load A'] = new_phase_loads_g2['A'][local_i]
+        result_df.at[global_i, 'New Load B'] = new_phase_loads_g2['B'][local_i]
+        result_df.at[global_i, 'New Load C'] = new_phase_loads_g2['C'][local_i]
+
+    for n in G.nodes():
+        if n in group1_nodes:
+            G.nodes[n]['group'] = 1
+        elif n in group2_nodes:
+            G.nodes[n]['group'] = 2
+        else:
+            G.nodes[n]['group'] = 0
+            
+    g1_load = sum(G.nodes[n]['load_A'] + G.nodes[n]['load_B'] + G.nodes[n]['load_C'] for n in group1_nodes)
+    g2_load = sum(G.nodes[n]['load_A'] + G.nodes[n]['load_B'] + G.nodes[n]['load_C'] for n in group2_nodes)
+    logging.info(f"Group 1 total load: {g1_load:.2f} kW | Group 2 total load: {g2_load:.2f} kW")
+
+    group1_meterLocs = meterLocations[g1_idx]
+    group1_phase_loads = {
+        'A': phase_loads['A'][g1_idx],
+        'B': phase_loads['B'][g1_idx],
+        'C': phase_loads['C'][g1_idx]
+    }
+    group2_meterLocs = meterLocations[g2_idx]
+    group2_phase_loads = {
+        'A': phase_loads['A'][g2_idx],
+        'B': phase_loads['B'][g2_idx],
+        'C': phase_loads['C'][g2_idx]
+    }
+    
+    logging.info("Calculate LoadCenter each Group...")
+    logging.info("Optimizing Transformer Location each Group...")
+    
+    optimizedTransformerLocationGroup1 = optimizeGroup(
+        group1_meterLocs,
+        group1_phase_loads,
+        calculateNetworkLoadCenter(
+            group1_meterLocs, 
+            group1_phase_loads, 
+            lvLines, 
+            mvLines, 
+            conductorResistance,
+            conductorReactance=conductorReactance,
+            lvData=lvData,
+            svcLines=svcLines
+        ),
+        lvLines, 
+        mvLines,
+        initialVoltage, 
+        conductorResistance,
+        powerFactor, 
+        epsilon_junction=2.0,
+        conductorReactance=conductorReactance,
+        lvData=lvData,
+        svcLines=svcLines
+    )
+    
+    optimizedTransformerLocationGroup2 = optimizeGroup(
+        group2_meterLocs,
+        group2_phase_loads,
+        calculateNetworkLoadCenter(
+            group2_meterLocs, 
+            group2_phase_loads, 
+            lvLines, 
+            mvLines, 
+            conductorResistance,
+            conductorReactance=conductorReactance,
+            lvData=lvData,
+            svcLines=svcLines
+        ),
+        lvLines, 
+        mvLines,
+        initialVoltage, 
+        conductorResistance,
+        powerFactor, 
+        epsilon_junction=2.0,
+        conductorReactance=conductorReactance,
+        lvData=lvData,
+        svcLines=svcLines
+    )
+      
+    if optimizedTransformerLocationGroup1 is not None:
+        G_g1, tNode_g1, mNodes_g1, nm_g1, cm_g1 = buildLVNetworkWithLoads(
+            lvLines, mvLines,
+            group1_meterLocs,
+            optimizedTransformerLocationGroup1,
+            group1_phase_loads,
+            conductorResistance,
+            conductorReactance=conductorReactance,
+            use_shape_length=True,
+            lvData=lvData,
+            svcLines=svcLines
+        )
+        dist_g1 = []
+        for i, mNode in enumerate(mNodes_g1):
+            try:
+                dist_g1.append(nx.shortest_path_length(G_g1, tNode_g1, mNode, weight='weight'))
+            except nx.NetworkXNoPath:
+                dist_g1.append(float('inf'))
+                
+        # เปลี่ยนไปใช้ calculateUnbalancedPowerFlow แทน calculatePowerLoss
+        node_voltages_g1, branch_currents_g1, total_power_loss_g1 = calculateUnbalancedPowerFlow(
+        G_g1, tNode_g1, mNodes_g1, powerFactor, initialVoltage
+        )
+        
+        for i, node in enumerate(mNodes_g1):
+            global_idx = g1_idx[i]
+            result_df.at[global_idx, 'Distance to Transformer (m)'] = dist_g1[i]
+            result_df.at[global_idx, 'Final Voltage A (V)'] = abs(node_voltages_g1[node]['A'])
+            result_df.at[global_idx, 'Final Voltage B (V)'] = abs(node_voltages_g1[node]['B'])
+            result_df.at[global_idx, 'Final Voltage C (V)'] = abs(node_voltages_g1[node]['C'])
+            
+    if optimizedTransformerLocationGroup2 is not None:
+        G_g2, tNode_g2, mNodes_g2, nm_g2, cm_g2 = buildLVNetworkWithLoads(
+            lvLines, mvLines,
+            group2_meterLocs,
+            optimizedTransformerLocationGroup2,
+            group2_phase_loads,
+            conductorResistance,
+            conductorReactance=conductorReactance,
+            use_shape_length=True,
+            lvData=lvData,
+            svcLines=svcLines
+        )
+        dist_g2 = []
+        for i, mNode in enumerate(mNodes_g2):
+            try:
+                dist_g2.append(nx.shortest_path_length(G_g2, tNode_g2, mNode, weight='weight'))
+            except nx.NetworkXNoPath:
+                dist_g2.append(float('inf'))
+                
+        # เปลี่ยนไปใช้ calculateUnbalancedPowerFlow แทน calculatePowerLoss
+        node_voltages_g2, branch_currents_g2, total_power_loss_g2 = calculateUnbalancedPowerFlow(
+        G_g2, tNode_g2, mNodes_g2, powerFactor, initialVoltage
+        )
+        
+        for i, node in enumerate(mNodes_g2):
+            global_idx = g2_idx[i]
+            result_df.at[global_idx, 'Distance to Transformer (m)'] = dist_g2[i]
+            result_df.at[global_idx, 'Final Voltage A (V)'] = abs(node_voltages_g2[node]['A'])
+            result_df.at[global_idx, 'Final Voltage B (V)'] = abs(node_voltages_g2[node]['B'])
+            result_df.at[global_idx, 'Final Voltage C (V)'] = abs(node_voltages_g2[node]['C'])
+
+    # Calculate Total Loss
+    line_loss_g1_kW = total_power_loss_g1 / 1000.0
+    tx_loss_g1_kW = get_transformer_losses(g1_load)
+    total_system_loss_g1 = line_loss_g1_kW + tx_loss_g1_kW
+
+    line_loss_g2_kW = total_power_loss_g2 / 1000.0
+    tx_loss_g2_kW = get_transformer_losses(g2_load)
+    total_system_loss_g2 = line_loss_g2_kW + tx_loss_g2_kW
+
+    # Select Transformer size for each group (using your document)
+    rating_g1 = Lossdocument(g1_load)
+    rating_g2 = Lossdocument(g2_load)
+
+    # Forecast Future Load
+    future_g1_load = growthRate(g1_load, annual_growth=0.04, years=4)
+    future_g2_load = growthRate(g2_load, annual_growth=0.04, years=4)
+
+    logging.info('############ Result ############')
+    logging.info(f"Group 1 => Load={g1_load:.2f} kW, Future growthrate(4yr@4%)={future_g1_load:.2f} kW, Chosen TX1={rating_g1} kVA")
+    logging.info(f"Group 2 => Load={g2_load:.2f} kW, Future growthrate(4yr@4%)={future_g2_load:.2f} kW, Chosen TX2={rating_g2} kVA")
+    logging.info('############ Loss Report ############')
+    logging.info(f"Group 1 => Load={g1_load:.2f} kW | LineLoss={line_loss_g1_kW:.2f} kW | TxLoss={tx_loss_g1_kW:.2f} kW => TOTAL={total_system_loss_g1:.2f} kW")
+    logging.info(f"Group 2 => Load={g2_load:.2f} kW | LineLoss={line_loss_g2_kW:.2f} kW | TxLoss={tx_loss_g2_kW:.2f} kW => TOTAL={total_system_loss_g2:.2f} kW")
+
+    # Export Splitting Point, Transformer Group Point to Shapefile #
+    point_coords = []
+    attributes_list = []
+    if sp_coord is not None:
+        # Convert sp_coord to tuple for consistency
+        point_coords.append(tuple(sp_coord))
+        attributes_list.append({'Name': 'Splitting Point'})
+    if optimizedTransformerLocationGroup1 is not None:
+        point_coords.append(tuple(optimizedTransformerLocationGroup1))
+        attributes_list.append({'Name': 'Group 1 Transformer'})
+    if optimizedTransformerLocationGroup2 is not None:
+        point_coords.append(tuple(optimizedTransformerLocationGroup2))
+        attributes_list.append({'Name': 'Group 2 Transformer'})
+    if point_coords:
+        folder_path = './testpy'
+        ensure_folder_exists(folder_path)
+        exportPointsToShapefile(point_coords, f"{folder_path}/optimized_transformer_locations.shp", attributes_list)
+        g1_plot_indices = np.array(g1_idx, dtype=int)
+        g2_plot_indices = np.array(g2_idx, dtype=int)
+    
+    # Export to CSV
+    folder_path = './testpy'
+    ensure_folder_exists(folder_path)
+    csv_path = f"{folder_path}/optimized_transformer_locations.csv"
+    result_df.to_csv(csv_path, index=False)
+    logging.info(f"Result CSV saved: {csv_path}")
+    
+    # Export to shapefile
+    exportResultDFtoShapefile(result_df, f"{folder_path}/result_meters.shp")
+    
+    plotResults_NGUI(
+        [l['X'] for l in lvLines], [l['Y'] for l in lvLines],
+        [l['X'] for l in mvLines], [l['Y'] for l in mvLines],
+        [l['X'] for l in filteredEserviceLines],
+        [l['Y'] for l in filteredEserviceLines],
+        projectID,
+        meterLocations,
+        initialTransformerLocation,
+        optimizedTransformerLocation_LV,  # For demonstration
+        g1_plot_indices,
+        g2_plot_indices,
+        splitting_point_coords=sp_coord,
+        coord_mapping=coord_mapping,
+        optimizedTransformerLocationGroup1=optimizedTransformerLocationGroup1,
+        optimizedTransformerLocationGroup2=optimizedTransformerLocationGroup2,
+        transformer_losses=None,
+        phases=phases,
+        result_df=result_df,
+        G=G,        
+    )
+
+    # G = addNodeLabels(G, None, sp_edge_diff)
+    # plotGraphWithLabels(G, coord_mapping, best_edge_diff=sp_edge_diff, best_edge=splitting_edge)
+    
+    # logging.info("Initial processing complete. Proceeding with group-level optimization and output.")
+    
+    # # 5‑A)  build initial split dict so the button works FIRST time
+    # global latest_split_result, reopt_btn
+    # latest_split_result = {
+    #     'best_edge': splitting_edge,
+    #     'group1'   : {
+    #         'idx'        : np.array(g1_idx, dtype=int),
+    #         'meter_locs' : group1_meterLocs,
+    #         'phase_loads': group1_phase_loads,
+    #         'tx_loc'     : optimizedTransformerLocationGroup1
+    #     },
+    #     'group2'   : {
+    #         'idx'        : np.array(g2_idx, dtype=int),
+    #         'meter_locs' : group2_meterLocs,
+    #         'phase_loads': group2_phase_loads,
+    #         'tx_loc'     : optimizedTransformerLocationGroup2
+    #     }
+    # }
+    # if reopt_btn is not None:
+    #     reopt_btn.config(state=tk.NORMAL)
+
+    # # 5‑B)  open the candidate‑edge dialog
+    # gui_candidate_input(G, transformerNode, meterNodes,
+    #                     node_mapping, coord_mapping,
+    #                     meterLocations, phase_loads,
+    #                     lvLines, mvLines, filteredEserviceLines,
+    #                     initialTransformerLocation,
+    #                     powerFactor, initialVoltage,
+    #                     conductorResistance,
+    #                     peano, phases,
+    #                     conductorReactance, lvData, svcLines)
+
+    # logging.info("Program finished successfully.")
 
 #############################################################################################
 
