@@ -3563,6 +3563,11 @@ def plotResults_NGUI(lvLinesX, lvLinesY, mvLinesX, mvLinesY, eserviceLinesX, ese
         json.dump(feature_collection, f, ensure_ascii=False, indent=2)
 
     
+    print("Export OK!")
+
+    
+
+    
 
 # ---------------------------------
 # 18) Transformer sizing & losses
@@ -5113,6 +5118,7 @@ def run_process_from_project_folder(project_id, folder_path):
             json.dump(result, f, indent=2, ensure_ascii=False)
 
         return {
+            'success': True,
             'message': 'Process completed successfully',
             'summary_path': summary_path,
             'geojson_files': [
@@ -5642,6 +5648,7 @@ def main_pipeline(data):
     # Export to shapefile
     exportResultDFtoShapefile(result_df, f"{folder_path}/result_meters.shp")
     
+    
     plotResults_NGUI(
         [l['X'] for l in lvLines], [l['Y'] for l in lvLines],
         [l['X'] for l in mvLines], [l['Y'] for l in mvLines],
@@ -5662,6 +5669,10 @@ def main_pipeline(data):
         result_df=result_df,
         G=G,        
     )
+
+    print("RUN OK!")
+
+    # return {"success": True}
 
     # G = addNodeLabels(G, None, sp_edge_diff)
     # plotGraphWithLabels(G, coord_mapping, best_edge_diff=sp_edge_diff, best_edge=splitting_edge)

@@ -236,13 +236,16 @@ def run_project(project_id):
     try:
         folder_path = app.config['UPLOAD_FOLDER']
         result = run_process_from_project_folder(project_id, folder_path)
-
-        # return jsonify({'message': 'ประมวลผลเสร็จสิ้น', 'result': result})
-        return jsonify(result)
+        print(result)
+        if result["success"]:
+            return jsonify({"message": "ประมวลผลเสร็จสิ้น"})
+        else:
+            return jsonify({"error": "ประมวลผลไม่สำเร็จ"}), 500
     except Exception as e:
         logging.exception("Error in running project")
         return jsonify({'error': str(e)}), 500
     
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    # app.run(debug=True)
+    app.run(host='0.0.0.0', port=5000)

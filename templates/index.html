@@ -167,9 +167,8 @@
         .then(data => {
           if (data.error) {
             Swal.fire('ผิดพลาด', data.error, 'error');
-          } else {
-            let fileList = Object.values(data.files).join('\n');
-            Swal.fire('สำเร็จ', `${data.message}\n\nไฟล์ที่พบ:\n${fileList}`, 'success');
+          } else {            
+            Swal.fire(`สำเร็จ`, `${data.message}`, 'success');
           }
         })
         .catch(error => {

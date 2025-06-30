@@ -62,7 +62,7 @@
     </div>
 
     <div class="card shadow-sm mt-4">
-      <div class="card-header bg-custom text-white">
+      <div class="card-header bg-custom text-dark">
         <strong>ผลการวิเคราะห์ระบบไฟฟ้า</strong>
       </div>
       <div class="card-body">
@@ -77,17 +77,17 @@
             </thead>
             <tbody>
               <tr>
-                <td><strong>โหลด</strong></td>
+                <td><strong>โหลดหม้อแปลง</strong></td>
                 <td>{{ result.g1_load }} kW</td>
                 <td>{{ result.g2_load }} kW</td>
               </tr>
               <tr>
-                <td><strong>โหลดในอีก 4 ปี (4%)</strong></td>
+                <td><strong>โหลดคาดการณ์อีก 4 ปี (เพิ่มปีละ 1%)</strong></td>
                 <td>{{ result.future_g1_load }} kW</td>
                 <td>{{ result.future_g2_load }} kW</td>
               </tr>
               <tr>
-                <td><strong>หม้อแปลงที่เลือก</strong></td>
+                <td><strong>ขนาดหม้อแปลงที่แนะนำ</strong></td>
                 <td>{{ result.rating_g1 }} kVA</td>
                 <td>{{ result.rating_g2 }} kVA</td>
               </tr>
@@ -97,7 +97,7 @@
                 <td>{{ result.line_loss_g2_kW }} kW</td>
               </tr>
               <tr>
-                <td><strong>Tx Loss</strong></td>
+                <td><strong>Transformer Loss (Core+Copper Loss)</strong></td>
                 <td>{{ result.tx_loss_g1_kW }} kW</td>
                 <td>{{ result.tx_loss_g2_kW }} kW</td>
               </tr>
@@ -138,7 +138,7 @@
   // LV Lines
   const lvLineLayer = new GeoJSONLayer({
     url: "/output/{{project}}/lv_lines.geojson",
-    title: "ระบบจำหน่าย",
+    title: "ระบบจำหน่าย 400/230 V",
     renderer: {
       type: "simple",
       symbol: {
@@ -157,14 +157,14 @@
   // // MV Lines
   const mvLineLayer = new GeoJSONLayer({
     url: "/output/{{project}}/mv_lines.geojson",
-    title: "ระบบจำหน่าย",
+    title: "ระบบจำหน่าย 22 kV",
     renderer: {
       type: "simple",
       symbol: {
         type: "simple-line",
-        color: "#8a8a8a",
+        color: "#800000",
         width: 2,
-        style: "dash"
+        style: "dash-dot"
       }
     },
     popupTemplate: {
