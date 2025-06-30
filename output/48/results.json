@@ -10,5 +10,25 @@
   "rating_g2": 30,
   "line_loss_g2_kW": 0.03,
   "tx_loss_g2_kW": 0.17,
-  "total_system_loss_g2": 0.2
+  "total_system_loss_g2": 0.2,
+  "group1_load_balance_before": {
+    "A": 3.6,
+    "B": 9.8,
+    "C": 0.0
+  },
+  "group1_load_balance_after": {
+    "A": 3.6,
+    "B": 9.8,
+    "C": 0.0
+  },
+  "group2_load_balance_before": {
+    "A": 7.7,
+    "B": 1.3,
+    "C": 0.0
+  },
+  "group2_load_balance_after": {
+    "A": 5.8,
+    "B": 3.2,
+    "C": 0.0
+  }
 }

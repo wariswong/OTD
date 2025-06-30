@@ -1,0 +1,34 @@
+{
+  "g1_load": 39.12,
+  "future_g1_load": 45.76,
+  "rating_g1": 50,
+  "line_loss_g1_kW": 0.9,
+  "tx_loss_g1_kW": 0.81,
+  "total_system_loss_g1": 1.71,
+  "g2_load": 40.67,
+  "future_g2_load": 47.58,
+  "rating_g2": 50,
+  "line_loss_g2_kW": 1.39,
+  "tx_loss_g2_kW": 0.87,
+  "total_system_loss_g2": 2.26,
+  "group1_load_balance_before": {
+    "A": 15.2,
+    "B": 10.6,
+    "C": 13.3
+  },
+  "group1_load_balance_after": {
+    "A": 13.1,
+    "B": 13.0,
+    "C": 13.0
+  },
+  "group2_load_balance_before": {
+    "A": 13.2,
+    "B": 13.7,
+    "C": 13.8
+  },
+  "group2_load_balance_after": {
+    "A": 13.6,
+    "B": 13.6,
+    "C": 13.6
+  }
+}

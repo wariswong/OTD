@@ -106,6 +106,44 @@
                 <td>{{ result.total_system_loss_g1 }} kW</td>
                 <td>{{ result.total_system_loss_g2 }} kW</td>
               </tr>
+
+              <tr class="table-primary">
+                <td colspan="3"><strong>Load balancing before Process</strong></td>
+              </tr>
+              <tr>
+                <td>Phase A</td>
+                <td>{{ result.group1_load_balance_before.A }} kW</td>
+                <td>{{ result.group2_load_balance_before.A }} kW</td>
+              </tr>
+              <tr>
+                <td>Phase B</td>
+                <td>{{ result.group1_load_balance_before.B }} kW</td>
+                <td>{{ result.group2_load_balance_before.B }} kW</td>
+              </tr>
+              <tr>
+                <td>Phase C</td>
+                <td>{{ result.group1_load_balance_before.C }} kW</td>
+                <td>{{ result.group2_load_balance_before.C }} kW</td>
+              </tr>
+
+              <tr class="table-success">
+                <td colspan="3"><strong>Load balancing after Process</strong></td>
+              </tr>
+              <tr>
+                <td>Phase A</td>
+                <td>{{ result.group1_load_balance_after.A }} kW</td>
+                <td>{{ result.group2_load_balance_after.A }} kW</td>
+              </tr>
+              <tr>
+                <td>Phase B</td>
+                <td>{{ result.group1_load_balance_after.B }} kW</td>
+                <td>{{ result.group2_load_balance_after.B }} kW</td>
+              </tr>
+              <tr>
+                <td>Phase C</td>
+                <td>{{ result.group1_load_balance_after.C }} kW</td>
+                <td>{{ result.group2_load_balance_after.C }} kW</td>
+              </tr>
             </tbody>
           </table>
         </div>

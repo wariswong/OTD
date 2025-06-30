@@ -1,0 +1,61 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.231046,
+          16.426509
+        ]
+      },
+      "properties": {
+        "name": "Initial Transformer",
+        "group": "initial"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.231885,
+          16.426443
+        ]
+      },
+      "properties": {
+        "name": "Splitting Point",
+        "group": "splitting"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.229303,
+          16.42681
+        ]
+      },
+      "properties": {
+        "name": "Group 1 Transformer",
+        "group": "group1"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.232907,
+          16.426303
+        ]
+      },
+      "properties": {
+        "name": "Group 2 Transformer",
+        "group": "group2"
+      }
+    }
+  ]
+}

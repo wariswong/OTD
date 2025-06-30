@@ -5611,7 +5611,28 @@ def main_pipeline(data):
         "rating_g2": rating_g2,
         "line_loss_g2_kW": round(line_loss_g2_kW, 2),
         "tx_loss_g2_kW": round(tx_loss_g2_kW, 2),
-        "total_system_loss_g2": round(total_system_loss_g2, 2)
+        "total_system_loss_g2": round(total_system_loss_g2, 2),
+
+        "group1_load_balance_before": {
+            "A": round(group1_phase_loads['A'].sum(), 1),
+            "B": round(group1_phase_loads['B'].sum(), 1),
+            "C": round(group1_phase_loads['C'].sum(), 1),
+        },
+        "group1_load_balance_after": {
+            "A": round(new_phase_loads_g1['A'].sum(), 1),
+            "B": round(new_phase_loads_g1['B'].sum(), 1),
+            "C": round(new_phase_loads_g1['C'].sum(), 1),
+        },
+        "group2_load_balance_before": {
+            "A": round(group2_phase_loads['A'].sum(), 1),
+            "B": round(group2_phase_loads['B'].sum(), 1),
+            "C": round(group2_phase_loads['C'].sum(), 1),
+        },
+        "group2_load_balance_after": {
+            "A": round(new_phase_loads_g2['A'].sum(), 1),
+            "B": round(new_phase_loads_g2['B'].sum(), 1),
+            "C": round(new_phase_loads_g2['C'].sum(), 1),
+        },
     }
 
     # บันทึกลงไฟล์ results.json
