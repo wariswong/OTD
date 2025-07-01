@@ -2163,7 +2163,7 @@ def notOnJunctionConstraint(x, junction_coords, epsilon=1.0):
 
 # ---------------------------------
 # 15) Splitting & partitioning
-def findSplittingPoint(G, transformerNode, meterNodes, coord_mapping, powerFactor, initialVoltage, candidate_index=0):
+def findSplittingPoint(G, projectID, transformerNode, meterNodes, coord_mapping, powerFactor, initialVoltage, candidate_index=0):
     """
     ปรับปรุงฟังก์ชัน findSplittingPoint เพื่อเพิ่มประสิทธิภาพ:
     1. ใช้ memoization สำหรับการคำนวณ cumulative loads
@@ -2274,7 +2274,14 @@ def findSplittingPoint(G, transformerNode, meterNodes, coord_mapping, powerFacto
     loads_parent = []
     loads_child  = []
 
-    # 2) เติมข้อมูลในลูปเดียว
+    # import pyproj
+
+    # 1) เตรียม transformer แค่ครั้งเดียว
+    proj_tm3 = pyproj.CRS.from_proj4("+proj=utm +zone=47 +datum=WGS84 +units=m +no_defs")
+    proj_wgs84 = pyproj.CRS("EPSG:4326")
+    transformer = pyproj.Transformer.from_crs(proj_tm3, proj_wgs84, always_xy=True)
+
+    # 2) เติมข้อมูล
     for (edge, diff) in edge_diffs:
         n1, n2 = edge
 
@@ -2296,29 +2303,116 @@ def findSplittingPoint(G, transformerNode, meterNodes, coord_mapping, powerFacto
         loads_child.append(child_load)
         loads_parent.append(parent_load)
 
-    # 3) สร้าง DataFrame พร้อมทั้ง 6 คอลัมน์พิกัด + 2 คอลัมน์โหลด
+    # 3) สร้าง DataFrame
     edge_diffs_df = pd.DataFrame({
-        'Edge'     : edges_list,
+        'Edge': edges_list,
         'Edge_Diff': diffs_list,
-        'N1_X'     : n1x_list,
-        'N1_Y'     : n1y_list,
-        'N2_X'     : n2x_list,
-        'N2_Y'     : n2y_list,
-        'Load_G1'  : loads_parent,
-        'Load_G2'  : loads_child,
+        'N1_X': n1x_list,
+        'N1_Y': n1y_list,
+        'N2_X': n2x_list,
+        'N2_Y': n2y_list,
+        'Load_G1': loads_parent,
+        'Load_G2': loads_child,
     })
 
-    # 4) สร้าง splitting_index
+    # 4) สร้าง index สำหรับทั้ง JSON และ CSV
     edge_diffs_df.reset_index(inplace=True)
     edge_diffs_df.rename(columns={'index': 'splitting_index'}, inplace=True)
-    _EDGE_DF_CACHE = edge_diffs_df
-    
-    # บันทึกไฟล์ CSV
+
+    # 5) บันทึก CSV: ใช้พิกัด X/Y เดิม
     folder_path = './testpy'
     ensure_folder_exists(folder_path)
     csv_path = f"{folder_path}/edgediff.csv"
-    edge_diffs_df.to_csv(csv_path, index=True, index_label="splitting_index")
-    logging.info(f"Splitting edges info saved to CSV: {csv_path}. Found {len(edge_diffs)} edges.")
+    edge_diffs_df.to_csv(csv_path, index=False)
+    logging.info(f"CSV saved: {csv_path}")
+
+    # 6) แปลงพิกัด TM3 เป็น lat/lon สำหรับ JSON เท่านั้น
+    n1_lons, n1_lats = transformer.transform(edge_diffs_df["N1_X"].values, edge_diffs_df["N1_Y"].values)
+    n2_lons, n2_lats = transformer.transform(edge_diffs_df["N2_X"].values, edge_diffs_df["N2_Y"].values)
+
+    # สร้างสำเนา DataFrame สำหรับ JSON แล้วเพิ่ม lat/lon
+    edge_diffs_json_df = edge_diffs_df.copy()
+    edge_diffs_json_df["N1_Lon"] = n1_lons
+    edge_diffs_json_df["N1_Lat"] = n1_lats
+    edge_diffs_json_df["N2_Lon"] = n2_lons
+    edge_diffs_json_df["N2_Lat"] = n2_lats
+
+    # ลบคอลัมน์ X/Y ถ้าไม่ต้องการใน JSON
+    edge_diffs_json_df = edge_diffs_json_df.drop(columns=["N1_X", "N1_Y", "N2_X", "N2_Y"])
+
+    # บันทึก JSON
+    output_folder = f"output/{projectID}"
+    edge_diffs_json_path = os.path.join(output_folder, "edge_diffs.json")
+    with open(edge_diffs_json_path, "w", encoding="utf-8") as f:
+        json.dump(edge_diffs_json_df.to_dict(orient="records"), f, ensure_ascii=False, indent=2)
+    logging.info(f"GeoJSON saved: {edge_diffs_json_path}")
+
+    # 7) เก็บไว้ใช้ในระบบถัดไป
+    _EDGE_DF_CACHE = edge_diffs_df
+
+
+    # proj_tm3 = pyproj.CRS.from_proj4("+proj=utm +zone=47 +datum=WGS84 +units=m +no_defs")
+    # proj_wgs84 = pyproj.CRS("EPSG:4326")
+    # transformer = pyproj.Transformer.from_crs(proj_tm3, proj_wgs84, always_xy=True)
+
+    # # 2) เติมข้อมูลในลูปเดียว
+    # for (edge, diff) in edge_diffs:
+    #     n1, n2 = edge
+
+    #     # เก็บ edge กับ ΔLoad
+    #     edges_list.append(edge)
+    #     diffs_list.append(diff)
+
+    #     # เก็บพิกัดเดิม
+    #     x1, y1 = coord_mapping.get(n1, (np.nan, np.nan))
+    #     x2, y2 = coord_mapping.get(n2, (np.nan, np.nan))
+    #     n1x_list.append(x1)
+    #     n1y_list.append(y1)
+    #     n2x_list.append(x2)
+    #     n2y_list.append(y2)
+
+    #     # คำนวณโหลดฝั่ง child & parent
+    #     child_load  = cumulative_loads[n2]
+    #     parent_load = total_load - child_load
+    #     loads_child.append(child_load)
+    #     loads_parent.append(parent_load)
+
+    # # 3) สร้าง DataFrame พร้อมทั้ง 6 คอลัมน์พิกัด + 2 คอลัมน์โหลด
+    # edge_diffs_df = pd.DataFrame({
+    #     'Edge'     : edges_list,
+    #     'Edge_Diff': diffs_list,
+    #     'N1_X'     : n1x_list,
+    #     'N1_Y'     : n1y_list,
+    #     'N2_X'     : n2x_list,
+    #     'N2_Y'     : n2y_list,
+    #     'Load_G1'  : loads_parent,
+    #     'Load_G2'  : loads_child,
+    # })
+
+    # output_folder = f"output/{projectID}"
+    # # เติม splitting_index เป็นคอลัมน์ (เก็บจาก index ปัจจุบัน)
+    # edge_diffs_df.reset_index(inplace=True)
+    # edge_diffs_df.rename(columns={'index': 'splitting_index'}, inplace=True)
+
+    # # แปลง DataFrame เป็น list แล้วเพิ่มลง JSON
+    # records = edge_diffs_df.to_dict(orient="records")
+
+    # # เขียนไฟล์ JSON พร้อม index
+    # edge_diffs_json_path = os.path.join(output_folder, "edge_diffs.json")
+    # with open(edge_diffs_json_path, "w", encoding="utf-8") as f:
+    #     json.dump(records, f, ensure_ascii=False, indent=2)
+
+    # # 4) สร้าง splitting_index
+    # edge_diffs_df.reset_index(inplace=True)
+    # edge_diffs_df.rename(columns={'index': 'splitting_index'}, inplace=True)
+    # _EDGE_DF_CACHE = edge_diffs_df
+    
+    # # บันทึกไฟล์ CSV
+    # folder_path = './testpy'
+    # ensure_folder_exists(folder_path)
+    # csv_path = f"{folder_path}/edgediff.csv"
+    # edge_diffs_df.to_csv(csv_path, index=True, index_label="splitting_index")
+    # logging.info(f"Splitting edges info saved to CSV: {csv_path}. Found {len(edge_diffs)} edges.")
 
     # ถ้าไม่มี edge ให้คืนค่า None
     if edge_diffs_df.empty:
@@ -5308,8 +5402,8 @@ def main_pipeline(data):
         else:
             logging.info("Post-optimization network is connected.")
     
-    splitting_edge, sp_coord, sp_edge_diff, candidate_edges = findSplittingPoint(
-        G, transformerNode, meterNodes, coord_mapping,
+    splitting_edge, sp_coord, sp_edge_diff, candidate_edges = findSplittingPoint(                           # main_pipeline() 
+        G, projectID, transformerNode, meterNodes, coord_mapping,
         powerFactor, initialVoltage, candidate_index=0
     )
     
@@ -5329,6 +5423,72 @@ def main_pipeline(data):
     g1_idx = [nodeToIndex[n] for n in group1_meter_nodes]
     g2_idx = [nodeToIndex[n] for n in group2_meter_nodes]
 
+    # # 1) สร้างข้อมูลเฉพาะกลุ่ม 1
+    # group1_meterLocs = meterLocations[g1_idx]
+    # loads_g1 = totalLoads[g1_idx]
+    # # โหลดตามเฟสของ มิเตอร์กลุ่ม 1
+    # group1_phase_loads = {
+    #     'A': phase_loads['A'][g1_idx],
+    #     'B': phase_loads['B'][g1_idx],
+    #     'C': phase_loads['C'][g1_idx],
+    # }
+    #     # ข้อมูล peano และ phases ตามกลุ่ม
+    # peano_g1  = peano[g1_idx]
+    # phases_g1 = phases[g1_idx]
+
+    # # เรียก balance Group 1
+    # new_phases_g1, new_phase_loads_g1 = optimize_phase_balance(
+    # group1_meterLocs,
+    # loads_g1,
+    # group1_phase_loads,
+    # peano[g1_idx],
+    # lvData,
+    # phases[g1_idx]
+    # )
+    # logging.info(
+    #     "Group 1 load balance before -> A: %.1f kW, B: %.1f kW, C: %.1f kW",
+    #     group1_phase_loads['A'].sum(),
+    #     group1_phase_loads['B'].sum(),
+    #     group1_phase_loads['C'].sum()
+    # )
+    # logging.info(
+    #     "Group 1 load balance after  -> A: %.1f kW, B: %.1f kW, C: %.1f kW",
+    #     new_phase_loads_g1['A'].sum(),
+    #     new_phase_loads_g1['B'].sum(),
+    #     new_phase_loads_g1['C'].sum()
+    # )
+    # # 2) กลุ่ม 2
+    # group2_meterLocs = meterLocations[g2_idx]
+    # loads_g2 = totalLoads[g2_idx]
+    # group2_phase_loads = {
+    #     'A': phase_loads['A'][g2_idx],
+    #     'B': phase_loads['B'][g2_idx],
+    #     'C': phase_loads['C'][g2_idx],
+    # }
+    # peano_g2  = peano[g2_idx]
+    # phases_g2 = phases[g2_idx]
+
+    # new_phases_g2, new_phase_loads_g2 = optimize_phase_balance(
+    # group2_meterLocs,
+    # loads_g2,
+    # group2_phase_loads,
+    # peano[g2_idx],
+    # lvData,
+    # phases[g2_idx]
+    # )
+    # logging.info(
+    # "Group 2 load balance before -> A: %.1f kW, B: %.1f kW, C: %.1f kW",
+    # group2_phase_loads['A'].sum(),
+    # group2_phase_loads['B'].sum(),
+    # group2_phase_loads['C'].sum()
+    # )
+    # logging.info(
+    #     "Group 2 load balance after  -> A: %.1f kW, B: %.1f kW, C: %.1f kW",
+    #     new_phase_loads_g2['A'].sum(),
+    #     new_phase_loads_g2['B'].sum(),
+    #     new_phase_loads_g2['C'].sum()
+    # )
+
     # 1) สร้างข้อมูลเฉพาะกลุ่ม 1
     group1_meterLocs = meterLocations[g1_idx]
     loads_g1 = totalLoads[g1_idx]
@@ -5341,7 +5501,8 @@ def main_pipeline(data):
         # ข้อมูล peano และ phases ตามกลุ่ม
     peano_g1  = peano[g1_idx]
     phases_g1 = phases[g1_idx]
-
+    
+    
     # เรียก balance Group 1
     new_phases_g1, new_phase_loads_g1 = optimize_phase_balance(
     group1_meterLocs,
@@ -5357,12 +5518,28 @@ def main_pipeline(data):
         group1_phase_loads['B'].sum(),
         group1_phase_loads['C'].sum()
     )
+    # Calculate %Unbalance Before Group1
+    g1_a = group1_phase_loads['A'].sum()
+    g1_b = group1_phase_loads['B'].sum()
+    g1_c = group1_phase_loads['C'].sum()
+    g1_avg = (g1_a + g1_b + g1_c) / 3.0
+    g1_unb_before = max(abs(g1_a - g1_avg), abs(g1_b - g1_avg), abs(g1_c - g1_avg)) / g1_avg * 100
+    logging.info("Group 1 percent unbalance before: %.2f%%", g1_unb_before)
+    
     logging.info(
         "Group 1 load balance after  -> A: %.1f kW, B: %.1f kW, C: %.1f kW",
         new_phase_loads_g1['A'].sum(),
         new_phase_loads_g1['B'].sum(),
         new_phase_loads_g1['C'].sum()
     )
+    # Calculate %Unbalance After Group1
+    new_g1_a = new_phase_loads_g1['A'].sum()
+    new_g1_b = new_phase_loads_g1['B'].sum()
+    new_g1_c = new_phase_loads_g1['C'].sum()
+    new_g1_avg = (new_g1_a + new_g1_b + new_g1_c) / 3.0
+    g1_unb_after = max(abs(new_g1_a - new_g1_avg), abs(new_g1_b - new_g1_avg), abs(new_g1_c - new_g1_avg)) / new_g1_avg * 100
+    logging.info("Group 1 percent unbalance after: %.2f%%", g1_unb_after)
+    
     # 2) กลุ่ม 2
     group2_meterLocs = meterLocations[g2_idx]
     loads_g2 = totalLoads[g2_idx]
@@ -5388,12 +5565,28 @@ def main_pipeline(data):
     group2_phase_loads['B'].sum(),
     group2_phase_loads['C'].sum()
     )
+    # Calculate %Unbalance Before Group2
+    g2_a = group2_phase_loads['A'].sum()
+    g2_b = group2_phase_loads['B'].sum()
+    g2_c = group2_phase_loads['C'].sum()
+    g2_avg = (g2_a + g2_b + g2_c) / 3.0
+    g2_unb_before = max(abs(g2_a - g2_avg), abs(g2_b - g2_avg), abs(g2_c - g2_avg)) / g2_avg * 100
+    logging.info("Group 2 percent unbalance before: %.2f%%", g2_unb_before)
+    
     logging.info(
         "Group 2 load balance after  -> A: %.1f kW, B: %.1f kW, C: %.1f kW",
         new_phase_loads_g2['A'].sum(),
         new_phase_loads_g2['B'].sum(),
         new_phase_loads_g2['C'].sum()
     )
+    # Calculate %Unbalance After Group2
+    new_g2_a = new_phase_loads_g2['A'].sum()
+    new_g2_b = new_phase_loads_g2['B'].sum()
+    new_g2_c = new_phase_loads_g2['C'].sum()
+    new_g2_avg = (new_g2_a + new_g2_b + new_g2_c) / 3.0
+    g2_unb_after = max(abs(new_g2_a - new_g2_avg), abs(new_g2_b - new_g2_avg), abs(new_g2_c - new_g2_avg)) / new_g2_avg * 100
+    logging.info("Group 2 percent unbalance after: %.2f%%", g2_unb_after)
+
     dist_arr = []
     for n in meterNodes:
         try:
@@ -5613,6 +5806,12 @@ def main_pipeline(data):
         "tx_loss_g2_kW": round(tx_loss_g2_kW, 2),
         "total_system_loss_g2": round(total_system_loss_g2, 2),
 
+        "Group_1_percent_unbalance_before": round(g1_unb_before, 1),
+        "Group_1_percent_unbalance_after":round(g1_unb_after, 1),
+
+        "Group_2_percent_unbalance_before": round(g2_unb_before, 1),
+        "Group_2_percent_unbalance_after":round(g2_unb_after, 1),
+
         "group1_load_balance_before": {
             "A": round(group1_phase_loads['A'].sum(), 1),
             "B": round(group1_phase_loads['B'].sum(), 1),
@@ -5691,8 +5890,13 @@ def main_pipeline(data):
         G=G,        
     )
 
-    print("RUN OK!")
-
+    print(sp_edge_diff)
+    print("############## splitting_edge ###########")
+    print(splitting_edge)
+    print("############## candidate_edges ###########")
+    print(candidate_edges)
+    print("############## sp_coord ###########")
+    print(sp_coord)
     # return {"success": True}
 
     # G = addNodeLabels(G, None, sp_edge_diff)

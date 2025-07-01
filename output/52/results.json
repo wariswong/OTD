@@ -11,6 +11,10 @@
   "line_loss_g2_kW": 1.39,
   "tx_loss_g2_kW": 0.87,
   "total_system_loss_g2": 2.26,
+  "Group_1_percent_unbalance_before": 18.3,
+  "Group_1_percent_unbalance_after": 0.5,
+  "Group_2_percent_unbalance_before": 2.3,
+  "Group_2_percent_unbalance_after": 0.0,
   "group1_load_balance_before": {
     "A": 15.2,
     "B": 10.6,

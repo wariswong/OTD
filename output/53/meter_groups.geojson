@@ -1,0 +1,719 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97710889484203,
+          14.906942296843454
+        ]
+      },
+      "properties": {
+        "group": 1,
+        "voltage_text": "A:228.5V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97478441766087,
+          14.907801717042242
+        ]
+      },
+      "properties": {
+        "group": 1,
+        "voltage_text": "A:230.0V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97617834400684,
+          14.907223096367108
+        ]
+      },
+      "properties": {
+        "group": 1,
+        "voltage_text": "A:228.8V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97797016231965,
+          14.906644511689247
+        ]
+      },
+      "properties": {
+        "group": 1,
+        "voltage_text": "A:228.5V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97501251265653,
+          14.90795353162383
+        ]
+      },
+      "properties": {
+        "group": 1,
+        "voltage_text": "A:229.9V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97706088404874,
+          14.90691711713805
+        ]
+      },
+      "properties": {
+        "group": 1,
+        "voltage_text": "A:228.5V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97507290220877,
+          14.907978945524505
+        ]
+      },
+      "properties": {
+        "group": 1,
+        "voltage_text": "A:229.9V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.9760164954753,
+          14.91102714348555
+        ]
+      },
+      "properties": {
+        "group": 1,
+        "voltage_text": "A:229.7V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97706720861581,
+          14.906954357765382
+        ]
+      },
+      "properties": {
+        "group": 1,
+        "voltage_text": "A:228.5V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97531954560485,
+          14.90755983773858
+        ]
+      },
+      "properties": {
+        "group": 1,
+        "voltage_text": "A:229.4V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97635115473378,
+          14.907210417927395
+        ]
+      },
+      "properties": {
+        "group": 1,
+        "voltage_text": "A:228.7V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97674797594415,
+          14.907034391378625
+        ]
+      },
+      "properties": {
+        "group": 1,
+        "voltage_text": "A:228.6V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97476968197485,
+          14.907774171795689
+        ]
+      },
+      "properties": {
+        "group": 1,
+        "voltage_text": "A:230.0V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97536038869636,
+          14.907535363344236
+        ]
+      },
+      "properties": {
+        "group": 1,
+        "voltage_text": "A:229.4V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97276799572442,
+          14.908758697624748
+        ]
+      },
+      "properties": {
+        "group": 2,
+        "voltage_text": "A:230.0V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97365702734996,
+          14.90932565808656
+        ]
+      },
+      "properties": {
+        "group": 2,
+        "voltage_text": "A:228.5V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97357404301476,
+          14.90900156548084
+        ]
+      },
+      "properties": {
+        "group": 2,
+        "voltage_text": "A:228.5V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97272564166012,
+          14.908738641970794
+        ]
+      },
+      "properties": {
+        "group": 2,
+        "voltage_text": "A:230.0V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97329282516682,
+          14.908516965160327
+        ]
+      },
+      "properties": {
+        "group": 2,
+        "voltage_text": "A:228.9V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97229360137044,
+          14.909018959712283
+        ]
+      },
+      "properties": {
+        "group": 2,
+        "voltage_text": "A:229.2V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.9718699841051,
+          14.909051005007534
+        ]
+      },
+      "properties": {
+        "group": 2,
+        "voltage_text": "A:228.5V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97185735259657,
+          14.909017231454063
+        ]
+      },
+      "properties": {
+        "group": 2,
+        "voltage_text": "A:228.5V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97233238023544,
+          14.90888478555627
+        ]
+      },
+      "properties": {
+        "group": 2,
+        "voltage_text": "A:229.1V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97379349709585,
+          14.909556458194182
+        ]
+      },
+      "properties": {
+        "group": 2,
+        "voltage_text": "A:228.5V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.9736913270016,
+          14.909312153254414
+        ]
+      },
+      "properties": {
+        "group": 2,
+        "voltage_text": "A:228.5V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97342750580012,
+          14.908639066521662
+        ]
+      },
+      "properties": {
+        "group": 2,
+        "voltage_text": "A:228.7V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97339309033944,
+          14.908649388867156
+        ]
+      },
+      "properties": {
+        "group": 2,
+        "voltage_text": "A:228.7V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97415608728761,
+          14.908075406582716
+        ]
+      },
+      "properties": {
+        "group": 2,
+        "voltage_text": "A:227.6V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97276081557678,
+          14.908724961434068
+        ]
+      },
+      "properties": {
+        "group": 2,
+        "voltage_text": "A:230.0V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97354747029163,
+          14.908956918058774
+        ]
+      },
+      "properties": {
+        "group": 2,
+        "voltage_text": "A:228.5V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97353480565067,
+          14.909025565751374
+        ]
+      },
+      "properties": {
+        "group": 2,
+        "voltage_text": "A:228.5V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97274030741343,
+          14.908771687300677
+        ]
+      },
+      "properties": {
+        "group": 2,
+        "voltage_text": "A:230.0V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97231725209582,
+          14.9088524181694
+        ]
+      },
+      "properties": {
+        "group": 2,
+        "voltage_text": "A:228.8V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.9734070747696,
+          14.908685898358689
+        ]
+      },
+      "properties": {
+        "group": 2,
+        "voltage_text": "A:228.7V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97226083722353,
+          14.909002360317892
+        ]
+      },
+      "properties": {
+        "group": 2,
+        "voltage_text": "A:229.2V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97183525229892,
+          14.909063279109526
+        ]
+      },
+      "properties": {
+        "group": 2,
+        "voltage_text": "A:228.5V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97276107050105,
+          14.90865494684462
+        ]
+      },
+      "properties": {
+        "group": 2,
+        "voltage_text": "A:228.5V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97318442642799,
+          14.908507223066877
+        ]
+      },
+      "properties": {
+        "group": 2,
+        "voltage_text": "A:228.2V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97277116648137,
+          14.908674677113442
+        ]
+      },
+      "properties": {
+        "group": 2,
+        "voltage_text": "A:228.5V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97279217589023,
+          14.908637701442837
+        ]
+      },
+      "properties": {
+        "group": 2,
+        "voltage_text": "A:228.5V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97196048227084,
+          14.908983028585197
+        ]
+      },
+      "properties": {
+        "group": 2,
+        "voltage_text": "A:228.6V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97351255179929,
+          14.908973471527109
+        ]
+      },
+      "properties": {
+        "group": 2,
+        "voltage_text": "A:228.5V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.9731713440797,
+          14.9084768898555
+        ]
+      },
+      "properties": {
+        "group": 2,
+        "voltage_text": "A:228.2V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97263460587271,
+          14.908779493335434
+        ]
+      },
+      "properties": {
+        "group": 2,
+        "voltage_text": "A:229.9V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97230834722785,
+          14.908975003224667
+        ]
+      },
+      "properties": {
+        "group": 2,
+        "voltage_text": "A:229.2V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97296213070084,
+          14.9086447885093
+        ]
+      },
+      "properties": {
+        "group": 2,
+        "voltage_text": "A:229.4V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97445247453798,
+          14.907953528402713
+        ]
+      },
+      "properties": {
+        "group": 2,
+        "voltage_text": "A:227.6V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97353638211501,
+          14.908370258389338
+        ]
+      },
+      "properties": {
+        "group": 2,
+        "voltage_text": "A:227.9V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97227887530012,
+          14.908971365414475
+        ]
+      },
+      "properties": {
+        "group": 2,
+        "voltage_text": "A:229.2V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97343834463327,
+          14.908672256950945
+        ]
+      },
+      "properties": {
+        "group": 2,
+        "voltage_text": "A:228.7V"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          104.97376052521732,
+          14.908229926709636
+        ]
+      },
+      "properties": {
+        "group": 2,
+        "voltage_text": "A:227.7V"
+      }
+    }
+  ]
+}

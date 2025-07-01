@@ -50,106 +50,134 @@
   </nav>
 
   
-  <div class="container">
-    <div class="d-flex justify-content-between mb-3">
-      <a href="/" class="btn btn-secondary"><i class="bi bi-arrow-left"></i> กลับ</a>
-    </div>
-    <div class="card mb-4 shadow-sm">
-      <div class="card-header bg-light fw-bold">แผนที่การจำลอง</div>
-      <div class="card-body p-0">
-        <div id="viewDiv"></div>
+  <div class="container-fluid">
+    <div class="row">
+      <div class="col-10">
+        <div class="d-flex justify-content-between mb-3">
+          <a href="/" class="btn btn-secondary"><i class="bi bi-arrow-left"></i> กลับ</a>
+        </div>
+        <div class="card mb-4 shadow-sm">
+          <div class="card-header bg-light fw-bold">แผนที่การจำลอง</div>
+          <div class="card-body p-0">
+            <div id="viewDiv"></div>
+          </div>
+        </div>
+
+        <div class="card shadow-sm mt-4">
+          <div class="card-header bg-custom text-dark">
+            <strong>ผลการวิเคราะห์ระบบไฟฟ้า</strong>
+          </div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table table-bordered align-middle text-center">
+                <thead class="table-light">
+                  <tr>
+                    <th>รายการ</th>
+                    <th>หม้อแปลงกลุ่มที่ 1</th>
+                    <th>หม้อแปลงกลุ่มที่ 2</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>โหลดหม้อแปลง</strong></td>
+                    <td>{{ result.g1_load }} kW</td>
+                    <td>{{ result.g2_load }} kW</td>
+                  </tr>
+                  <tr>
+                    <td><strong>โหลดคาดการณ์อีก 4 ปี (เพิ่มปีละ 1%)</strong></td>
+                    <td>{{ result.future_g1_load }} kW</td>
+                    <td>{{ result.future_g2_load }} kW</td>
+                  </tr>
+                  <tr>
+                    <td><strong>ขนาดหม้อแปลงที่แนะนำ</strong></td>
+                    <td>{{ result.rating_g1 }} kVA</td>
+                    <td>{{ result.rating_g2 }} kVA</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Line Loss</strong></td>
+                    <td>{{ result.line_loss_g1_kW }} kW</td>
+                    <td>{{ result.line_loss_g2_kW }} kW</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Transformer Loss (Core+Copper Loss)</strong></td>
+                    <td>{{ result.tx_loss_g1_kW }} kW</td>
+                    <td>{{ result.tx_loss_g2_kW }} kW</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Loss รวม</strong></td>
+                    <td>{{ result.total_system_loss_g1 }} kW</td>
+                    <td>{{ result.total_system_loss_g2 }} kW</td>
+                  </tr>
+
+                  <tr class="table-primary">
+                    <td colspan="3"><strong>Load balancing before Process</strong></td>
+                  </tr>
+                  <tr class="table-primary">
+                    <td colspan="3"><strong>Group 1 percent unbalance before : {{result.Group_1_percent_unbalance_before}} %</strong></td>
+                  </tr>
+                  <tr class="table-primary">
+                    <td colspan="3"><strong>Group 2 percent unbalance before : {{result.Group_2_percent_unbalance_before}} %</strong></td>
+                  </tr>
+                  <tr>
+                    <td>Phase A</td>
+                    <td>{{ result.group1_load_balance_before.A }} kW</td>
+                    <td>{{ result.group2_load_balance_before.A }} kW</td>
+                  </tr>
+                  <tr>
+                    <td>Phase B</td>
+                    <td>{{ result.group1_load_balance_before.B }} kW</td>
+                    <td>{{ result.group2_load_balance_before.B }} kW</td>
+                  </tr>
+                  <tr>
+                    <td>Phase C</td>
+                    <td>{{ result.group1_load_balance_before.C }} kW</td>
+                    <td>{{ result.group2_load_balance_before.C }} kW</td>
+                  </tr>
+
+                  <tr class="table-success">
+                    <td colspan="3"><strong>Load balancing after Process</strong></td>
+                  </tr>
+                  <tr class="table-success">
+                    <td colspan="3"><strong>Group 1 percent unbalance after : {{result.Group_1_percent_unbalance_after}} %</strong></td>
+                  </tr>
+                  <tr class="table-success">
+                    <td colspan="3"><strong>Group 2 percent unbalance after : {{result.Group_2_percent_unbalance_after}} %</strong></td>
+                  </tr>
+                  <tr>
+                    <td>Phase A</td>
+                    <td>{{ result.group1_load_balance_after.A }} kW</td>
+                    <td>{{ result.group2_load_balance_after.A }} kW</td>
+                  </tr>
+                  <tr>
+                    <td>Phase B</td>
+                    <td>{{ result.group1_load_balance_after.B }} kW</td>
+                    <td>{{ result.group2_load_balance_after.B }} kW</td>
+                  </tr>
+                  <tr>
+                    <td>Phase C</td>
+                    <td>{{ result.group1_load_balance_after.C }} kW</td>
+                    <td>{{ result.group2_load_balance_after.C }} kW</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            </div>
+          </div>
       </div>
-    </div>
-
-    <div class="card shadow-sm mt-4">
-      <div class="card-header bg-custom text-dark">
-        <strong>ผลการวิเคราะห์ระบบไฟฟ้า</strong>
-      </div>
-      <div class="card-body">
-        <div class="table-responsive">
-          <table class="table table-bordered align-middle text-center">
-            <thead class="table-light">
-              <tr>
-                <th>รายการ</th>
-                <th>หม้อแปลงกลุ่มที่ 1</th>
-                <th>หม้อแปลงกลุ่มที่ 2</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td><strong>โหลดหม้อแปลง</strong></td>
-                <td>{{ result.g1_load }} kW</td>
-                <td>{{ result.g2_load }} kW</td>
-              </tr>
-              <tr>
-                <td><strong>โหลดคาดการณ์อีก 4 ปี (เพิ่มปีละ 1%)</strong></td>
-                <td>{{ result.future_g1_load }} kW</td>
-                <td>{{ result.future_g2_load }} kW</td>
-              </tr>
-              <tr>
-                <td><strong>ขนาดหม้อแปลงที่แนะนำ</strong></td>
-                <td>{{ result.rating_g1 }} kVA</td>
-                <td>{{ result.rating_g2 }} kVA</td>
-              </tr>
-              <tr>
-                <td><strong>Line Loss</strong></td>
-                <td>{{ result.line_loss_g1_kW }} kW</td>
-                <td>{{ result.line_loss_g2_kW }} kW</td>
-              </tr>
-              <tr>
-                <td><strong>Transformer Loss (Core+Copper Loss)</strong></td>
-                <td>{{ result.tx_loss_g1_kW }} kW</td>
-                <td>{{ result.tx_loss_g2_kW }} kW</td>
-              </tr>
-              <tr>
-                <td><strong>Loss รวม</strong></td>
-                <td>{{ result.total_system_loss_g1 }} kW</td>
-                <td>{{ result.total_system_loss_g2 }} kW</td>
-              </tr>
-
-              <tr class="table-primary">
-                <td colspan="3"><strong>Load balancing before Process</strong></td>
-              </tr>
-              <tr>
-                <td>Phase A</td>
-                <td>{{ result.group1_load_balance_before.A }} kW</td>
-                <td>{{ result.group2_load_balance_before.A }} kW</td>
-              </tr>
-              <tr>
-                <td>Phase B</td>
-                <td>{{ result.group1_load_balance_before.B }} kW</td>
-                <td>{{ result.group2_load_balance_before.B }} kW</td>
-              </tr>
-              <tr>
-                <td>Phase C</td>
-                <td>{{ result.group1_load_balance_before.C }} kW</td>
-                <td>{{ result.group2_load_balance_before.C }} kW</td>
-              </tr>
-
-              <tr class="table-success">
-                <td colspan="3"><strong>Load balancing after Process</strong></td>
-              </tr>
-              <tr>
-                <td>Phase A</td>
-                <td>{{ result.group1_load_balance_after.A }} kW</td>
-                <td>{{ result.group2_load_balance_after.A }} kW</td>
-              </tr>
-              <tr>
-                <td>Phase B</td>
-                <td>{{ result.group1_load_balance_after.B }} kW</td>
-                <td>{{ result.group2_load_balance_after.B }} kW</td>
-              </tr>
-              <tr>
-                <td>Phase C</td>
-                <td>{{ result.group1_load_balance_after.C }} kW</td>
-                <td>{{ result.group2_load_balance_after.C }} kW</td>
-              </tr>
-            </tbody>
-          </table>
+      <div class="col-2">
+        <!-- แทรก selector เอาข้อมูลจาก index มาให้เป็นตัวเลือก และเอาค่า lat lon ไปแสดงพิกัด ใน map จากข้อมูลในไฟล์ edge_diff.json -->
+         <div class="card shadow-sm mb-3">
+          <div class="card-header bg-light fw-bold">เลือกจุดแบ่งโหลด</div>
+          <div class="card-body">
+            <select id="splittingSelector" class="form-select mb-2">
+              <option selected disabled>-- เลือก index --</option>
+            </select>
+            <div id="coordinateDisplay" class="small text-muted"></div>
+          </div>
         </div>
       </div>
     </div>
-
+  </div>
   <!-- ArcGIS JS API -->
   <script src="https://js.arcgis.com/4.29/"></script>
   <script>
@@ -157,8 +185,9 @@
   "esri/Map",
   "esri/views/MapView",
   "esri/layers/GeoJSONLayer",
+  "esri/Graphic",
   "esri/widgets/Legend"
-], function(Map, MapView, GeoJSONLayer, Legend) {
+], function(Map, MapView, GeoJSONLayer, Graphic, Legend) {
 
   const map = new Map({
     basemap: "streets-navigation-vector"
@@ -392,6 +421,60 @@
     style: "classic"  // หรือ "classic" ตามที่ชอบ
   });
   view.ui.add(legend, "top-right");
+
+  // โหลด edge_diffs.json
+  fetch("/output/{{project}}/edge_diffs.json")
+    .then(response => response.json())
+    .then(data => {
+      const selector = document.getElementById("splittingSelector");
+      data.forEach((item, index) => {
+        const opt = document.createElement("option");
+        opt.value = index;
+        opt.textContent = `Index ${item.splitting_index}`;
+        selector.appendChild(opt);
+      });
+
+      let markerGraphic = null;
+
+      selector.addEventListener("change", function () {
+        const idx = parseInt(this.value);
+        const selected = data[idx];
+
+        const lat = selected.N1_Lat;
+        const lon = selected.N1_Lon;
+
+        // แสดงตำแหน่ง lat/lon
+        document.getElementById("coordinateDisplay").innerText = `Lat: ${lat.toFixed(6)}, Lon: ${lon.toFixed(6)}`;
+
+        // ลบ marker เดิมถ้ามี
+        if (markerGraphic) view.graphics.remove(markerGraphic);
+
+        // สร้าง marker ใหม่
+        markerGraphic = new Graphic({
+          geometry: {
+            type: "point",
+            longitude: lon,
+            latitude: lat
+          },
+          symbol: {
+            type: "simple-marker",
+            style: "triangle",
+            color: "red",
+            size: "14px",
+            angle: 180,  // หมุนหัวหมุดลงล่าง
+            outline: {
+              color: [255, 255, 255],
+              width: 1
+            }
+          }
+        });
+
+        view.graphics.add(markerGraphic);
+        view.goTo({ center: [lon, lat], zoom: 16 });
+      });
+    })
+    .catch(err => console.error("โหลด edge_diffs.json ไม่สำเร็จ:", err));
+
 
 });
   </script>

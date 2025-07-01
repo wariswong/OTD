@@ -2095,77 +2095,18 @@ def plotResults(lvLinesX, lvLinesY, mvLinesX, mvLinesY, eserviceLinesX, eservice
     canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
     ##################  GUI  ########################################################
 
-    # Step 1: โปรเจกชัน TM3 48N (ใส่พิกัดเริ่มต้นตามของคุณ)
-    # TM3 Thailand 48N = EPSG:32648, หรือใช้ Proj string
-    proj_tm3 = pyproj.CRS.from_proj4("+proj=utm +zone=47 +datum=WGS84 +units=m +no_defs")
-    proj_wgs84 = pyproj.CRS("EPSG:4326")
-    transformer = pyproj.Transformer.from_crs(proj_tm3, proj_wgs84, always_xy=True)
-
-    output_dir = f"output/{projectID}"
-    os.makedirs(output_dir, exist_ok=True)
-
-    # ตัวอย่างข้อมูลจาก lvLinesX, lvLinesY (list of list)
-    # สมมุติว่า lvLinesX = [[x1, x2], [x3, x4]], lvLinesY = [[y1, y2], [y3, y4]]
-    featuresLV = []
+    
     
     # วาดข้อมูลทั้งหมด (เหมือนเดิมทุกประการ) ##################  GUI  ########################################################
     for x, y in zip(lvLinesX, lvLinesY):
         ax.plot(x, y, color='lime', linewidth=1, linestyle='--', label='LV Line' if 'LV Line' not in ax.get_legend_handles_labels()[1] else "")
     ##################  GUI  ########################################################
-    for x_list, y_list in zip(lvLinesX, lvLinesY):
-        latlons = [transformer.transform(x, y) for x, y in zip(x_list, y_list)]
-        
-        feature = {
-            "type": "Feature",
-            "geometry": {
-                "type": "LineString",
-                "coordinates": latlons
-            },
-            "properties": {
-                "type": "LV Line"
-            }
-        }
-        featuresLV.append(feature)
-
-    geojson_output = {
-        "type": "FeatureCollection",
-        "features": featuresLV
-    }
-
-    # เขียนลงไฟล์หรือ return
-    output_path = os.path.join(output_dir, "lv_lines.geojson")
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(geojson_output, f, indent=2)
-
-    featuresMV = []
+    
     ##################  GUI  ########################################################
     for x, y in zip(mvLinesX, mvLinesY):
         ax.plot(x, y, color='maroon', linewidth=1, linestyle='-.', label='MV Line' if 'MV Line' not in ax.get_legend_handles_labels()[1] else "")
     ##################  GUI  ########################################################
-    for mvx_list, mvy_list in zip(mvLinesX, mvLinesY):
-        latlons = [transformer.transform(x, y) for x, y in zip(mvx_list, mvy_list)]
-        
-        feature = {
-            "type": "Feature",
-            "geometry": {
-                "type": "LineString",
-                "coordinates": latlons
-            },
-            "properties": {
-                "type": "MV Line"
-            }
-        }
-        featuresMV.append(feature)
-
-    geojson_output = {
-        "type": "FeatureCollection",
-        "features": featuresMV
-    }
-
-    # เขียนลงไฟล์หรือ return
-    output_path = os.path.join(output_dir, "mv_lines.geojson")
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(geojson_output, f, indent=2)
+    
     
     for x, y in zip(eserviceLinesX, eserviceLinesY):
         ax.plot(x, y, 'm-', linewidth=2, label='Eservice Line to TR' if 'Eservice Line' not in ax.get_legend_handles_labels()[1] else "")
@@ -2174,86 +2115,14 @@ def plotResults(lvLinesX, lvLinesY, mvLinesX, mvLinesY, eserviceLinesX, eservice
     if len(group2_indices) > 0:
         ax.plot(meterLocations[group2_indices, 0], meterLocations[group2_indices, 1], 'r.', markersize=10, label='Group 2 Meters')
     # 1. สร้าง transformer สำหรับแปลงจาก TM3 Zone 48N → WGS84
-    proj_tm3 = pyproj.CRS.from_proj4("+proj=utm +zone=47 +datum=WGS84 +units=m +no_defs")
-    proj_wgs84 = pyproj.CRS("EPSG:4326")
-    transformer = pyproj.Transformer.from_crs(proj_tm3, proj_wgs84, always_xy=True)
+    
 
     # 2. สมมุติว่ามีตัวแปรเหล่านี้จากโค้ดเดิม
     # meterLocations: numpy array shape (N,2)
     # group1_indices, group2_indices: list of indices
 
     # 3. แปลงพิกัดแต่ละกลุ่ม
-    group1_lonlat = [
-        transformer.transform(x, y)
-        for x, y in zip(
-            meterLocations[group1_indices, 0],
-            meterLocations[group1_indices, 1]
-        )
-    ]
-
-    group2_lonlat = [
-        transformer.transform(x, y)
-        for x, y in zip(
-            meterLocations[group2_indices, 0],
-            meterLocations[group2_indices, 1]
-        )
-    ]
-
-    # สร้างฟังก์ชันช่วยสร้าง voltage_text ต่อมิเตอร์
-    def get_voltage_text(i):
-        connected_phases = phases[i].upper().strip()
-        voltage_text = ''
-        for ph in ['A', 'B', 'C']:
-            if ph in connected_phases:
-                colname = f'Final Voltage {ph} (V)'
-                if colname in result_df.columns:
-                    vval = result_df.iloc[i][colname]
-                    if pd.notnull(vval):
-                        voltage_text += f'{ph}:{vval:.1f}V\n'
-                    else:
-                        voltage_text += f'{ph}:N/A\n'
-        return voltage_text.strip()
-
-    # แปลงพิกัดและเพิ่ม voltage text
-
-    # 4. สร้าง GeoJSON FeatureCollection
-    features = []
-
-    for idx in group1_indices:
-        x, y = meterLocations[idx]
-        lon, lat = transformer.transform(x, y)
-        voltage_text = get_voltage_text(idx)
-        features.append({
-            "type": "Feature",
-            "geometry": {"type": "Point", "coordinates": [lon, lat]},
-            "properties": {
-                "group": 1,
-                "voltage_text": voltage_text
-            }
-        })
-
-    for idx in group2_indices:
-        x, y = meterLocations[idx]
-        lon, lat = transformer.transform(x, y)
-        voltage_text = get_voltage_text(idx)
-        features.append({
-            "type": "Feature",
-            "geometry": {"type": "Point", "coordinates": [lon, lat]},
-            "properties": {
-                "group": 2,
-                "voltage_text": voltage_text
-            }
-        })
-
-    geojson = {
-        "type": "FeatureCollection",
-        "features": features
-    }
-
-    # บันทึกลงไฟล์
-    output_path = os.path.join(output_dir, "meter_groups.geojson")
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(geojson, f, ensure_ascii=False, indent=2)
+    
     if result_df is not None:
         for i in range(len(meterLocations)):
             x = meterLocations[i, 0]
@@ -2299,40 +2168,7 @@ def plotResults(lvLinesX, lvLinesY, mvLinesX, mvLinesY, eserviceLinesX, eservice
                      bbox=dict(facecolor='yellow', alpha=0.5, edgecolor='none', pad=1))
     ##################  GUI  ########################################################
 
-    features = []
-
-    if initialTransformerLocation:
-        features.append(geojson.Feature(
-            geometry=geojson.Point(initialTransformerLocation),
-            properties={"name": "Initial Transformer"}
-        ))
-
-    if splitting_point_coords:
-        features.append(geojson.Feature(
-            geometry=geojson.Point(splitting_point_coords),
-            properties={"name": "Splitting Point"}
-        ))
-
-    if optimizedTransformerLocationGroup1:
-        features.append(geojson.Feature(
-            geometry=geojson.Point(optimizedTransformerLocationGroup1),
-            properties={"name": "Group 1 Transformer"}
-        ))
-
-    if optimizedTransformerLocationGroup2:
-        features.append(geojson.Feature(
-            geometry=geojson.Point(optimizedTransformerLocationGroup2),
-            properties={"name": "Group 2 Transformer"}
-        ))
-
-    # สร้าง FeatureCollection
-    feature_collection = geojson.FeatureCollection(features)
-
-    # บันทึกลงไฟล์ .geojson
-    # บันทึกลงไฟล์
-    output_path = os.path.join(output_dir, "feature_groups.geojson")
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(feature_collection, f, ensure_ascii=False, indent=2)
+    
             
     if G is not None and coord_mapping is not None:
         svc_edges = [(u, v) for u, v, d in G.edges(data=True) if d.get('is_service')]
