@@ -5148,7 +5148,7 @@ def ensure_folder_exists(folder_path):
 #         logging.error(f"Error during processing: {str(e)}")
 #         return {'error': f"Error during processing: {str(e)}"}
     
-def run_process_from_project_folder(project_id, folder_path):
+def run_process_from_project_folder(project_id, folder_path, sp_index=0):
     """
     โหลด SHP ทั้งหมดจาก project_id ที่อยู่ใน folder_path และรัน main_pipeline
     แล้วบันทึกผลลัพธ์ใน output/{project_id}/
@@ -5182,6 +5182,7 @@ def run_process_from_project_folder(project_id, folder_path):
         # เพิ่ม project metadata
         data['project_id'] = project_id
         data['output_dir'] = os.path.join('output', str(project_id))
+        data['sp_index'] = sp_index
         os.makedirs(data['output_dir'], exist_ok=True)
 
         # Setup logging
@@ -5242,6 +5243,7 @@ def main_pipeline(data):
     eserviceData = data['eserviceData']
     output_dir = data['output_dir']
     projectID = data['project_id']
+    sp_index = data['sp_index']
 
     # --- Initial global-like variables ---
     SNAP_TOLERANCE = None
@@ -5404,7 +5406,7 @@ def main_pipeline(data):
     
     splitting_edge, sp_coord, sp_edge_diff, candidate_edges = findSplittingPoint(                           # main_pipeline() 
         G, projectID, transformerNode, meterNodes, coord_mapping,
-        powerFactor, initialVoltage, candidate_index=0
+        powerFactor, initialVoltage, candidate_index=sp_index
     )
     
     if splitting_edge is None:

@@ -246,6 +246,21 @@ def run_project(project_id):
         return jsonify({'error': str(e)}), 500
     
 
+@app.route('/reprocess/<int:project_id>', methods=['POST'])
+def reprocess_with_index(project_id):
+    try:
+        sp_index = request.json.get("sp_index", 0)
+        folder_path = app.config['UPLOAD_FOLDER']
+        result = run_process_from_project_folder(project_id, folder_path, sp_index=sp_index)
+        if result["success"]:
+            return jsonify({"message": "ประมวลผลเสร็จสิ้น"})
+        else:
+            return jsonify({"error": "ประมวลผลไม่สำเร็จ"}), 500
+    except Exception as e:
+        logging.exception("Error in reprocessing project")
+        return jsonify({'error': str(e)}), 500
+    
+
 if __name__ == '__main__':
     # app.run(debug=True)
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=5000, debug=True)

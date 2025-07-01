@@ -59,7 +59,7 @@
 <body>
   <!-- Navbar -->
   <nav class="navbar navbar-expand-lg navbar-custom mb-4">
-    <div class="container">
+    <div class="container-fluid px-5">
       <a class="navbar-brand" href="#"><i class="bi bi-geo-alt-fill"></i> GIS</a>
       <div class="collapse navbar-collapse">
         <ul class="navbar-nav ms-auto">
@@ -70,7 +70,7 @@
   </nav>
 
   <!-- Main Content -->
-  <div class="container">
+  <div class="container-fluid px-5">
     <div class="d-flex justify-content-between align-items-center mb-3">
       <h3>รายการโปรเจค</h3>
       <a href="{{ url_for('create') }}" class="btn btn-custom-primary"><i class="bi bi-plus-circle-fill"></i> สร้างโปรเจคใหม่</a>
@@ -168,7 +168,9 @@
           if (data.error) {
             Swal.fire('ผิดพลาด', data.error, 'error');
           } else {            
-            Swal.fire(`สำเร็จ`, `${data.message}`, 'success');
+            Swal.fire(`สำเร็จ`, `${data.message}`, 'success').then(() => {
+              location.reload();  // ดึง index ใหม่ที่มีข้อมูล has_output อัปเดตแล้ว
+            });
           }
         })
         .catch(error => {
