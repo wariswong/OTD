@@ -2320,7 +2320,9 @@ def findSplittingPoint(G, projectID, transformerNode, meterNodes, coord_mapping,
     edge_diffs_df.rename(columns={'index': 'splitting_index'}, inplace=True)
 
     # 5) บันทึก CSV: ใช้พิกัด X/Y เดิม
-    folder_path = './testpy'
+    # folder_path = './testpy'
+    # ensure_folder_exists(folder_path)
+    folder_path = f"output/{projectID}/downloads"
     ensure_folder_exists(folder_path)
     csv_path = f"{folder_path}/edgediff.csv"
     edge_diffs_df.to_csv(csv_path, index=False)
@@ -2438,7 +2440,9 @@ def findSplittingPoint(G, projectID, transformerNode, meterNodes, coord_mapping,
     logging.info(f"Splitting edge chosen (candidate={candidate_index}): {best_edge}, diff={best_edge_diff:.2f}")
 
     # สร้าง shapefile ของ edges
-    folder_path = './testpy'
+    # folder_path = './testpy'
+    # ensure_folder_exists(folder_path)
+    folder_path = f"output/{projectID}/downloads"
     ensure_folder_exists(folder_path)
     shp_path = f"{folder_path}/edgediff.shp"
     w = shapefile.Writer(shp_path, shapeType=shapefile.POLYLINE)
@@ -5288,7 +5292,9 @@ def main_pipeline(data):
         logging.warning(f"Found {lv_analysis['total_issues']} problematic LV lines")
         
         # Export สายที่มีปัญหาเพื่อตรวจสอบ
-        folder_path = './testpy'
+        # folder_path = './testpy'
+        # ensure_folder_exists(folder_path)
+        folder_path = f"output/{projectID}/downloads"
         ensure_folder_exists(folder_path)
         export_failed_lines_shapefile(
             lv_analysis, 
@@ -5860,14 +5866,18 @@ def main_pipeline(data):
         point_coords.append(tuple(optimizedTransformerLocationGroup2))
         attributes_list.append({'Name': 'Group 2 Transformer'})
     if point_coords:
-        folder_path = './testpy'
+        # folder_path = './testpy'
+        # ensure_folder_exists(folder_path)
+        folder_path = f"output/{projectID}/downloads"
         ensure_folder_exists(folder_path)
         exportPointsToShapefile(point_coords, f"{folder_path}/optimized_transformer_locations.shp", attributes_list)
         g1_plot_indices = np.array(g1_idx, dtype=int)
         g2_plot_indices = np.array(g2_idx, dtype=int)
     
     # Export to CSV
-    folder_path = './testpy'
+    # folder_path = './testpy'
+    # ensure_folder_exists(folder_path)
+    folder_path = f"output/{projectID}/downloads"
     ensure_folder_exists(folder_path)
     csv_path = f"{folder_path}/optimized_transformer_locations.csv"
     result_df.to_csv(csv_path, index=False)

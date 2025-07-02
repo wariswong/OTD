@@ -65,17 +65,19 @@
             </div>
           </div>
         </div>  
-        <div class="col-md-12 col-xl-2">
-        <!-- แทรก selector เอาข้อมูลจาก index มาให้เป็นตัวเลือก และเอาค่า lat lon ไปแสดงพิกัด ใน map จากข้อมูลในไฟล์ edge_diff.json -->
+        <div class="col-md-12 col-xl-2">        
           <div class="card shadow-sm mb-3">
             <div class="card-header bg-light fw-bold">เลือกจุดแบ่งโหลด</div>
-              <div class="card-body">
-                <select id="splittingSelector" class="form-select mb-2">
-                  <option selected disabled>-- เลือก index --</option>
-                </select>
-                <div id="coordinateDisplay" class="small text-muted"></div>
-              </div>
+            <div class="card-body">
+              <select id="splittingSelector" class="form-select mb-2">
+                <option selected disabled>-- เลือก index --</option>
+              </select>
+              <div id="coordinateDisplay" class="small text-muted"></div>
+            </div>
           </div>
+          <a href="{{ url_for('download_project_files', project_id=project) }}" class="col-12 btn btn-outline-primary mb-3">
+            <i class="bi bi-download"></i> ดาวน์โหลดไฟล์ผลลัพธ์
+          </a>
         </div>
       </div>
 

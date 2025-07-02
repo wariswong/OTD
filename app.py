@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template, redirect, url_for, render_template
+from flask import Flask, request, jsonify, render_template, redirect, url_for, render_template, send_file
 from werkzeug.utils import secure_filename
 import os, shutil
 import mysql.connector
@@ -6,6 +6,8 @@ from processNew_no_gui import run_process_from_project_folder
 import logging
 from collections import defaultdict
 import json
+import zipfile
+import io
 
 app = Flask(__name__,
             static_folder="output",      # บอกให้ static folder ชื่อ output
@@ -260,6 +262,30 @@ def reprocess_with_index(project_id):
         logging.exception("Error in reprocessing project")
         return jsonify({'error': str(e)}), 500
     
+
+@app.route('/download/<int:project_id>')
+def download_project_files(project_id):
+    folder_path = f'output/{project_id}/downloads'
+
+    if not os.path.exists(folder_path):
+        return "ไม่พบโฟลเดอร์ดาวน์โหลด", 404
+
+    # สร้าง ZIP ไฟล์ในหน่วยความจำ
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        for root, _, files in os.walk(folder_path):
+            for file in files:
+                full_path = os.path.join(root, file)
+                relative_path = os.path.relpath(full_path, folder_path)
+                zipf.write(full_path, arcname=relative_path)
+    zip_buffer.seek(0)
+
+    return send_file(
+        zip_buffer,
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name=f'project_{project_id}_results.zip'
+    )
 
 if __name__ == '__main__':
     # app.run(debug=True)
