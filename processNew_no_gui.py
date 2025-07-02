@@ -5783,9 +5783,12 @@ def main_pipeline(data):
     future_g1_load = growthRate(g1_load, annual_growth=0.04, years=4)
     future_g2_load = growthRate(g2_load, annual_growth=0.04, years=4)
 
+    max_dist1 = max(dist_g1)
+    max_dist2 = max(dist_g2)
+
     logging.info('############ Result ############')
-    logging.info(f"Group 1 => Load={g1_load:.2f} kW, Future growthrate(4yr@4%)={future_g1_load:.2f} kW, Chosen TX1={rating_g1} kVA")
-    logging.info(f"Group 2 => Load={g2_load:.2f} kW, Future growthrate(4yr@4%)={future_g2_load:.2f} kW, Chosen TX2={rating_g2} kVA")
+    logging.info(f"Group 1 => Load={g1_load:.2f} kW, Future growthrate(4yr@4%)={future_g1_load:.2f} kW, Chosen TX1={rating_g1} kVA ,Max Distance Group1={max_dist1: 1f}m.")
+    logging.info(f"Group 2 => Load={g2_load:.2f} kW, Future growthrate(4yr@4%)={future_g2_load:.2f} kW, Chosen TX2={rating_g2} kVA ,Max Distance Group2={max_dist2: 1f}m.")
     logging.info('############ Loss Report ############')
     logging.info(f"Group 1 => Load={g1_load:.2f} kW | LineLoss={line_loss_g1_kW:.2f} kW | TxLoss={tx_loss_g1_kW:.2f} kW => TOTAL={total_system_loss_g1:.2f} kW")
     logging.info(f"Group 2 => Load={g2_load:.2f} kW | LineLoss={line_loss_g2_kW:.2f} kW | TxLoss={tx_loss_g2_kW:.2f} kW => TOTAL={total_system_loss_g2:.2f} kW")
@@ -5813,6 +5816,9 @@ def main_pipeline(data):
 
         "Group_2_percent_unbalance_before": round(g2_unb_before, 1),
         "Group_2_percent_unbalance_after":round(g2_unb_after, 1),
+
+        "Max_Distance_Group1": round(max_dist1, 1),
+        "Max_Distance_Group2": round(max_dist2, 1),
 
         "group1_load_balance_before": {
             "A": round(group1_phase_loads['A'].sum(), 1),

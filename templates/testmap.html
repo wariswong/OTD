@@ -124,6 +124,11 @@
                   <td>{{ result.total_system_loss_g1 }} kW</td>
                   <td>{{ result.total_system_loss_g2 }} kW</td>
                 </tr>
+                <tr>
+                  <td><strong>ความยาวที่ไกลที่สุด</strong></td>
+                  <td>{{ result.Max_Distance_Group1 }} m</td>
+                  <td>{{ result.Max_Distance_Group2 }} m</td>
+                </tr>
 
                 <tr class="table-primary">
                   <td colspan="3"><strong>Load balancing before Process</strong></td>
@@ -408,10 +413,29 @@
   // map.add(featureGroups);
 
   
-  meterLayer.when(() => {
-    meterLayer.queryExtent().then((response) => {
-      if (response.extent) {
-        view.goTo(response.extent.expand(2.5));  // ขยายเล็กน้อยเพื่อให้มองเห็นทั้งหมด
+  // meterLayer.when(() => {
+  //   meterLayer.queryExtent().then((response) => {
+  //     if (response.extent) {
+  //       view.goTo(response.extent.expand(2.5));  // ขยายเล็กน้อยเพื่อให้มองเห็นทั้งหมด
+  //     }
+  //   });
+  // });
+
+  featureGroups.when(() => {
+    const query = featureGroups.createQuery();
+    query.where = "group = 'initial'";
+    query.returnGeometry = true;
+
+    featureGroups.queryFeatures(query).then((result) => {
+      if (result.features.length > 0) {
+        const initialFeature = result.features[0];
+        const geometry = initialFeature.geometry;
+
+        // ซูมไปที่ตำแหน่งหม้อแปลง initial
+        view.goTo({
+          target: geometry,
+          zoom: 16
+        });
       }
     });
   });
@@ -422,6 +446,8 @@
     view: view,
     style: "classic"  // หรือ "classic" ตามที่ชอบ
   });
+
+  
   view.ui.add(legend, "top-right");
 
   // โหลด edge_diffs.json
@@ -437,32 +463,37 @@
       });
 
       let markerGraphic = null;
+      let textGraphic = null;
 
       selector.addEventListener("change", function () {
         const idx = parseInt(this.value);
         const selected = data[idx];
 
-        const lat = selected.N1_Lat;
-        const lon = selected.N1_Lon;
+        const lat = (selected.N1_Lat + selected.N2_Lat)/2;
+        const lon = (selected.N1_Lon + selected.N2_Lon)/2;
+        const Edge_Diff = selected.Edge_Diff;
+        const Load_G1 = selected.Load_G1;
+        const Load_G2 = selected.Load_G2;
 
         // แสดงตำแหน่ง lat/lon
-        document.getElementById("coordinateDisplay").innerText = `Lat: ${lat.toFixed(6)}, Lon: ${lon.toFixed(6)}`;
+        document.getElementById("coordinateDisplay").innerText = `ΔLoad (kW): ${Edge_Diff.toFixed(1)}\n Load G1 (kW): ${Load_G1.toFixed(1)}\n Load G2 (kW): ${Load_G2.toFixed(1)}`;
 
         // ลบ marker เดิมถ้ามี
         if (markerGraphic) view.graphics.remove(markerGraphic);
-
+        if (textGraphic) view.graphics.remove(textGraphic);
+        
         // สร้าง marker ใหม่
         markerGraphic = new Graphic({
           geometry: {
             type: "point",
             longitude: lon,
             latitude: lat
-          },
+          },     
           symbol: {
             type: "simple-marker",
             style: "triangle",
             color: "red",
-            size: "14px",
+            size: "16px",
             angle: 180,  // หมุนหัวหมุดลงล่าง
             outline: {
               color: [255, 255, 255],
@@ -470,9 +501,34 @@
             }
           }
         });
-
         view.graphics.add(markerGraphic);
+
+        // สร้าง text symbol แสดง label
+        textGraphic = new Graphic({
+          geometry: markerGraphic.geometry,
+          symbol: {
+            type: "text",  
+            text: "Splitting Point (Customize)",
+            color: "red",
+            yoffset: 20,      // เลื่อนข้อความขึ้นเหนือ marker
+            font: {
+              size: 12,
+              family: "Arial",
+              // weight: "bold"
+            },
+            // กำหนด Anchor ให้ข้อความชิดมุมบน–ขวาของจุด
+            horizontalAlignment: "left",   // ข้อความจะขยายไปทางขวา
+            verticalAlignment: "bottom",   // ข้อความจะขยายขึ้นบน
+            // ปรับระยะให้มีช่องว่างเล็กน้อย
+            xoffset: 5,
+            yoffset: 5
+          }
+        });
+        view.graphics.add(textGraphic);
+
+        
         view.goTo({ center: [lon, lat], zoom: 16 });
+        
       });
     })
     .catch(err => console.error("โหลด edge_diffs.json ไม่สำเร็จ:", err));
