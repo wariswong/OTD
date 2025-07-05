@@ -11,6 +11,12 @@
   "line_loss_g2_kW": 0.05,
   "tx_loss_g2_kW": 0.18,
   "total_system_loss_g2": 0.23,
+  "Group_1_percent_unbalance_before": 200.0,
+  "Group_1_percent_unbalance_after": 200.0,
+  "Group_2_percent_unbalance_before": 200.0,
+  "Group_2_percent_unbalance_after": 200.0,
+  "Max_Distance_Group1": 391.1,
+  "Max_Distance_Group2": 315.7,
   "group1_load_balance_before": {
     "A": 10.5,
     "B": 0.0,

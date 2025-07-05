@@ -80,3 +80,8 @@
 2025-07-01 14:14:34 [INFO] MV Conductor shapefile selected: C:/Users/505975/Downloads/49-000072/49-000072/Mv_Con_49_000072.shp
 2025-07-01 14:14:38 [INFO] Eservice Line shapefile selected: C:/Users/505975/Downloads/49-000072/49-000072/Eservice_49_000072.shp
 2025-07-01 14:14:40 [INFO] Transformer shapefile selected: C:/Users/505975/Downloads/49-000072/49-000072/Tr_49_000072.shp
+2025-07-02 15:38:04 [INFO] Meter shapefile selected: C:/Users/505975/Downloads/49-000072/49-000072/Meter_49_000072.shp
+2025-07-02 15:38:08 [INFO] LV Conductor shapefile selected: C:/Users/505975/Downloads/49-000072/49-000072/Lv_Con_49_000072.shp
+2025-07-02 15:38:11 [INFO] MV Conductor shapefile selected: C:/Users/505975/Downloads/49-000072/49-000072/Mv_Con_49_000072.shp
+2025-07-02 15:38:15 [INFO] Eservice Line shapefile selected: C:/Users/505975/Downloads/49-000072/49-000072/Eservice_49_000072.shp
+2025-07-02 15:38:18 [INFO] Transformer shapefile selected: C:/Users/505975/Downloads/49-000072/49-000072/Tr_49_000072.shp

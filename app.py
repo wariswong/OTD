@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template, redirect, url_for, render_template, send_file
+from flask import Flask, request, jsonify, render_template, redirect, url_for, render_template, send_file, session, url_for, redirect
 from werkzeug.utils import secure_filename
 import os, shutil
 import mysql.connector
@@ -8,6 +8,11 @@ from collections import defaultdict
 import json
 import zipfile
 import io
+import requests
+from dotenv import load_dotenv
+import urllib.parse
+
+load_dotenv()
 
 app = Flask(__name__,
             static_folder="output",      # บอกให้ static folder ชื่อ output
@@ -24,6 +29,83 @@ db_config = {
     'database': 'odt'
 }
 
+app.secret_key = os.getenv("SECRET_KEY")
+
+# SSO Config
+SSO_AUTH_URL = "https://sso2.pea.co.th/realms/pea-users/protocol/openid-connect/auth"
+SSO_TOKEN_URL = "https://sso2.pea.co.th/realms/pea-users/protocol/openid-connect/token"
+SSO_USERINFO_URL = "https://sso2.pea.co.th/realms/pea-users/protocol/openid-connect/userinfo"
+SSO_LOGOUT_URL = "https://sso2.pea.co.th/realms/pea-users/protocol/openid-connect/logout"
+
+CLIENT_ID = os.getenv("SSO_CLIENT_ID")
+CLIENT_SECRET = os.getenv("SSO_CLIENT_SECRET")
+REDIRECT_URI = os.getenv("SSO_REDIRECT_URI")
+REDIRECT_URI_CALLBACK = os.getenv("SSO_REDIRECT_URI_CALLBACK")
+
+
+def login_required(f):
+    from functools import wraps
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not session.get("user"):
+            return redirect(url_for("login"))
+        return f(*args, **kwargs)
+    return decorated
+
+@app.route("/login")
+def login():
+    params = {        
+        "redirect_uri": REDIRECT_URI_CALLBACK,
+        "response_type": "code",
+        "scope": "openid profile",
+        "client_id": CLIENT_ID
+    }
+    # print(f"{SSO_AUTH_URL}?{requests.compat.urlencode(params)}")
+    # return render_template('login.html', linkParams=params)
+    return redirect(f"{SSO_AUTH_URL}?{requests.compat.urlencode(params)}")
+
+@app.route("/login/callback")
+def login_callback():
+    code = request.args.get("code")
+    if not code:
+        return "No code provided", 400
+
+    data = {        
+        "code": code,
+        "client_id": CLIENT_ID,
+        "client_secret": CLIENT_SECRET,
+        "redirect_uri": REDIRECT_URI_CALLBACK,
+        "grant_type": "authorization_code",
+        
+    }
+    r = requests.post(SSO_TOKEN_URL, data=data, headers={"Content-Type": "application/x-www-form-urlencoded"})
+    token_json = r.json()
+    access_token = token_json.get("access_token")
+    if not access_token:
+        return "Failed to get access token", 400
+
+    u = requests.get(SSO_USERINFO_URL, headers={"Authorization": f"Bearer {access_token}"})
+    userinfo = u.json()
+    session["user"] = userinfo  # เก็บข้อมูล user
+    print(userinfo)
+    return redirect(url_for("index"))
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    params = {        
+        "client_id": CLIENT_ID,
+        "post_logout_redirect_uri":REDIRECT_URI,
+        "lockout": "true"
+    }
+    # print((f"{SSO_LOGOUT_URL}?{requests.compat.urlencode(params)}"))
+    return redirect(f"{SSO_LOGOUT_URL}?{requests.compat.urlencode(params)}")
+
+@app.route("/api/userinfo")
+def api_userinfo():
+    return jsonify(session.get("user", {}))
+
+
 def get_db():
     return mysql.connector.connect(**db_config)
 
@@ -31,15 +113,21 @@ def allowed_file(fn):
     return '.' in fn and fn.rsplit('.',1)[1].lower() in ALLOWED_EXTENSIONS
 
 @app.route('/')
+@login_required
 def index():
+
+    user = session.get("user", {})
+    employee_id = user.get("hr_employee_id")
+
     conn = get_db()
     cur = conn.cursor(dictionary=True)
     cur.execute("""
         SELECT p.*, 
                (SELECT COUNT(*) FROM project_files pf WHERE pf.project_id=p.id) AS file_count 
         FROM projects p
+        WHERE p.owner_id = %s
         ORDER BY p.created_at DESC
-    """)
+    """, (employee_id,))
     projects = cur.fetchall()
     cur.close(); conn.close()
 
@@ -47,13 +135,19 @@ def index():
         output_path = os.path.join("output", str(project["id"]))
         project["has_output"] = os.path.exists(output_path) and len(os.listdir(output_path)) > 0
 
-    return render_template('index.html', projects=projects)
+    return render_template('index.html', projects=projects, user=user)
+
+
+    # return render_template('index.html', projects=projects, user=user)
 
 @app.route('/create')
+@login_required
 def create():
-    return render_template('form.html', mode='create', project={})
+    user = session.get("user", {})
+    return render_template('form.html', mode='create', project={}, user=user)
 
 @app.route('/edit/<int:project_id>')
+@login_required
 def edit(project_id):
     conn = get_db()
     cur = conn.cursor(dictionary=True)
@@ -73,9 +167,12 @@ def edit(project_id):
         existing_files[f['file_type']].append(f['filename'])
     if not project:
         return "ไม่พบโปรเจค", 404
-    return render_template('form.html', mode='edit', project=project, existing_files=existing_files)
+    
+    user = session.get("user", {})
+    return render_template('form.html', mode='edit', project=project, existing_files=existing_files, user=user)
 
 @app.route('/upload', methods=['POST'])
+@login_required
 def upload():
     project_id = request.form.get('project_id')
     name = request.form['project_name']
@@ -83,6 +180,9 @@ def upload():
 
     if not name.strip():
         return jsonify({'error': 'ชื่อโปรเจคห้ามว่าง'}), 400
+    
+    user = session.get("user", {})
+    employee_id = user.get("hr_employee_id")
 
     conn = get_db()
     cur = conn.cursor()
@@ -92,8 +192,8 @@ def upload():
                     (name, detail, project_id))
         cur.execute("DELETE FROM project_files WHERE project_id=%s", (project_id,))
     else:
-        cur.execute("INSERT INTO projects (project_name, project_detail) VALUES (%s, %s)",
-                    (name, detail))
+        cur.execute("INSERT INTO projects (project_name, project_detail, owner_id) VALUES (%s, %s, %s)",
+                    (name, detail, employee_id))
         project_id = str(cur.lastrowid)
 
     folder_name = secure_filename(project_id)
@@ -227,11 +327,14 @@ def delete(project_id):
     return jsonify({'message': 'ลบสำเร็จ'}), 200
 
 @app.route('/map/<int:project_id>', methods=['GET'])
+@login_required
 def map_view(project_id):
     with open(f"output/{project_id}/results.json", "r", encoding="utf-8") as f:
         result_data = json.load(f)
 
-    return render_template("testmap.html", project=project_id, result=result_data)
+    user = session.get("user", {})   
+
+    return render_template("testmap.html", project=project_id, result=result_data, user=user)
 
 @app.route('/run/<int:project_id>', methods=['POST'])
 def run_project(project_id):
