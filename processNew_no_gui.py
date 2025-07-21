@@ -5324,6 +5324,14 @@ def main_pipeline(data):
             transformerCapacity_kVA = transformer_df['OPSA_TRS_3'].values[0]
         else:
             raise KeyError("Field 'OPSA_TRS_3' not found in transformer shapefile.")
+        if 'Loss' in transformerFields:
+            transformerLoss = transformer_df['Loss'].values[0]
+        else:
+            raise KeyError("Field 'Loss' not found in transformer shapefile.")
+        if 'Line_lengh' in transformerFields:
+            transformerLine_lengh = transformer_df['Line_lengh'].values[0]
+        else:
+            raise KeyError("Field 'Line_lengh' not found in transformer shapefile.")
         powerFactor = 0.875
         transformerCapacity = transformerCapacity_kVA * powerFactor
     except Exception as e:
@@ -5803,6 +5811,10 @@ def main_pipeline(data):
 
     # สร้าง dict สำหรับข้อมูลผลลัพธ์
     results = {
+        "tr_kva": round(transformerCapacity_kVA,2),
+        "tr_loss": round(transformerLoss,2),
+        "tr_Line_lengh": round(transformerLine_lengh,2),
+
         "g1_load": round(g1_load, 2),
         "future_g1_load": round(future_g1_load, 2),
         "rating_g1": rating_g1,

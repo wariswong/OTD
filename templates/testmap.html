@@ -98,111 +98,247 @@
         </div>
       </div>
 
-      <div class="card shadow-sm mt-4">
-        <div class="card-header bg-custom text-dark">
-          <strong>ผลการวิเคราะห์ระบบไฟฟ้า</strong>
+      <!-- ปุ่มสวิตซ์สลับมุมมอง -->
+      <div class="d-flex justify-content-end mb-2">
+        <div class="form-check form-switch">
+          <input class="form-check-input" type="checkbox" id="toggleSwitch">
+          <label class="form-check-label" for="toggleSwitch" id="toggleSwitchLabel">
+            <i class="bi bi-table"></i> แสดงแบบตาราง
+          </label>
         </div>
-        <div class="card-body">
-          <div class="table-responsive">
-            <table class="table table-bordered align-middle text-center">
-              <thead class="table-light">
-                <tr>
-                  <th>รายการ</th>
-                  <th>หม้อแปลงกลุ่มที่ 1</th>
-                  <th>หม้อแปลงกลุ่มที่ 2</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td><strong>โหลดหม้อแปลง</strong></td>
-                  <td>{{ result.g1_load }} kW</td>
-                  <td>{{ result.g2_load }} kW</td>
-                </tr>
-                <tr>
-                  <td><strong>โหลดคาดการณ์อีก 4 ปี (เพิ่มปีละ 1%)</strong></td>
-                  <td>{{ result.future_g1_load }} kW</td>
-                  <td>{{ result.future_g2_load }} kW</td>
-                </tr>
-                <tr>
-                  <td><strong>ขนาดหม้อแปลงที่แนะนำ</strong></td>
-                  <td>{{ result.rating_g1 }} kVA</td>
-                  <td>{{ result.rating_g2 }} kVA</td>
-                </tr>
-                <tr>
-                  <td><strong>Line Loss</strong></td>
-                  <td>{{ result.line_loss_g1_kW }} kW</td>
-                  <td>{{ result.line_loss_g2_kW }} kW</td>
-                </tr>
-                <tr>
-                  <td><strong>Transformer Loss (Core+Copper Loss)</strong></td>
-                  <td>{{ result.tx_loss_g1_kW }} kW</td>
-                  <td>{{ result.tx_loss_g2_kW }} kW</td>
-                </tr>
-                <tr>
-                  <td><strong>Loss รวม</strong></td>
-                  <td>{{ result.total_system_loss_g1 }} kW</td>
-                  <td>{{ result.total_system_loss_g2 }} kW</td>
-                </tr>
-                <tr>
-                  <td><strong>ความยาวที่ไกลที่สุด</strong></td>
-                  <td>{{ result.Max_Distance_Group1 }} m</td>
-                  <td>{{ result.Max_Distance_Group2 }} m</td>
-                </tr>
-
-                <tr class="table-primary">
-                  <td colspan="3"><strong>Load balancing before Process</strong></td>
-                </tr>
-                <tr class="table-primary">
-                  <td colspan="3"><strong>Group 1 percent unbalance before : {{result.Group_1_percent_unbalance_before}} %</strong></td>
-                </tr>
-                <tr class="table-primary">
-                  <td colspan="3"><strong>Group 2 percent unbalance before : {{result.Group_2_percent_unbalance_before}} %</strong></td>
-                </tr>
-                <tr>
-                  <td>Phase A</td>
-                  <td>{{ result.group1_load_balance_before.A }} kW</td>
-                  <td>{{ result.group2_load_balance_before.A }} kW</td>
-                </tr>
-                <tr>
-                  <td>Phase B</td>
-                  <td>{{ result.group1_load_balance_before.B }} kW</td>
-                  <td>{{ result.group2_load_balance_before.B }} kW</td>
-                </tr>
-                <tr>
-                  <td>Phase C</td>
-                  <td>{{ result.group1_load_balance_before.C }} kW</td>
-                  <td>{{ result.group2_load_balance_before.C }} kW</td>
-                </tr>
-
-                <tr class="table-success">
-                  <td colspan="3"><strong>Load balancing after Process</strong></td>
-                </tr>
-                <tr class="table-success">
-                  <td colspan="3"><strong>Group 1 percent unbalance after : {{result.Group_1_percent_unbalance_after}} %</strong></td>
-                </tr>
-                <tr class="table-success">
-                  <td colspan="3"><strong>Group 2 percent unbalance after : {{result.Group_2_percent_unbalance_after}} %</strong></td>
-                </tr>
-                <tr>
-                  <td>Phase A</td>
-                  <td>{{ result.group1_load_balance_after.A }} kW</td>
-                  <td>{{ result.group2_load_balance_after.A }} kW</td>
-                </tr>
-                <tr>
-                  <td>Phase B</td>
-                  <td>{{ result.group1_load_balance_after.B }} kW</td>
-                  <td>{{ result.group2_load_balance_after.B }} kW</td>
-                </tr>
-                <tr>
-                  <td>Phase C</td>
-                  <td>{{ result.group1_load_balance_after.C }} kW</td>
-                  <td>{{ result.group2_load_balance_after.C }} kW</td>
-                </tr>
-              </tbody>
-            </table>
+      </div>
+      <!-- Card Dashboard View -->
+      <div id="cardView">
+        <div class="row g-3 mb-3">
+          <!-- หม้อแปลงกลุ่มที่ 1 -->
+          <div class="col-md-6">
+            <div class="card h-100 text-white" style="background:#2056a8; border-radius:20px;">
+              <div class="card-body">
+                <div class="d-flex align-items-center mb-2">
+                  <i class="bi bi-battery-charging me-2" style="font-size:2.5rem;"></i>
+                  <div class="fs-5 fw-bold">หม้อแปลง<br>กลุ่มที่ 1</div>
+                </div>
+                <div class="display-5 fw-bold">{{ result.g1_load }} <span class="fs-4">kW</span></div>
+                <div class="row mt-3 small">
+                  <div class="col-6">Total Loss<br><span class="fw-bold">{{ result.total_system_loss_g1 }} kW</span></div>
+                  <div class="col-6">ความยาวรสาย<br><span class="fw-bold">{{ result.Max_Distance_Group1 }} m</span></div>
+                </div>
+              </div>
+            </div>
           </div>
+          <!-- หม้อแปลงกลุ่มที่ 2 -->
+          <div class="col-md-6">
+            <div class="card h-100 text-white" style="background:#2ca36c; border-radius:20px;">
+              <div class="card-body">
+                <div class="d-flex align-items-center mb-2">
+                  <i class="bi bi-battery-charging me-2" style="font-size:2.5rem;"></i>
+                  <div class="fs-5 fw-bold">หม้อแปลง<br>กลุ่มที่ 2</div>
+                </div>
+                <div class="display-5 fw-bold">{{ result.g2_load }} <span class="fs-4">kW</span></div>
+                <div class="row mt-3 small">
+                  <div class="col-6">Total Loss<br><span class="fw-bold">{{ result.total_system_loss_g2 }} kW</span></div>
+                  <div class="col-6">ความยาวรสาย<br><span class="fw-bold">{{ result.Max_Distance_Group2 }} m</span></div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
+        <!-- Load Balancing Before Process -->
+        <div class="card mb-3" style="background:#f3f3f3; border-radius:16px;">
+          <div class="card-body">
+            <div class="fw-bold fs-5 mb-2">Load Balancing Before Process</div>
+            <div class="row align-items-center mb-2">
+              <div class="col-2">Group 1</div>
+              <div class="col-7">
+                <div class="progress" style="height: 1.5rem;">
+                  <div class="progress-bar bg-danger" role="progressbar" style="width: {{ result.Group_1_percent_unbalance_before }}%;" aria-valuenow="{{ result.Group_1_percent_unbalance_before }}" aria-valuemin="0" aria-valuemax="200"></div>
+                </div>
+              </div>
+              <div class="col-3 text-end fw-bold">{{ result.Group_1_percent_unbalance_before }}%</div>
+            </div>
+            <div class="row align-items-center">
+              <div class="col-2">Group 2</div>
+              <div class="col-7">
+                <div class="progress" style="height: 1.5rem;">
+                  <div class="progress-bar bg-danger" role="progressbar" style="width: {{ result.Group_2_percent_unbalance_before }}%;" aria-valuenow="{{ result.Group_2_percent_unbalance_before }}" aria-valuemin="0" aria-valuemax="200"></div>
+                </div>
+              </div>
+              <div class="col-3 text-end fw-bold">{{ result.Group_2_percent_unbalance_before }}%</div>
+            </div>
+          </div>
+        </div>
+        <!-- Load Balancing After Process -->
+        <div class="card mb-3" style="background:#eaf3ed; border-radius:16px;">
+          <div class="card-body">
+            <div class="fw-bold fs-5 mb-2">Load Balancing After Process</div>
+            <div class="row align-items-center mb-2">
+              <div class="col-2">Group 1</div>
+              <div class="col-7">
+                <div class="progress" style="height: 1.5rem;">
+                  <div class="progress-bar bg-warning" role="progressbar" style="width: {{ result.Group_1_percent_unbalance_after }}%;" aria-valuenow="{{ result.Group_1_percent_unbalance_after }}" aria-valuemin="0" aria-valuemax="200"></div>
+                </div>
+              </div>
+              <div class="col-3 text-end fw-bold">{{ result.Group_1_percent_unbalance_after }}%</div>
+            </div>
+            <div class="row align-items-center">
+              <div class="col-2">Group 2</div>
+              <div class="col-7">
+                <div class="progress" style="height: 1.5rem;">
+                  <div class="progress-bar bg-success" role="progressbar" style="width: {{ result.Group_2_percent_unbalance_after }}%;" aria-valuenow="{{ result.Group_2_percent_unbalance_after }}" aria-valuemin="0" aria-valuemax="200"></div>
+                </div>
+              </div>
+              <div class="col-3 text-end fw-bold">{{ result.Group_2_percent_unbalance_after }}%</div>
+            </div>
+          </div>
+        </div>
+        <!-- Phase Load Cards -->
+        <div class="row g-3">
+          <div class="col-md-6">
+            <div class="card h-100" style="background:#e3f0fa; border-radius:16px;">
+              <div class="card-body">
+                <div class="fw-bold fs-5 mb-2">Phase Load กลุ่ม 1</div>
+                <div class="row mb-1"><div class="col-6">Phase A</div><div class="col-6 text-end fw-bold">{{ result.group1_load_balance_after.A }} kW</div></div>
+                <div class="row mb-1"><div class="col-6">Phase B</div><div class="col-6 text-end fw-bold">{{ result.group1_load_balance_after.B }} kW</div></div>
+                <div class="row"><div class="col-6">Phase C</div><div class="col-6 text-end fw-bold">{{ result.group1_load_balance_after.C }} kW</div></div>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-6">
+            <div class="card h-100" style="background:#e3faea; border-radius:16px;">
+              <div class="card-body">
+                <div class="fw-bold fs-5 mb-2">Phase Load กลุ่ม 2</div>
+                <div class="row mb-1"><div class="col-6">Phase A</div><div class="col-6 text-end fw-bold">{{ result.group2_load_balance_after.A }} kW</div></div>
+                <div class="row mb-1"><div class="col-6">Phase B</div><div class="col-6 text-end fw-bold">{{ result.group2_load_balance_after.B }} kW</div></div>
+                <div class="row"><div class="col-6">Phase C</div><div class="col-6 text-end fw-bold">{{ result.group2_load_balance_after.C }} kW</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Table View (ซ่อนเริ่มต้น) -->
+      <div id="tableView" class="d-none">
+        <div class="card shadow-sm mt-4">
+          <div class="card-header bg-custom text-dark">
+            <strong>ผลการวิเคราะห์ระบบไฟฟ้า</strong>
+          </div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table table-bordered align-middle text-center">
+                <thead class="table-light">
+                  <tr>
+                    <th>รายการ</th>
+                    <th>หม้อแปลงกลุ่มที่ 1</th>
+                    <th>หม้อแปลงกลุ่มที่ 2</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>โหลดหม้อแปลง</strong></td>
+                    <td>{{ result.g1_load }} kW</td>
+                    <td>{{ result.g2_load }} kW</td>
+                  </tr>
+                  <tr>
+                    <td><strong>โหลดคาดการณ์อีก 4 ปี (เพิ่มปีละ 1%)</strong></td>
+                    <td>{{ result.future_g1_load }} kW</td>
+                    <td>{{ result.future_g2_load }} kW</td>
+                  </tr>
+                  <tr>
+                    <td><strong>ขนาดหม้อแปลงที่แนะนำ</strong></td>
+                    <td>{{ result.rating_g1 }} kVA</td>
+                    <td>{{ result.rating_g2 }} kVA</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Line Loss</strong></td>
+                    <td>{{ result.line_loss_g1_kW }} kW</td>
+                    <td>{{ result.line_loss_g2_kW }} kW</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Transformer Loss (Core+Copper Loss)</strong></td>
+                    <td>{{ result.tx_loss_g1_kW }} kW</td>
+                    <td>{{ result.tx_loss_g2_kW }} kW</td>
+                  </tr>
+                  <tr>
+                    <td><strong>Loss รวม</strong></td>
+                    <td>{{ result.total_system_loss_g1 }} kW</td>
+                    <td>{{ result.total_system_loss_g2 }} kW</td>
+                  </tr>
+                  <tr>
+                    <td><strong>ความยาวที่ไกลที่สุด</strong></td>
+                    <td>{{ result.Max_Distance_Group1 }} m</td>
+                    <td>{{ result.Max_Distance_Group2 }} m</td>
+                  </tr>
+                  <tr class="table-primary">
+                    <td colspan="3"><strong>Load balancing before Process</strong></td>
+                  </tr>
+                  <tr class="table-primary">
+                    <td colspan="3"><strong>Group 1 percent unbalance before : {{result.Group_1_percent_unbalance_before}} %</strong></td>
+                  </tr>
+                  <tr class="table-primary">
+                    <td colspan="3"><strong>Group 2 percent unbalance before : {{result.Group_2_percent_unbalance_before}} %</strong></td>
+                  </tr>
+                  <tr>
+                    <td>Phase A</td>
+                    <td>{{ result.group1_load_balance_before.A }} kW</td>
+                    <td>{{ result.group2_load_balance_before.A }} kW</td>
+                  </tr>
+                  <tr>
+                    <td>Phase B</td>
+                    <td>{{ result.group1_load_balance_before.B }} kW</td>
+                    <td>{{ result.group2_load_balance_before.B }} kW</td>
+                  </tr>
+                  <tr>
+                    <td>Phase C</td>
+                    <td>{{ result.group1_load_balance_before.C }} kW</td>
+                    <td>{{ result.group2_load_balance_before.C }} kW</td>
+                  </tr>
+                  <tr class="table-success">
+                    <td colspan="3"><strong>Load balancing after Process</strong></td>
+                  </tr>
+                  <tr class="table-success">
+                    <td colspan="3"><strong>Group 1 percent unbalance after : {{result.Group_1_percent_unbalance_after}} %</strong></td>
+                  </tr>
+                  <tr class="table-success">
+                    <td colspan="3"><strong>Group 2 percent unbalance after : {{result.Group_2_percent_unbalance_after}} %</strong></td>
+                  </tr>
+                  <tr>
+                    <td>Phase A</td>
+                    <td>{{ result.group1_load_balance_after.A }} kW</td>
+                    <td>{{ result.group2_load_balance_after.A }} kW</td>
+                  </tr>
+                  <tr>
+                    <td>Phase B</td>
+                    <td>{{ result.group1_load_balance_after.B }} kW</td>
+                    <td>{{ result.group2_load_balance_after.B }} kW</td>
+                  </tr>
+                  <tr>
+                    <td>Phase C</td>
+                    <td>{{ result.group1_load_balance_after.C }} kW</td>
+                    <td>{{ result.group2_load_balance_after.C }} kW</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+      <script>
+        const toggleSwitch = document.getElementById('toggleSwitch');
+        const toggleSwitchLabel = document.getElementById('toggleSwitchLabel');
+        const cardView = document.getElementById('cardView');
+        const tableView = document.getElementById('tableView');
+        toggleSwitch.checked = false; // เริ่มต้นเป็น Card
+        toggleSwitch.addEventListener('change', function() {
+          if (this.checked) {
+            cardView.classList.add('d-none');
+            tableView.classList.remove('d-none');
+            toggleSwitchLabel.innerHTML = '<i class="bi bi-table"></i> แสดงแบบตาราง';
+          } else {
+            cardView.classList.remove('d-none');
+            tableView.classList.add('d-none');
+            toggleSwitchLabel.innerHTML = '<i class="bi bi-grid-3x3-gap"></i> แสดงแบบการ์ด';
+          }
+        });
+      </script>
   </div>
   <!-- ArcGIS JS API -->
   <script src="https://js.arcgis.com/4.29/"></script>
