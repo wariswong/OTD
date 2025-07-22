@@ -5318,8 +5318,14 @@ def main_pipeline(data):
     # ส่วนการตั้งค่า transformer ต่างๆ ยังคงเหมือนเดิม
     try:
         transformerRecords = transformerData.records()
-        transformerFields = [f[0] for f in transformerData.fields[1:]]
+        transformerFields = [f[0].strip() for f in transformerData.fields[1:]]
         transformer_df = pd.DataFrame(transformerRecords, columns=transformerFields)
+        # print(transformer_df.columns.tolist())
+
+        if 'FACILITYID' in transformerFields:
+            transformerPEA_No = transformer_df['FACILITYID'].values[0]
+        else:
+            raise KeyError("Field 'FACILITYID' not found in transformer shapefile.")
         if 'OPSA_TRS_3' in transformerFields:
             transformerCapacity_kVA = transformer_df['OPSA_TRS_3'].values[0]
         else:
@@ -5332,6 +5338,7 @@ def main_pipeline(data):
             transformerLine_lengh = transformer_df['Line_lengh'].values[0]
         else:
             raise KeyError("Field 'Line_lengh' not found in transformer shapefile.")
+        
         powerFactor = 0.875
         transformerCapacity = transformerCapacity_kVA * powerFactor
     except Exception as e:
@@ -5811,6 +5818,7 @@ def main_pipeline(data):
 
     # สร้าง dict สำหรับข้อมูลผลลัพธ์
     results = {
+        "tr_pea_no": transformerPEA_No,
         "tr_kva": round(transformerCapacity_kVA,2),
         "tr_loss": round(transformerLoss,2),
         "tr_Line_lengh": round(transformerLine_lengh,2),
