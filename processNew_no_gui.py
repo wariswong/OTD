@@ -5796,13 +5796,17 @@ def main_pipeline(data):
     tx_loss_g2_kW = get_transformer_losses(g2_load)
     total_system_loss_g2 = line_loss_g2_kW + tx_loss_g2_kW
 
-    # Select Transformer size for each group (using your document)
-    rating_g1 = Lossdocument(g1_load)
-    rating_g2 = Lossdocument(g2_load)
-
     # Forecast Future Load
     future_g1_load = growthRate(g1_load, annual_growth=0.04, years=4)
     future_g2_load = growthRate(g2_load, annual_growth=0.04, years=4)
+
+    # Select Transformer size for each group (using your document)
+    rating_g1 = Lossdocument(future_g1_load)
+    rating_g2 = Lossdocument(future_g2_load)
+
+    # # Forecast Future Load
+    # future_g1_load = growthRate(g1_load, annual_growth=0.04, years=4)
+    # future_g2_load = growthRate(g2_load, annual_growth=0.04, years=4)
 
     max_dist1 = max(dist_g1)
     max_dist2 = max(dist_g2)
