@@ -271,7 +271,7 @@
                     {% set max_g1 = [result.group1_load_balance_before.A, result.group1_load_balance_before.B, result.group1_load_balance_before.C]|max %}
                     {% for phase in ['A', 'B', 'C'] %}
                     {% set value = result.group1_load_balance_before[phase] %}
-                    {% set percent = ((value / (result.rating_g2*0.875)*100))/3|round(1) if max_g1 else 0 %}
+                    {% set percent = ((value / (result.rating_g2*0.875/3)*100))|round(1) if max_g1 else 0 %}
                     <div class="mb-2">
                       <div class="d-flex justify-content-between">
                         <span>Phase {{ phase }}</span>
@@ -303,7 +303,7 @@
                     {% set max_g2 = [result.group2_load_balance_before.A, result.group2_load_balance_before.B, result.group2_load_balance_before.C]|max %}
                     {% for phase in ['A', 'B', 'C'] %}
                     {% set value = result.group2_load_balance_before[phase] %}
-                    {% set percent = ((value /(result.rating_g2*0.875)*100))/3|round(1) if max_g2 else 0 %}
+                    {% set percent = ((value /(result.rating_g2*0.875/3)*100))|round(1) if max_g2 else 0 %}
                     <div class="mb-2">
                       <div class="d-flex justify-content-between">
                         <span>Phase {{ phase }}</span>
@@ -346,7 +346,7 @@
                     {% set max_g1 = [result.group1_load_balance_after.A, result.group1_load_balance_after.B, result.group1_load_balance_after.C]|max %}
                     {% for phase in ['A', 'B', 'C'] %}
                     {% set value = result.group1_load_balance_after[phase] %}
-                    {% set percent = ((value / (result.rating_g2*0.875)*100))/3|round(1) if max_g1 else 0 %}
+                    {% set percent = ((value / (result.rating_g2*0.875/3)*100))|round(1) if max_g1 else 0 %}
                     <div class="mb-2">
                       <div class="d-flex justify-content-between">
                         <span>Phase {{ phase }}</span>
@@ -378,7 +378,7 @@
                     {% set max_g2 = [result.group2_load_balance_after.A, result.group2_load_balance_after.B, result.group2_load_balance_after.C]|max %}
                     {% for phase in ['A', 'B', 'C'] %}
                     {% set value = result.group2_load_balance_after[phase] %}
-                    {% set percent = ((value / (result.rating_g2*0.875)*100))/3|round(1) if max_g2 else 0 %}
+                    {% set percent = ((value / (result.rating_g2*0.875/3)*100))|round(1) if max_g2 else 0 %}
                     <div class="mb-2">
                       <div class="d-flex justify-content-between">
                         <span>Phase {{ phase }}</span>
