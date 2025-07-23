@@ -107,9 +107,11 @@
           </label>
         </div>
       </div>
-      <!-- Card Dashboard View -->
+      <!-- Card Dashboard View -->      
       <div id="cardView" class="d-none">
-        <div class="row g-4 mb-4">
+        <strong>Section 1</strong></br>
+        <strong>ข้อมูลระบบจำหน่าย</strong>
+        <div class="row g-4 mb-4 mt-2">
           <!-- ก่อนปรับปรุง -->
           <div class="col-md-4">
             <div class="card shadow-sm h-100" style="border-radius:20px; overflow:hidden;">
@@ -246,103 +248,173 @@
                     </div>
                   </div>
                 </div>
+                
+                <!-- End Section 2 Card View -->
               </div>
             </div>
           </div>
         </div>
         <!-- Section 2: การบาลานซ์โหลดหม้อแปลง -->
-        <div class="row g-3 mb-3">
+
+        <strong>Section 2</strong></br>
+        <strong>การบาลานซ์โหลดหม้อแปลง</strong>
+        <div class="row">
           <div class="col-md-6">
-            <div class="card  shadow-sm" style="border-radius:20px; overflow:hidden;">
-              <div class="card-header  text-white d-flex align-items-center gap-2" style="background:#999; border-radius:20px 20px 0 0;">
-                <i class="bi bi-arrow-counterclockwise"></i> ก่อนปรับสมดุล
+            <div class="card shadow-sm h-100 mt-4" style="border-radius:20px; overflow:hidden;">
+              <div class="card-header text-white text-center fs-5 fw-bold" style="background:#999; border-radius:20px 20px 0 0;">
+                ก่อน
               </div>
-              <div class="card-body">
-                <div class="row mb-2">
-                  <div class="col-4 text-start fw-bold">เฟส</div>
-                  <div class="col-4 text-end fw-bold">เครื่องที่ 1</div>
-                  <div class="col-4 text-end fw-bold">เครื่องที่ 2</div>
-                </div>
-                <div class="row mb-1">
-                  <div class="col-4 text-start">A</div>
-                  <div class="col-4 text-end">{{ result.group1_load_balance_before.A }} kW</div>
-                  <div class="col-4 text-end">{{ result.group2_load_balance_before.A }} kW</div>
-                </div>
-                <div class="row mb-1">
-                  <div class="col-4 text-start">B</div>
-                  <div class="col-4 text-end">{{ result.group1_load_balance_before.B }} kW</div>
-                  <div class="col-4 text-end">{{ result.group2_load_balance_before.B }} kW</div>
-                </div>
-                <div class="row mb-3">
-                  <div class="col-4 text-start">C</div>
-                  <div class="col-4 text-end">{{ result.group1_load_balance_before.C }} kW</div>
-                  <div class="col-4 text-end">{{ result.group2_load_balance_before.C }} kW</div>
-                </div>
-                <!-- Progress bar %unbalance เครื่อง 1 -->
-                {% set unb1 = result.Group_1_percent_unbalance_before|float %}
-                <div class="mb-2">
-                  <div class="small">%Unbalance เครื่องที่ 1</div>
-                  <div class="progress" style="height:1.2rem;">
-                    <div class="progress-bar {% if unb1 >= 80 %}bg-danger{% elif unb1 >= 50 %}bg-warning{% else %}bg-success{% endif %}" role="progressbar" style="width: {{ unb1 }}%;" aria-valuenow="{{ unb1 }}" aria-valuemin="0" aria-valuemax="100">{{ unb1|round(1) }}%</div>
+              <div class="card-body bg-light">
+                <div class="row">
+                  <div class="col-md-6">
+                    <div class="fw-bold mb-2">เครื่องที่ 1</div>
+                    {% set max_g1 = [result.group1_load_balance_before.A, result.group1_load_balance_before.B, result.group1_load_balance_before.C]|max %}
+                    {% for phase in ['A', 'B', 'C'] %}
+                    {% set value = result.group1_load_balance_before[phase] %}
+                    {% set percent = ((value / (result.rating_g2*0.875)*100))/3|round(1) if max_g1 else 0 %}
+                    <div class="mb-2">
+                      <div class="d-flex justify-content-between">
+                        <span>Phase {{ phase }}</span>
+                        <span><b>{{ value }}</b> kW</span>
+                      </div>
+                      <div class="progress" style="height:1.2rem;">
+                        <div class="progress-bar {% if phase == 'A' %}bg-danger{% elif phase == 'B' %}bg-warning{% elif phase == 'C' %}bg-primary{% endif %}" role="progressbar" style="width: {{ percent|round(1) }}%;" aria-valuenow="{{ percent|round(1) }}" aria-valuemin="0" aria-valuemax="100">{{ percent|round(1) }}%</div>
+                      </div>
+                    </div>
+                    {% endfor %}
+                    <div class="mb-2">
+                      <div class="d-flex justify-content-between">
+                        <div class="fw-bold mb-2">% Unbalance</div>
+                        {% set unb_before1 = result.Group_1_percent_unbalance_before|float %}
+                        <div class="fw-bold mb-2">{{ unb_before1 }} %</div>
+                      </div>
+                      <div class="progress" style="height:1.2rem;">
+                        <div class="progress-bar {% if unb_before1 >= 80 %}bg-danger{% elif unb_before1 >= 50 %}bg-warning text-dark{% else %}bg-success{% endif %}"
+                             role="progressbar"
+                             style="width: {{ unb_before1|round(1) }}%;"
+                             aria-valuenow="{{ unb_before1|round(1) }}" aria-valuemin="0" aria-valuemax="100">
+                          {{ unb_before1|round(1) }}%
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="fw-bold mb-2">เครื่องที่ 2</div>
+                    {% set max_g2 = [result.group2_load_balance_before.A, result.group2_load_balance_before.B, result.group2_load_balance_before.C]|max %}
+                    {% for phase in ['A', 'B', 'C'] %}
+                    {% set value = result.group2_load_balance_before[phase] %}
+                    {% set percent = ((value /(result.rating_g2*0.875)*100))/3|round(1) if max_g2 else 0 %}
+                    <div class="mb-2">
+                      <div class="d-flex justify-content-between">
+                        <span>Phase {{ phase }}</span>
+                        <span><b>{{ value }}</b> kW</span>
+                      </div>
+                      <div class="progress" style="height:1.2rem;">
+                        <div class="progress-bar {% if phase == 'A' %}bg-danger{% elif phase == 'B' %}bg-warning{% elif phase == 'C' %}bg-primary{% endif %}" role="progressbar" style="width: {{ percent|round(1) }}%;" aria-valuenow="{{ percent|round(1) }}" aria-valuemin="0" aria-valuemax="100">{{ percent|round(1) }}%</div>
+                      </div>
+                    </div>
+                    {% endfor %}
+                    <div class="mb-2">
+                      <div class="d-flex justify-content-between">
+                        <div class="fw-bold mb-2">% Unbalance</div>
+                        {% set unb_before2 = result.Group_2_percent_unbalance_before|float %}
+                        <div class="fw-bold mb-2">{{ unb_before2 }} %</div>
+                      </div>
+                      <div class="progress" style="height:1.2rem;">
+                        <div class="progress-bar {% if unb_before2 >= 80 %}bg-danger{% elif unb_before2 >= 50 %}bg-warning text-dark{% else %}bg-success{% endif %}"
+                             role="progressbar"
+                             style="width: {{ unb_before2|round(1) }}%;"
+                             aria-valuenow="{{ unb_before2|round(1) }}" aria-valuemin="0" aria-valuemax="100">
+                          {{ unb_before2|round(1) }}%
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
-                <!-- Progress bar %unbalance เครื่อง 2 -->
-                {% set unb2 = result.Group_2_percent_unbalance_before|float %}
-                <div>
-                  <div class="small">%Unbalance เครื่องที่ 2</div>
-                  <div class="progress" style="height:1.2rem;">
-                    <div class="progress-bar {% if unb2 >= 80 %}bg-danger{% elif unb2 >= 50 %}bg-warning{% else %}bg-success{% endif %}" role="progressbar" style="width: {{ unb2 }}%;" aria-valuenow="{{ unb2 }}" aria-valuemin="0" aria-valuemax="100">{{ unb2|round(1) }}%</div>
-                  </div>
-                </div>
               </div>
-            </div>
-          </div>
+            </div> <!-- Load Balance Comparison -->
+          </div>  
           <div class="col-md-6">
-            <div class="card border-success shadow-sm" style="border-radius:20px; overflow:hidden;">
-              <div class="card-header text-white d-flex align-items-center gap-2" style="background:#b2f3dd; border-radius:20px 20px 0 0;">
-                <i class="bi bi-arrow-clockwise"></i> หลังปรับสมดุล
+            <div class="card shadow-sm h-100 mt-4" style="border-radius:20px; overflow:hidden;">
+              <div class="card-header text-dark text-center fs-5 fw-bold" style="background:#b2f3dd; border-radius:20px 20px 0 0;">
+                หลังปรับปรุง
               </div>
-              <div class="card-body">
-                <div class="row mb-2">
-                  <div class="col-4 text-start fw-bold">เฟส</div>
-                  <div class="col-4 text-end fw-bold">เครื่องที่ 1</div>
-                  <div class="col-4 text-end fw-bold">เครื่องที่ 2</div>
-                </div>
-                <div class="row mb-1">
-                  <div class="col-4 text-start">A</div>
-                  <div class="col-4 text-end">{{ result.group1_load_balance_after.A }} kW</div>
-                  <div class="col-4 text-end">{{ result.group2_load_balance_after.A }} kW</div>
-                </div>
-                <div class="row mb-1">
-                  <div class="col-4 text-start">B</div>
-                  <div class="col-4 text-end">{{ result.group1_load_balance_after.B }} kW</div>
-                  <div class="col-4 text-end">{{ result.group2_load_balance_after.B }} kW</div>
-                </div>
-                <div class="row mb-3">
-                  <div class="col-4 text-start">C</div>
-                  <div class="col-4 text-end">{{ result.group1_load_balance_after.C }} kW</div>
-                  <div class="col-4 text-end">{{ result.group2_load_balance_after.C }} kW</div>
-                </div>
-                <!-- Progress bar %unbalance เครื่อง 1 -->
-                {% set unb3 = result.Group_1_percent_unbalance_after|float %}
-                <div class="mb-2">
-                  <div class="small">%Unbalance เครื่องที่ 1</div>
-                  <div class="progress" style="height:1.2rem;">
-                    <div class="progress-bar {% if unb3 >= 80 %}bg-danger{% elif unb3 >= 50 %}bg-warning{% else %}bg-success{% endif %}" role="progressbar" style="width: {{ unb3 }}%;" aria-valuenow="{{ unb3 }}" aria-valuemin="0" aria-valuemax="100">{{ unb3|round(1) }}%</div>
+              <div class="card-body bg-light">
+                <div class="row">
+                  <div class="col-md-6">
+                    <div class="fw-bold mb-2">เครื่องที่ 1</div>
+                    {% set max_g1 = [result.group1_load_balance_after.A, result.group1_load_balance_after.B, result.group1_load_balance_after.C]|max %}
+                    {% for phase in ['A', 'B', 'C'] %}
+                    {% set value = result.group1_load_balance_after[phase] %}
+                    {% set percent = ((value / (result.rating_g2*0.875)*100))/3|round(1) if max_g1 else 0 %}
+                    <div class="mb-2">
+                      <div class="d-flex justify-content-between">
+                        <span>Phase {{ phase }}</span>
+                        <span><b>{{ value }}</b> kW</span>
+                      </div>
+                      <div class="progress" style="height:1.2rem;">
+                        <div class="progress-bar {% if phase == 'A' %}bg-danger{% elif phase == 'B' %}bg-warning{% elif phase == 'C' %}bg-primary{% endif %}" role="progressbar" style="width: {{ percent|round(1) }}%;" aria-valuenow="{{ percent|round(1) }}" aria-valuemin="0" aria-valuemax="100">{{ percent|round(1) }}%</div>
+                      </div>
+                    </div>
+                    {% endfor %}
+                    <div class="mb-2">
+                      <div class="d-flex justify-content-between">
+                        <div class="fw-bold mb-2">% Unbalance</div>                        
+                        {% set unb_after1 = result.Group_1_percent_unbalance_after|float %}
+                        <div class="fw-bold mb-2">{{ unb_after1 }} %</div>
+                      </div>
+                      <div class="progress" style="height:1.2rem;">
+                        <div class="progress-bar {% if unb_after1 >= 80 %}bg-danger{% elif unb_after1 >= 50 %}bg-warning text-dark{% else %}bg-success{% endif %}"
+                             role="progressbar"
+                             style="width: {{ unb_after1|round(1) }}%;"
+                             aria-valuenow="{{ unb_after1|round(1) }}" aria-valuemin="0" aria-valuemax="100">
+                          {{ unb_after1|round(1) }}%
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="fw-bold mb-2">เครื่องที่ 2</div>
+                    {% set max_g2 = [result.group2_load_balance_after.A, result.group2_load_balance_after.B, result.group2_load_balance_after.C]|max %}
+                    {% for phase in ['A', 'B', 'C'] %}
+                    {% set value = result.group2_load_balance_after[phase] %}
+                    {% set percent = ((value / (result.rating_g2*0.875)*100))/3|round(1) if max_g2 else 0 %}
+                    <div class="mb-2">
+                      <div class="d-flex justify-content-between">
+                        <span>Phase {{ phase }}</span>
+                        <span><b>{{ value }}</b> kW</span>
+                      </div>
+                      <div class="progress" style="height:1.2rem;">
+                        <div class="progress-bar {% if phase == 'A' %}bg-danger{% elif phase == 'B' %}bg-warning{% elif phase == 'C' %}bg-primary{% endif %}" role="progressbar" style="width: {{ percent|round(1) }}%;" aria-valuenow="{{ percent|round(1) }}" aria-valuemin="0" aria-valuemax="100">{{ percent|round(1) }}%</div>
+                      </div>
+                    </div>
+                    {% endfor %}
+                    <div class="mb-2">
+                      <div class="d-flex justify-content-between">
+                        <div class="fw-bold mb-2">% Unbalance</div>                        
+                        {% set unb_after2 = result.Group_2_percent_unbalance_after|float %}
+                        <div class="fw-bold mb-2">{{ unb_after2 }} %</div>
+                      </div>
+                      <div class="progress" style="height:1.2rem;">
+                        <div class="progress-bar {% if unb_after2 >= 80 %}bg-danger{% elif unb_after2 >= 50 %}bg-warning text-dark{% else %}bg-success{% endif %}"
+                             role="progressbar"
+                             style="width: {{ unb_after2|round(1) }}%;"
+                             aria-valuenow="{{ unb_after2|round(1) }}" aria-valuemin="0" aria-valuemax="100">
+                          {{ unb_after2|round(1) }}%
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
-                <!-- Progress bar %unbalance เครื่อง 2 -->
-                {% set unb4 = result.Group_2_percent_unbalance_after|float %}
-                <div>
-                  <div class="small">%Unbalance เครื่องที่ 2</div>
-                  <div class="progress" style="height:1.2rem;">
-                    <div class="progress-bar {% if unb4 >= 80 %}bg-danger{% elif unb4 >= 50 %}bg-warning{% else %}bg-success{% endif %}" role="progressbar" style="width: {{ unb4 }}%;" aria-valuenow="{{ unb4 }}" aria-valuemin="0" aria-valuemax="100">{{ unb4|round(1) }}%</div>
-                  </div>
-                </div>
               </div>
-            </div>
+            </div> <!-- Load Balance Comparison -->
           </div>
         </div>
+        <!-- สรุป % Unbalance -->
+        
+
+  <!-- Phase Load After -->
+  
       </div>
       <!-- Table View (ซ่อนเริ่มต้น) -->
       <div id="tableView" >
