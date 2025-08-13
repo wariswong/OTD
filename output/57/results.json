@@ -1,0 +1,44 @@
+{
+  "tr_pea_no": "22-000327",
+  "tr_kva": 315.0,
+  "tr_loss": 4250.0,
+  "tr_Line_lengh": 1027.85,
+  "g1_load": 61.88,
+  "future_g1_load": 72.39,
+  "rating_g1": 100,
+  "line_loss_g1_kW": 1.69,
+  "tx_loss_g1_kW": 0.88,
+  "total_system_loss_g1": 2.56,
+  "g2_load": 66.74,
+  "future_g2_load": 78.08,
+  "rating_g2": 100,
+  "line_loss_g2_kW": 1.71,
+  "tx_loss_g2_kW": 0.99,
+  "total_system_loss_g2": 2.7,
+  "Group_1_percent_unbalance_before": 43.8,
+  "Group_1_percent_unbalance_after": 0.1,
+  "Group_2_percent_unbalance_before": 24.3,
+  "Group_2_percent_unbalance_after": 0.4,
+  "Max_Distance_Group1": 712.7,
+  "Max_Distance_Group2": 919.7,
+  "group1_load_balance_before": {
+    "A": 29.7,
+    "B": 19.2,
+    "C": 13.0
+  },
+  "group1_load_balance_after": {
+    "A": 20.6,
+    "B": 20.6,
+    "C": 20.6
+  },
+  "group2_load_balance_before": {
+    "A": 27.7,
+    "B": 17.0,
+    "C": 22.1
+  },
+  "group2_load_balance_after": {
+    "A": 22.3,
+    "B": 22.2,
+    "C": 22.2
+  }
+}

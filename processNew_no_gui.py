@@ -1339,7 +1339,18 @@ def buildLVNetworkWithLoads(lvLines, mvLines, meterLocations, transformerLocatio
     node_mapping = {}
     coord_mapping = {}
     lv_nodes = set()
-    
+    def _build_meter_to_service_map(svcLines, snap_map):
+        m2svc = {}
+        for line in svcLines:
+            pts = [(x, y) for x, y in zip(line['X'], line['Y']) if not np.isnan(x)]
+            if len(pts) < 2:
+                continue
+            p0 = snap_map.get(tuple(pts[0]), tuple(pts[0]))   # ปลายมิเตอร์
+            p1 = snap_map.get(tuple(pts[-1]), tuple(pts[-1])) # ปลาย LV
+            # เก็บสองทิศทาง กันกรณีเส้นถูกวาดกลับหัว
+            m2svc[p0] = p1
+            m2svc[p1] = p0
+        return m2svc    
     # รวบรวมพิกัดทั้งหมดจาก LV และ MV lines
     all_line_coords = []
     
@@ -1457,6 +1468,9 @@ def buildLVNetworkWithLoads(lvLines, mvLines, meterLocations, transformerLocatio
 
     logging.info("Connecting meters to network (KDTree)…")
 
+    # สร้าง mapping สำหรับ service-line ► LV
+    meter_to_service = _build_meter_to_service_map(svcLines, coord_snap_map)
+    
     # เชื่อมต่อมิเตอร์
     if 'tk_progress' in globals():
         tk_progress.start(len(meterLocations))
@@ -1473,44 +1487,54 @@ def buildLVNetworkWithLoads(lvLines, mvLines, meterLocations, transformerLocatio
     for line in svcLines:
         pts = [(x,y) for x,y in zip(line['X'], line['Y']) if not np.isnan(x)]
         if len(pts) >= 2:
-            p0, p1 = coord_snap_map.get(tuple(pts[0]), tuple(pts[0])), \
-                     coord_snap_map.get(tuple(pts[-1]),tuple(pts[-1]))
+            p0 = coord_snap_map.get(tuple(pts[0]), tuple(pts[0]))
+            p1 = coord_snap_map.get(tuple(pts[-1]),tuple(pts[-1]))
             svc_endpts.extend([p0, p1])
     kdt_svc = cKDTree(svc_endpts) if svc_endpts else None
 
     meterNodes = []
     for idx, m_xy in enumerate(meterLocations):
-        meterNode               = node_id
+        meterNode = node_id
         node_mapping[tuple(m_xy)] = meterNode
         coord_mapping[meterNode]  = tuple(m_xy)
         node_id += 1
         G.add_node(meterNode)
 
-        # โหลด/เฟส
         for ph in 'ABC':
             G.nodes[meterNode][f'load_{ph}'] = phase_loads[ph][idx]
 
-        # --- หาโหนด LV ใกล้ที่สุด ---
         if kdt_lv is None:
             logging.error("No LV nodes to snap meter.")
             continue
 
-        d_lv, i_lv  = kdt_lv.query(m_xy)
-        lv_node     = lv_list[i_lv]
+        # ค่า default: ต่อเข้ากับ LV node ใกล้สุด
+        d_lv, i_lv = kdt_lv.query(m_xy)
+        lv_node_default = lv_list[i_lv]
+        dist_default    = d_lv
 
-        # --- ถ้ามี service-line ใกล้กว่า ใช้เป็น edge สั้น ๆ ---
+        snap_m = coord_snap_map.get(tuple(m_xy), tuple(m_xy))
         use_service = False
-        if kdt_svc is not None:
-            d_svc, _ = kdt_svc.query(m_xy)
-            use_service = d_svc < d_lv
+        lv_node = lv_node_default
+        dist    = dist_default
 
-        dist = d_svc if use_service else d_lv
+        # ถ้ามีเส้นบริการ: เลือกปลายที่ใกล้มิเตอร์เป็น meter-end แล้วต่อไปยังปลายอีกด้าน (LV-end)
+        if kdt_svc is not None and svc_endpts:
+            d_svc, i_svc = kdt_svc.query(snap_m)
+            p_near  = svc_endpts[i_svc]                 # meter-end (ใกล้มิเตอร์สุด)
+            p_other = meter_to_service.get(p_near)      # LV-end = ปลายอีกด้าน
+            if p_other is not None and d_svc <= d_lv:
+                d1 = np.hypot(snap_m[0]-p_near[0], snap_m[1]-p_near[1])   # meter→meter-end
+                d_lv2, i_lv2 = kdt_lv.query(p_other)                      # LV-end→LV node
+                lv_node = lv_list[i_lv2]
+                dist    = d1 + d_lv2
+                use_service = True
+
         R = dist/1000 * conductorResistance
         X = dist/1000 * (conductorReactance if conductorReactance else 0.1*conductorResistance)
-        G.add_edge(meterNode, lv_node, weight=dist,
-                   resistance=R, reactance=X, is_service=use_service)
+        G.add_edge(meterNode, lv_node, weight=dist, resistance=R, reactance=X, is_service=use_service)
 
         meterNodes.append(meterNode)
+
     if 'tk_progress' in globals():
         tk_progress.finish()
     # เพิ่ม Transformer node
@@ -2679,78 +2703,139 @@ def optimizeGroup(meterLocations, phase_loads, initialTransformerLocation,
                   lvLines, mvLines, initialVoltage, conductorResistance,
                   powerFactor, epsilon_junction=1.0, conductorReactance=None, 
                   lvData=None, svcLines=None):
-    """แก้ไขฟังก์ชันเดิมให้ใช้ coordinate snapping"""
-    logging.info("Optimizing group-level transformer location on existing LV nodes (skipping meter nodes)...")
+    """แก้ไขให้เลือกตำแหน่งหม้อแปลงภายในคอมโพเนนต์เดียวกับกลุ่มเท่านั้น + เดิม"""
+    logging.info("Optimizing group-level transformer location on existing LV nodes (skip meter nodes)…")
 
     if len(meterLocations) == 0:
         logging.info("No meters in this group => skip optimization.")
         return None
-    # ใช้ get_bounding_box() ที่มีอยู่แล้ว
+
+    # 1) กรอบของกลุ่ม + buffer
     bounds = get_bounding_box(meterLocations)
     min_x, max_x = bounds[0]
     min_y, max_y = bounds[1]
-    
-    # เพิ่ม buffer 50 meters
-    buffer = 50
-    min_x -= buffer
-    max_x += buffer
-    min_y -= buffer
-    max_y += buffer
-    
-    # Build a temporary graph for this group's meters + lines
+    logging.info(f"Group bounds before buffer: x=[{min_x:.1f}, {max_x:.1f}], y=[{min_y:.1f}, {max_y:.1f}]")
+    diag = np.hypot(max_x - min_x, max_y - min_y)
+    buffer = max(5.0, min(25.0, 0.05 * diag))   # 5% ของเส้นทแยงมุม, หน้าต่าง [5, 25] เมตร
+    min_x -= buffer; max_x += buffer; min_y -= buffer; max_y += buffer
+
+    # 2) สร้างกราฟชั่วคราวเฉพาะกลุ่ม (เส้นทั้งเครือข่ายตามเดิม)
     G_temp, tNode_temp, mNodes_temp, node_mapping_temp, coord_mapping_temp = buildLVNetworkWithLoads(
-        lvLines, mvLines,
-        meterLocations,
-        initialTransformerLocation,
-        phase_loads,
-        conductorResistance,
-        conductorReactance=conductorReactance,
-        use_shape_length=lvData is not None,
-        lvData=lvData,
-        svcLines=svcLines,
+        lvLines, mvLines, meterLocations, initialTransformerLocation, phase_loads, conductorResistance,
+        conductorReactance=conductorReactance, use_shape_length=lvData is not None, lvData=lvData, svcLines=svcLines,
         snap_tolerance=SNAP_TOLERANCE
     )
 
-    # We'll iterate over all nodes, but skip the meter nodes so we stay on the actual line nodes
+    # 3) หา "คอมโพเนนต์หลัก" ของกลุ่มจากมิเตอร์
+    comp_id_of = {}
+    comps = list(nx.connected_components(G_temp))
+    for cid, comp in enumerate(comps):
+        for n in comp:
+            comp_id_of[n] = cid
+
+    meter_comp_count = {}
+    for n in mNodes_temp:
+        cid = comp_id_of.get(n, None)
+        if cid is not None:
+            meter_comp_count[cid] = meter_comp_count.get(cid, 0) + 1
+
+    if meter_comp_count:
+        best_cid = max(meter_comp_count, key=meter_comp_count.get)
+        comp_nodes = [n for n in comps[best_cid]]
+        logging.info(f"Selected component #{best_cid} for this group (meters in comp={meter_comp_count[best_cid]}).")
+    else:
+        # กรณีสุดวิสัย: ไม่เจอคอมโพเนนต์ของมิเตอร์ (ไม่ควรเกิด) => ใช้ทั้งกราฟ
+        comp_nodes = list(G_temp.nodes())
+        logging.warning("Meters not found in any component (unexpected) — falling back to all nodes.")
+
+    # 4) จำกัด candidate เฉพาะโหนดในคอมโพเนนต์ + ไม่ใช่ meter node + มีพิกัด
+    candidates = [n for n in comp_nodes if (n in coord_mapping_temp) and (n not in mNodes_temp)]
+
+    # 5) กรองด้วย bounding box (+buffer)
+    cand_in_bounds = []
+    for n in candidates:
+        x, y = coord_mapping_temp[n]
+        if (min_x <= x <= max_x) and (min_y <= y <= max_y):
+            cand_in_bounds.append(n)
+
+    # ถ้าหลังกรองว่าง ให้ย้อนกลับมาใช้โหนดทั้งหมดในคอมโพเนนต์
+    if not cand_in_bounds:
+        logging.warning("No candidate nodes inside group bounds; using all nodes in component as candidates.")
+        cand_in_bounds = candidates[:]
+        
+    # --- 3) Radial clamp รอบ centroid ของ 'กลุ่ม' ---
+    cx, cy = meterLocations.mean(axis=0)
+    dists  = np.hypot(meterLocations[:,0] - cx, meterLocations[:,1] - cy)
+    r_max  = dists.max()                              # รัศมีใหญ่สุดของกลุ่มจริง
+    radial_margin = max(3.0, min(15.0, 0.03 * diag)) # เผื่อขอบเล็กน้อย
+    radius = r_max + radial_margin
+    _cand_backup = cand_in_bounds[:]
+    cand_in_bounds = [n for n in cand_in_bounds
+                  if np.hypot(coord_mapping_temp[n][0] - cx,
+                              coord_mapping_temp[n][1] - cy) <= radius]
+    if not cand_in_bounds:
+        logging.warning("Radial clamp removed all candidates; revert to bbox-only candidates.")
+        cand_in_bounds = _cand_backup
+    
+    # --- 4) Convex-Hull clamp ของกลุ่ม (ขยายเล็กน้อย) ---
+    try:
+        from scipy.spatial import ConvexHull
+        from matplotlib.path import Path
+        if len(meterLocations) >= 3:
+            hull = ConvexHull(meterLocations)
+            poly = meterLocations[hull.vertices]         # จุดบน hull
+            pcx, pcy = poly.mean(axis=0)                 # centroid ของ hull
+            scale = 1.08                                 # ขยายออก ~8%
+            poly_scaled = np.column_stack([
+                pcx + (poly[:,0] - pcx) * scale,
+                pcy + (poly[:,1] - pcy) * scale
+            ])
+            path = Path(poly_scaled)
+
+            _cand_backup2 = cand_in_bounds[:]
+            cand_in_bounds = [n for n in cand_in_bounds
+                            if path.contains_point(coord_mapping_temp[n])]
+            if not cand_in_bounds:
+                logging.warning("Hull clamp removed all candidates; revert to radial candidates.")
+                cand_in_bounds = _cand_backup2
+    except Exception as e:
+        logging.warning(f"Hull clamp skipped: {e}")
+    # --- 5) ถ้ายังว่าง ให้กลับไปใช้ candidates ใน component ---
+    if not cand_in_bounds:
+        logging.warning("No candidates after clamps; falling back to component nodes.")
+        cand_in_bounds = candidates[:] 
+
+    # 6) ประเมิน objective เฉพาะบนตัวเลือกในคอมโพเนนต์นี้เท่านั้น
     best_coord = None
     best_score = float('inf')
-
-    for node_id in G_temp.nodes():
-        # Skip nodes if they don't have a coordinate or if they are meter nodes
+    for node_id in cand_in_bounds:
         if node_id not in coord_mapping_temp:
             continue
-        if node_id in mNodes_temp:
-            # This node was added specifically for a meter location
-            continue
-
         node_xy = np.array(coord_mapping_temp[node_id], dtype=float)
-        # ตรวจสอบว่า node อยู่ใน bounding box + buffer หรือไม่
-        if not (min_x <= node_xy[0] <= max_x and min_y <= node_xy[1] <= max_y):
-            continue  # ข้าม node ที่อยู่นอกขอบเขต
-        # Evaluate your existing objective function at this node
-        score = objectiveFunction(
-            node_xy,
-            meterLocations,
-            phase_loads,
-            initialVoltage,
-            conductorResistance,
-            lvLines,
-            powerFactor,
-            load_center_only=True,
-            conductorReactance=conductorReactance,
-            lvData=lvData,
-            svcLines=svcLines
-        )
 
+        score = objectiveFunction(
+            node_xy, meterLocations, phase_loads, initialVoltage,
+            conductorResistance, lvLines, powerFactor, load_center_only=True,
+            conductorReactance=conductorReactance, lvData=lvData, svcLines=svcLines
+        )
         if score < best_score:
             best_score = score
             best_coord = node_xy
 
+    # 7) Fallback: ยังไม่เจอ => snap init-guess ไปยังโหนดในคอมโพเนนต์ที่ใกล้ที่สุด
     if best_coord is None:
-        logging.warning("No valid line node found for discrete LV optimization. Returning initial location.")
-        return initialTransformerLocation
+        logging.warning("No best node found after filtering; snapping init guess to nearest node within component.")
+        if candidates:
+            pts = np.array([coord_mapping_temp[n] for n in candidates], dtype=float)
+            tree = cKDTree(pts)
+            guess = np.array(initialTransformerLocation, dtype=float)
+            _, idx = tree.query(guess)
+            best_coord = pts[idx]
+        else:
+            logging.error("Component has no candidate nodes; returning initial transformer location.")
+            return initialTransformerLocation
 
-    logging.info(f"Discrete node-based optimization picked node => {best_coord}, score={best_score:.2f}")
+    logging.info(f"Discrete node-based optimization (component-locked) => {best_coord}, score={best_score:.2f}")
     return best_coord
 
 def optimize_phase_balance(
@@ -4538,7 +4623,7 @@ def main():
         return
     
     G_init, tNode_init, mNodes_init, nm_init, cm_init = buildLVNetworkWithLoads(
-        lvLines, filteredEserviceLines, meterLocations, initialTransformerLocation, phase_loads, conductorResistance,
+        lvLines, mvLines, meterLocations, initialTransformerLocation, phase_loads, conductorResistance,
         conductorReactance=conductorReactance,
         use_shape_length=True,
         lvData=lvData,
@@ -4567,7 +4652,7 @@ def main():
     
     # ใช้ฟังก์ชันที่แก้ไขแล้ว พร้อม coordinate snapping
     G, transformerNode, meterNodes, node_mapping, coord_mapping = buildLVNetworkWithLoads(
-        lvLines, filteredEserviceLines, meterLocations, optimizedTransformerLocation, phase_loads, conductorResistance,
+        lvLines, mvLines, meterLocations, optimizedTransformerLocation, phase_loads, conductorResistance,
         conductorReactance=conductorReactance,
         use_shape_length=True,
         lvData=lvData,
