@@ -75,7 +75,7 @@
     </div>
       <div class="row">
         <div class="col-md-12 col-xl-10">  
-          <div class="card mb-4 shadow-sm">
+          <div class="card mb-4 shadow-sm border-light shadow-lg">
             <div class="card-header bg-light fw-bold">แผนที่การจำลอง</div>
             <div class="card-body p-0">
               <div id="viewDiv"></div>
@@ -83,7 +83,7 @@
           </div>
         </div>  
         <div class="col-md-12 col-xl-2">        
-          <div class="card shadow-sm mb-3">
+          <div class="card shadow-sm mb-3 border-light shadow-lg">
             <div class="card-header bg-light fw-bold">เลือกจุดแบ่งโหลด</div>
             <div class="card-body">
               <select id="splittingSelector" class="form-select mb-2">
@@ -114,7 +114,7 @@
         <div class="row g-4 mb-4 mt-2">
           <!-- ก่อนปรับปรุง -->
           <div class="col-md-4">
-            <div class="card shadow-sm h-100" style="border-radius:20px; overflow:hidden;">
+            <div class="card border-light shadow-lg h-100" style="border-radius:20px; overflow:hidden;">
               <div class="card-header text-white text-center fs-5 fw-bold" style="background:#999; border-radius:20px 20px 0 0;">
                 ก่อนปรับปรุง
                 <!-- <div class="fs-4 mt-2"><span style="text-decoration:underline; font-weight:600;">PEVno.</span> {{ result.tr_pea_no }}</div> -->
@@ -135,6 +135,10 @@
                 <div class="row mb-3">
                   <div class="col-7 text-start">ความยาวที่ไกลที่สุด</div>
                   <div class="col-5 text-end fw-bold">{{ result.tr_Line_lengh }} <span class="fs-6">m</span></div>
+                </div>
+                <div class="row mb-3">
+                  <div class="col-7 text-start">เปอร์เซ็นโหลด</div>
+                  <div class="col-5 text-end fw-bold">{{ result.tr_PLOADPEAK }} <span class="fs-6">%</span></div>
                 </div>
                 <!-- Progress bar: %โหลด/ขนาดแนะนำ -->
                 <!-- <div class="mb-2">
@@ -162,16 +166,16 @@
           </div>
           <!-- หลังปรับปรุง -->
           <div class="col-md-8">
-            <div class="card shadow-sm h-100" style="border-radius:20px; overflow:hidden;">
-              <div class="card-header text-dark text-center fs-5 fw-bold" style="background:#b2f3dd; color:#333; border-radius:20px 20px 0 0;">
+            <div class="card border-light shadow-lg h-100" style="border-radius:20px; overflow:hidden;">
+              <div class="card-header text-dark text-center fs-5 fw-bold border-light" style="background:#b2f3dd; color:#333; border-radius:20px 20px 0 0;">
                 หลังปรับปรุง
               </div>
               <div class="card-body bg-light">
                 <div class="row g-3">
                   <!-- หม้อแปลง 1 -->
                   <div class="col-md-6">
-                    <div class="card h-100 shadow-sm" style="border-radius:16px;">
-                      <div class="card-header text-white text-center fs-5 fw-bold d-flex align-items-center justify-content-center gap-2" style="background:#0dcaf0; border-radius:16px 16px 0 0;">
+                    <div class="card h-100 border-light shadow-sm" style="border-radius:16px;">
+                      <div class="card-header text-white text-center fs-5 fw-bold d-flex align-items-center justify-content-center gap-2 border-light" style="background:#0dcaf0; border-radius:16px 16px 0 0;">
                         <i class="bi bi-lightning-charge"></i> หม้อแปลง <span style="font-size:1.2em;">1</span>
                       </div>
                       <div class="card-body">
@@ -199,8 +203,8 @@
                   </div>
                   <!-- หม้อแปลง 2 -->
                   <div class="col-md-6">
-                    <div class="card h-100 shadow-sm" style="border-radius:16px;">
-                      <div class="card-header text-white text-center fs-5 fw-bold d-flex align-items-center justify-content-center gap-2" style="background:#f48fb1; border-radius:16px 16px 0 0;">
+                    <div class="card h-100 border-light shadow-sm" style="border-radius:16px;">
+                      <div class="card-header text-white text-center fs-5 fw-bold d-flex align-items-center justify-content-center gap-2 border-light" style="background:#f48fb1; border-radius:16px 16px 0 0;">
                         <i class="bi bi-lightning-charge"></i> หม้อแปลง <span style="font-size:1.2em;">2</span>
                       </div>
                       <div class="card-body">
@@ -258,9 +262,9 @@
 
         <strong>Section 2</strong></br>
         <strong>การบาลานซ์โหลดหม้อแปลง</strong>
-        <div class="row">
+        <div class="row mb-5">
           <div class="col-md-6">
-            <div class="card shadow-lg h-100 mt-4" style="border-radius:20px; border:none; box-shadow:0 4px 16px rgba(0,0,0,0.12); overflow:hidden;">
+            <div class="card border-light shadow-lg h-100 mt-4" style="border-radius:20px; border:none; box-shadow:0 4px 16px rgba(0,0,0,0.12); overflow:hidden;">
               <div class="card-header text-white text-center fs-5 fw-bold" style="background:#999; border-radius:20px 20px 0 0; border-bottom:none;">
                 ก่อน
               </div>
@@ -271,7 +275,7 @@
                     {% set max_g1 = [result.group1_load_balance_before.A, result.group1_load_balance_before.B, result.group1_load_balance_before.C]|max %}
                     {% for phase in ['A', 'B', 'C'] %}
                     {% set value = result.group1_load_balance_before[phase] %}
-                    {% set percent = ((value / (result.rating_g2*0.875/3)*100))|round(1) if max_g1 else 0 %}
+                    {% set percent = ((value / (result.rating_g1*0.875/3)*100))|round(1) if max_g1 else 0 %}
                     <div class="mb-2">
                       <div class="d-flex justify-content-between">
                         <span>Phase {{ phase }}</span>
@@ -335,7 +339,7 @@
             </div> <!-- Load Balance Comparison -->
           </div>  
           <div class="col-md-6">
-            <div class="card shadow-lg h-100 mt-4" style="border-radius:20px; border:none; box-shadow:0 4px 16px rgba(0,0,0,0.12); overflow:hidden;">
+            <div class="card border-light shadow-lg h-100 mt-4" style="border-radius:20px; border:none; box-shadow:0 4px 16px rgba(0,0,0,0.12); overflow:hidden;">
               <div class="card-header text-dark text-center fs-5 fw-bold" style="background:#b2f3dd; border-radius:20px 20px 0 0; border-bottom:none;">
                 หลังปรับปรุง
               </div>
@@ -418,50 +422,50 @@
       </div>
       <!-- Table View (ซ่อนเริ่มต้น) -->
       <div id="tableView" >
-        <div class="card shadow-sm mt-4">
-          <div class="card-header bg-custom text-dark">
+        <div class="card shadow-sm mt-4 border-light shadow-lg">
+          <div class="card-header bg-custom text-dark border-light">
             <strong>Section 1</strong></br>
             <strong>ข้อมูลระบบจำหน่าย</strong>
           </div>
           <div class="card-body">
             <div class="table-responsive">
-              <table class="table table-bordered align-middle text-center">
-                <thead class="table-light">
+              <table class="table table-bordered align-middle text-center" style="border-color: #a7a7a7;">
+                <thead class="table-light" style="border-color: #a7a7a7;">
                   <tr>
                     <th></th>
                     <th></th>
-                    <th >ก่อน</th>
-                    <th colspan="2">หลัง</th>
+                    <th style="background:#999;">ก่อน</th>
+                    <th style="background:#b2f3dd;" colspan="2">หลัง</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr>
                     <th>ลำดับ</th>
                     <th class="text-start"></th>
-                    <th>PEAno.{{ result.tr_pea_no }}</th>
-                    <th>เครื่องที่ 1</th>
-                    <th>เครื่องที่ 2</th>
+                    <th style="background:#e4e4e4;">PEAno.{{ result.tr_pea_no }}</th>
+                    <th style="background:#b6f3ff;">เครื่องที่ 1</th>
+                    <th style="background:#ffc9db;">เครื่องที่ 2</th>
                   </tr>
                   <tr>
                     <td>1.</td>
                     <td class="text-start"><strong>โหลดหม้อแปลง</strong></td>
-                    <td>{{ result.tr_kva }} kVA</td>
-                    <td>{{ result.g1_load }} kW</td>
-                    <td>{{ result.g2_load }} kW</td>
+                    <td style="background:#e4e4e4;">{{ "%.2f"|format(result.g1_load + result.g2_load) }} kW</td>
+                    <td style="background:#b6f3ff;">{{ result.g1_load }} kW</td>
+                    <td style="background:#ffc9db;">{{ result.g2_load }} kW</td>
                   </tr>
                   <tr>
                     <td>2.</td>
                     <td class="text-start"><strong>โหลดคาดการณ์อีก 4 ปี (เพิ่มปีละ 1%)</strong></td>
-                    <td> - </td>
-                    <td>{{ result.future_g1_load }} kW</td>
-                    <td>{{ result.future_g2_load }} kW</td>
+                    <td style="background:#e4e4e4;"> - </td>
+                    <td style="background:#b6f3ff;">{{ result.future_g1_load }} kW</td>
+                    <td style="background:#ffc9db;">{{ result.future_g2_load }} kW</td>
                   </tr>
                   <tr>
                     <td>3.</td>
                     <td class="text-start"><strong>ขนาดหม้อแปลงที่แนะนำ</strong></td>
-                    <td> - </td>
-                    <td>{{ result.rating_g1 }} kVA</td>
-                    <td>{{ result.rating_g2 }} kVA</td>
+                    <td style="background:#e4e4e4;">{{ result.tr_kva }} kVA</td>
+                    <td style="background:#b6f3ff;">{{ result.rating_g1 }} kVA</td>
+                    <td style="background:#ffc9db;">{{ result.rating_g2 }} kVA</td>
                   </tr>
                   <!-- <tr>
                     <td>7.</td>
@@ -480,73 +484,73 @@
                   <tr>
                     <td>4.</td>
                     <td class="text-start"><strong>Loss รวม</strong></td>
-                    <td>{{ result.tr_loss }} kWh</td>
-                    <td>{{ result.total_system_loss_g1 }} kW</td>
-                    <td>{{ result.total_system_loss_g2 }} kW</td>
+                    <td style="background:#e4e4e4;">{{ "%.2f"|format(result.tr_loss/720) }} kW</td>
+                    <td style="background:#b6f3ff;">{{ result.total_system_loss_g1 }} kW</td>
+                    <td style="background:#ffc9db;">{{ result.total_system_loss_g2 }} kW</td>
                   </tr>
                   <tr>
                     <td>5.</td>
                     <td class="text-start"><strong>ความยาวที่ไกลที่สุด</strong></td>
-                    <td>{{ result.tr_Line_lengh }} m</td>
-                    <td>{{ result.Max_Distance_Group1 }} m</td>
-                    <td>{{ result.Max_Distance_Group2 }} m</td>
+                    <td style="background:#e4e4e4;">{{ result.tr_Line_lengh }} m</td>
+                    <td style="background:#b6f3ff;">{{ result.Max_Distance_Group1 }} m</td>
+                    <td style="background:#ffc9db;">{{ result.Max_Distance_Group2 }} m</td>
                   </tr>                                  
                 </tbody>
               </table>
             </div>
           </div>
         </div>
-        <div class="card shadow-sm mt-4">
-          <div class="card-header bg-custom text-dark">
+        <div class="card shadow-sm mt-4 border-light shadow-lg">
+          <div class="card-header bg-custom text-dark border-light">
             <strong>Section 2</strong></br>
             <strong>การบาลานซ์โหลดหม้อแปลง</strong>
           </div>
           <div class="card-body">
             <div class="table-responsive">
-              <table class="table table-bordered align-middle text-center">
-                <thead class="table-light">
+              <table class="table table-bordered align-middle text-center" style="border-color: #a7a7a7;">
+                <thead class="table-light" style="border-color: #a7a7a7;">
                   <tr>
                     <th></th>
                     <!-- <th></th> -->
-                    <th colspan="2">ก่อน</th>
-                    <th colspan="2">หลัง</th>
+                    <th colspan="2" style="background:#999;">ก่อน</th>
+                    <th colspan="2" style="background:#b2f3dd;">หลัง</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr>
                     <th>เฟส</th>
-                    <th>เครื่องที่ 1</th>
-                    <th>เครื่องที่ 2</th>
-                    <th>เครื่องที่ 1</th>
-                    <th>เครื่องที่ 2</th>
+                    <th style="background:#e4e4e4;">เครื่องที่ 1</th>
+                    <th style="background:#e4e4e4;">เครื่องที่ 2</th>
+                    <th style="background:#b6f3ff;">เครื่องที่ 1</th>
+                    <th style="background:#ffc9db;">เครื่องที่ 2</th>
                   </tr>
                   <tr>
                     <td>A</td>
-                    <td>{{ result.group1_load_balance_before.A }} kW</td>
-                    <td>{{ result.group2_load_balance_before.A }} kW</td>
-                    <td>{{ result.group1_load_balance_after.A }} kW</td>
-                    <td>{{ result.group2_load_balance_after.A }} kW</td>
+                    <td style="background:#e4e4e4;">{{ result.group1_load_balance_before.A }} kW</td>
+                    <td style="background:#e4e4e4;">{{ result.group2_load_balance_before.A }} kW</td>
+                    <td style="background:#b6f3ff;">{{ result.group1_load_balance_after.A }} kW</td>
+                    <td style="background:#ffc9db;">{{ result.group2_load_balance_after.A }} kW</td>
                   </tr>
                   <tr>
                     <td>B</td>
-                    <td>{{ result.group1_load_balance_before.B }} kW</td>
-                    <td>{{ result.group2_load_balance_before.B }} kW</td>
-                    <td>{{ result.group1_load_balance_after.B }} kW</td>
-                    <td>{{ result.group2_load_balance_after.B }} kW</td>
+                    <td style="background:#e4e4e4;">{{ result.group1_load_balance_before.B }} kW</td>
+                    <td style="background:#e4e4e4;">{{ result.group2_load_balance_before.B }} kW</td>
+                    <td style="background:#b6f3ff;">{{ result.group1_load_balance_after.B }} kW</td>
+                    <td style="background:#ffc9db;">{{ result.group2_load_balance_after.B }} kW</td>
                   </tr>
                   <tr>
                     <td>C</td>
-                    <td>{{ result.group1_load_balance_before.C }} kW</td>
-                    <td>{{ result.group2_load_balance_before.C }} kW</td>
-                    <td>{{ result.group1_load_balance_after.C }} kW</td>
-                    <td>{{ result.group2_load_balance_after.C }} kW</td>
+                    <td style="background:#e4e4e4;">{{ result.group1_load_balance_before.C }} kW</td>
+                    <td style="background:#e4e4e4;">{{ result.group2_load_balance_before.C }} kW</td>
+                    <td style="background:#b6f3ff;">{{ result.group1_load_balance_after.C }} kW</td>
+                    <td style="background:#ffc9db;">{{ result.group2_load_balance_after.C }} kW</td>
                   </tr>    
                   <tr>
                     <td>% Unbalance</td>
-                    <td>{{result.Group_1_percent_unbalance_before}} %</td>
-                    <td>{{result.Group_2_percent_unbalance_before}} %</td>
-                    <td>{{result.Group_1_percent_unbalance_after}} %</td>
-                    <td>{{result.Group_2_percent_unbalance_after}} %</td>
+                    <td style="background:#e4e4e4;">{{result.Group_1_percent_unbalance_before}} %</td>
+                    <td style="background:#e4e4e4;">{{result.Group_2_percent_unbalance_before}} %</td>
+                    <td style="background:#b6f3ff;">{{result.Group_1_percent_unbalance_after}} %</td>
+                    <td style="background:#ffc9db;">{{result.Group_2_percent_unbalance_after}} %</td>
                   </tr>                                            
                 </tbody>
               </table>

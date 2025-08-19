@@ -5407,6 +5407,10 @@ def main_pipeline(data):
         transformer_df = pd.DataFrame(transformerRecords, columns=transformerFields)
         # print(transformer_df.columns.tolist())
 
+        if 'PLOADPEAK' in transformerFields:
+            transformerPLOADPEAK = transformer_df['PLOADPEAK'].values[0]
+        else:
+            raise KeyError("Field 'PLOADPEAK' not found in transformer shapefile.")
         if 'FACILITYID' in transformerFields:
             transformerPEA_No = transformer_df['FACILITYID'].values[0]
         else:
@@ -5911,6 +5915,7 @@ def main_pipeline(data):
         "tr_kva": round(transformerCapacity_kVA,2),
         "tr_loss": round(transformerLoss,2),
         "tr_Line_lengh": round(transformerLine_lengh,2),
+        "tr_PLOADPEAK" : transformerPLOADPEAK,
 
         "g1_load": round(g1_load, 2),
         "future_g1_load": round(future_g1_load, 2),
