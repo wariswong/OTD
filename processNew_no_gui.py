@@ -5630,27 +5630,81 @@ def main_pipeline(data):
         group1_phase_loads['B'].sum(),
         group1_phase_loads['C'].sum()
     )
-    # Calculate %Unbalance Before Group1
-    g1_a = group1_phase_loads['A'].sum()
-    g1_b = group1_phase_loads['B'].sum()
-    g1_c = group1_phase_loads['C'].sum()
-    g1_avg = (g1_a + g1_b + g1_c) / 3.0
-    g1_unb_before = max(abs(g1_a - g1_avg), abs(g1_b - g1_avg), abs(g1_c - g1_avg)) / g1_avg * 100
-    logging.info("Group 1 percent unbalance before: %.2f%%", g1_unb_before)
+
+    def calculate_unbalance(phase_loads, label="Group"):
+        """
+        phase_loads: dict หรือ Series ที่มี key เป็น 'A','B','C'
+                    เช่น {"A":10,"B":12,"C":9} หรือ {"A":20,"B":15}
+        label: ใช้ระบุชื่อ group เวลา log
+
+        return: ค่า %Unbalance (float)
+        """
+        # ดึงค่าเฉพาะเฟสที่มีและไม่เป็น None
+        values = []
+        for phase in ['A', 'B', 'C']:
+            if phase in phase_loads and phase_loads[phase] is not None:
+                try:
+                    values.append(float(phase_loads[phase]))
+                except:
+                    pass
+
+        n = len(values)
+
+        if n == 0:
+            logging.warning("%s ไม่มีข้อมูลโหลดเลย", label)
+            return 0.0
+
+        elif n == 1:
+            logging.info("%s เป็นระบบ 1 เฟส → Unbalance = 0", label)
+            return 0.0
+
+        elif n == 2:
+            avg = sum(values) / 2.0
+            unbalance = abs(values[0] - values[1]) / avg * 100 if avg > 0 else 0.0
+            logging.info("%s เป็นระบบ 2 เฟส → Unbalance = %.2f%%", label, unbalance)
+            return unbalance
+
+        else:  # มีครบ 3 เฟส
+            avg = sum(values) / 3.0
+            unbalance = max(abs(v - avg) for v in values) / avg * 100 if avg > 0 else 0.0
+            logging.info("%s เป็นระบบ 3 เฟส → Unbalance = %.2f%%", label, unbalance)
+            return unbalance
+
+    # ก่อนปรับปรุง Group 1
+    g1_unb_before = calculate_unbalance({
+        "A": group1_phase_loads.get("A", 0).sum() if "A" in group1_phase_loads else None,
+        "B": group1_phase_loads.get("B", 0).sum() if "B" in group1_phase_loads else None,
+        "C": group1_phase_loads.get("C", 0).sum() if "C" in group1_phase_loads else None
+    }, label="Group 1 Before")
+
+    # หลังปรับปรุง Group 1
+    g1_unb_after = calculate_unbalance({
+        "A": new_phase_loads_g1.get("A", 0).sum() if "A" in new_phase_loads_g1 else None,
+        "B": new_phase_loads_g1.get("B", 0).sum() if "B" in new_phase_loads_g1 else None,
+        "C": new_phase_loads_g1.get("C", 0).sum() if "C" in new_phase_loads_g1 else None
+    }, label="Group 1 After")
+
+    # # Calculate %Unbalance Before Group1
+    # g1_a = group1_phase_loads['A'].sum()
+    # g1_b = group1_phase_loads['B'].sum()
+    # g1_c = group1_phase_loads['C'].sum()
+    # g1_avg = (g1_a + g1_b + g1_c) / 3.0
+    # g1_unb_before = max(abs(g1_a - g1_avg), abs(g1_b - g1_avg), abs(g1_c - g1_avg)) / g1_avg * 100
+    # logging.info("Group 1 percent unbalance before: %.2f%%", g1_unb_before)
     
-    logging.info(
-        "Group 1 load balance after  -> A: %.1f kW, B: %.1f kW, C: %.1f kW",
-        new_phase_loads_g1['A'].sum(),
-        new_phase_loads_g1['B'].sum(),
-        new_phase_loads_g1['C'].sum()
-    )
-    # Calculate %Unbalance After Group1
-    new_g1_a = new_phase_loads_g1['A'].sum()
-    new_g1_b = new_phase_loads_g1['B'].sum()
-    new_g1_c = new_phase_loads_g1['C'].sum()
-    new_g1_avg = (new_g1_a + new_g1_b + new_g1_c) / 3.0
-    g1_unb_after = max(abs(new_g1_a - new_g1_avg), abs(new_g1_b - new_g1_avg), abs(new_g1_c - new_g1_avg)) / new_g1_avg * 100
-    logging.info("Group 1 percent unbalance after: %.2f%%", g1_unb_after)
+    # logging.info(
+    #     "Group 1 load balance after  -> A: %.1f kW, B: %.1f kW, C: %.1f kW",
+    #     new_phase_loads_g1['A'].sum(),
+    #     new_phase_loads_g1['B'].sum(),
+    #     new_phase_loads_g1['C'].sum()
+    # )
+    # # Calculate %Unbalance After Group1
+    # new_g1_a = new_phase_loads_g1['A'].sum()
+    # new_g1_b = new_phase_loads_g1['B'].sum()
+    # new_g1_c = new_phase_loads_g1['C'].sum()
+    # new_g1_avg = (new_g1_a + new_g1_b + new_g1_c) / 3.0
+    # g1_unb_after = max(abs(new_g1_a - new_g1_avg), abs(new_g1_b - new_g1_avg), abs(new_g1_c - new_g1_avg)) / new_g1_avg * 100
+    # logging.info("Group 1 percent unbalance after: %.2f%%", g1_unb_after)
     
     # 2) กลุ่ม 2
     group2_meterLocs = meterLocations[g2_idx]
@@ -5677,27 +5731,42 @@ def main_pipeline(data):
     group2_phase_loads['B'].sum(),
     group2_phase_loads['C'].sum()
     )
-    # Calculate %Unbalance Before Group2
-    g2_a = group2_phase_loads['A'].sum()
-    g2_b = group2_phase_loads['B'].sum()
-    g2_c = group2_phase_loads['C'].sum()
-    g2_avg = (g2_a + g2_b + g2_c) / 3.0
-    g2_unb_before = max(abs(g2_a - g2_avg), abs(g2_b - g2_avg), abs(g2_c - g2_avg)) / g2_avg * 100
-    logging.info("Group 2 percent unbalance before: %.2f%%", g2_unb_before)
+
+    # ก่อนปรับปรุง Group 1
+    g2_unb_before = calculate_unbalance({
+        "A": group2_phase_loads.get("A", 0).sum() if "A" in group2_phase_loads else None,
+        "B": group2_phase_loads.get("B", 0).sum() if "B" in group2_phase_loads else None,
+        "C": group2_phase_loads.get("C", 0).sum() if "C" in group2_phase_loads else None
+    }, label="Group 2 Before")
+
+    # หลังปรับปรุง Group 1
+    g2_unb_after = calculate_unbalance({
+        "A": new_phase_loads_g2.get("A", 0).sum() if "A" in new_phase_loads_g2 else None,
+        "B": new_phase_loads_g2.get("B", 0).sum() if "B" in new_phase_loads_g2 else None,
+        "C": new_phase_loads_g2.get("C", 0).sum() if "C" in new_phase_loads_g2 else None
+    }, label="Group 2 After")
+
+    # # Calculate %Unbalance Before Group2
+    # g2_a = group2_phase_loads['A'].sum()
+    # g2_b = group2_phase_loads['B'].sum()
+    # g2_c = group2_phase_loads['C'].sum()
+    # g2_avg = (g2_a + g2_b + g2_c) / 3.0
+    # g2_unb_before = max(abs(g2_a - g2_avg), abs(g2_b - g2_avg), abs(g2_c - g2_avg)) / g2_avg * 100
+    # logging.info("Group 2 percent unbalance before: %.2f%%", g2_unb_before)
     
-    logging.info(
-        "Group 2 load balance after  -> A: %.1f kW, B: %.1f kW, C: %.1f kW",
-        new_phase_loads_g2['A'].sum(),
-        new_phase_loads_g2['B'].sum(),
-        new_phase_loads_g2['C'].sum()
-    )
-    # Calculate %Unbalance After Group2
-    new_g2_a = new_phase_loads_g2['A'].sum()
-    new_g2_b = new_phase_loads_g2['B'].sum()
-    new_g2_c = new_phase_loads_g2['C'].sum()
-    new_g2_avg = (new_g2_a + new_g2_b + new_g2_c) / 3.0
-    g2_unb_after = max(abs(new_g2_a - new_g2_avg), abs(new_g2_b - new_g2_avg), abs(new_g2_c - new_g2_avg)) / new_g2_avg * 100
-    logging.info("Group 2 percent unbalance after: %.2f%%", g2_unb_after)
+    # logging.info(
+    #     "Group 2 load balance after  -> A: %.1f kW, B: %.1f kW, C: %.1f kW",
+    #     new_phase_loads_g2['A'].sum(),
+    #     new_phase_loads_g2['B'].sum(),
+    #     new_phase_loads_g2['C'].sum()
+    # )
+    # # Calculate %Unbalance After Group2
+    # new_g2_a = new_phase_loads_g2['A'].sum()
+    # new_g2_b = new_phase_loads_g2['B'].sum()
+    # new_g2_c = new_phase_loads_g2['C'].sum()
+    # new_g2_avg = (new_g2_a + new_g2_b + new_g2_c) / 3.0
+    # g2_unb_after = max(abs(new_g2_a - new_g2_avg), abs(new_g2_b - new_g2_avg), abs(new_g2_c - new_g2_avg)) / new_g2_avg * 100
+    # logging.info("Group 2 percent unbalance after: %.2f%%", g2_unb_after)
 
     dist_arr = []
     for n in meterNodes:
