@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}GIS Project Management{% endblock %}</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            DEFAULT: '#7e468f',
+                            dark: '#690089',
+                            light: '#dfd2e3',
+                        },
+                    },
+                    fontFamily: {
+                        sans: ['Prompt', 'Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
+    
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <style>
+        .glass {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        .navbar-gradient {
+            background: linear-gradient(135deg, #690089 0%, #7e468f 100%);
+        }
+        body {
+            background-color: #f3f4f6;
+            min-height: 100vh;
+        }
+        .animate-fade-in {
+            animation: fadeIn 0.3s ease-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+    {% block head %}{% endblock %}
+</head>
+
+<body class="font-sans text-gray-900">
+    <!-- Navbar -->
+    <nav class="navbar-gradient shadow-lg mb-8 sticky top-0 z-50">
+        <div class="container mx-auto px-4 md:px-8">
+            <div class="flex justify-between items-center py-4">
+                <a class="flex items-center space-x-2 text-white font-bold text-2xl tracking-tight" href="/">
+                    <i class="bi bi-geo-alt-fill"></i>
+                    <span>GIS OTD</span>
+                </a>
+
+                <div class="hidden lg:flex items-center space-x-6">
+                    <a class="flex items-center space-x-1 px-4 py-2 rounded-full transition-all duration-200 {% if request.endpoint == 'index' %}bg-white text-primary font-semibold{% else %}text-white hover:bg-white/10{% endif %}" 
+                       href="{{ url_for('index') }}">
+                        <i class="bi bi-house-door-fill"></i>
+                        <span>Shape File Projects</span>
+                    </a>
+                    <a class="flex items-center space-x-1 px-4 py-2 rounded-full transition-all duration-200 {% if request.endpoint == 'projectspeanumber' %}bg-white text-primary font-semibold{% else %}text-white hover:bg-white/10{% endif %}" 
+                       href="{{ url_for('projectspeanumber') }}">
+                        <i class="bi bi-rocket-takeoff-fill"></i>
+                        <span>PEA Transformer Projects</span>
+                    </a>
+                    
+                    {% if user %}
+                    <div class="relative group">
+                        <button class="flex items-center space-x-2 text-white hover:bg-white/10 px-4 py-2 rounded-full transition-all">
+                            <i class="bi bi-person-circle text-xl"></i>
+                            <span>{{ user.hr_fullname_th }}</span>
+                            <i class="bi bi-chevron-down text-xs"></i>
+                        </button>
+                        
+                        <div class="absolute right-0 w-64 mt-2 origin-top-right bg-white rounded-xl shadow-xl ring-1 ring-black ring-opacity-5 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all duration-200 z-50">
+                            <div class="p-4 border-b border-gray-100">
+                                <p class="text-sm font-semibold text-gray-700">{{ user.hr_fullname_th }}</p>
+                                <p class="text-xs text-gray-500 mt-1 line-clamp-1">สังกัด: {{ user.hr_department }}</p>
+                            </div>
+                            <div class="py-1">
+                                <a href="{{ url_for('logout') }}" class="flex items-center space-x-2 px-4 py-3 text-sm text-red-600 hover:bg-red-50 transition-colors">
+                                    <i class="bi bi-box-arrow-right"></i>
+                                    <span>ออกจากระบบ</span>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Mobile Menu Button -->
+                <button class="lg:hidden text-white text-2xl" id="mobile-menu-btn">
+                    <i class="bi bi-list"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Mobile Menu -->
+        <div class="lg:hidden hidden bg-primary-dark shadow-inner text-white px-4 pb-4 animate-fade-in" id="mobile-menu">
+            <div class="flex flex-col space-y-2 mt-4">
+                <a class="p-3 rounded-lg {% if request.endpoint == 'index' %}bg-white text-primary font-semibold{% else %}hover:bg-white/10{% endif %}" href="{{ url_for('index') }}">
+                    <i class="bi bi-house-door-fill mr-2"></i> Shape File Projects
+                </a>
+                <a class="p-3 rounded-lg {% if request.endpoint == 'projectspeanumber' %}bg-white text-primary font-semibold{% else %}hover:bg-white/10{% endif %}" href="{{ url_for('projectspeanumber') }}">
+                    <i class="bi bi-rocket-takeoff-fill mr-2"></i> PEA Transformer Projects
+                </a>
+                {% if user %}
+                <div class="border-t border-white/20 pt-2 text-sm">
+                    <div class="p-2 text-white/70">
+                        {{ user.hr_fullname_th }}<br>
+                        {{ user.hr_department }}
+                    </div>
+                    <a href="{{ url_for('logout') }}" class="p-3 text-red-300 hover:text-red-100 flex items-center">
+                        <i class="bi bi-box-arrow-right mr-2"></i> ออกจากระบบ
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="{% block container_class %}container mx-auto px-4 md:px-8{% endblock %} pb-12">
+        {% block content %}{% endblock %}
+    </main>
+
+    <script>
+        // Mobile menu toggle
+        const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+        const mobileMenu = document.getElementById('mobile-menu');
+
+        if (mobileMenuBtn && mobileMenu) {
+            mobileMenuBtn.addEventListener('click', () => {
+                mobileMenu.classList.toggle('hidden');
+            });
+        }
+
+        // Global functions
+        function showLoading(text = 'กำลังประมวลผล...') {
+            Swal.fire({
+                title: text,
+                didOpen: () => {
+                    Swal.showLoading()
+                },
+                allowOutsideClick: false
+            });
+        }
+
+        // Debug: Log user data
+        {% if user %}
+        console.log("DEBUG: Current User Data ->", {{ user|tojson|safe }});
+        {% else %}
+        console.log("DEBUG: No user session found.");
+        {% endif %}
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+
+</html>

@@ -1,210 +1,166 @@
-<!DOCTYPE html>
-<html lang="th">
+{% extends "base.html" %}
 
-<head>
-  <meta charset="UTF-8">
-  <title>รายการโปรเจค</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-  <style>
-    body {
-      background-color: #f8f9fa;
-    }
+{% block title %}รายการโปรเจค (Shape File) | GIS OTD{% endblock %}
 
-    .navbar-custom {
-      background-image: linear-gradient(0deg, #690089, #7e468f);
-      color: white;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
-    }
-
-    .navbar-custom .nav-link,
-    .navbar-custom .navbar-brand {
-      color: white;
-    }
-
-    .navbar-custom .nav-link:hover {
-      color: #f8f9fa;
-    }
-
-    .btn-custom-primary {
-      background-color: #7e468f;
-      border-color: #7e468f;
-      color: #fff;
-    }
-
-    .btn-custom-primary:hover {
-      background-color: #690089;
-      border-color: #690089;
-      color: #fff;
-    }
-
-    .btn-custom-success {
-      background-color: #689d6a;
-      border-color: #689d6a;
-      color: #fff;
-    }
-
-    .table-hover tbody tr:hover {
-      background-color: #dfd2e3;
-    }
-
-    .card {
-      background-color: #ffffff;
-      border-color: #dfd2e3;
-    }
-
-    /* ปรับระยะ padding ของเมนูเมื่อ active ให้ดูเป็นเม็ดยา */
-    .nav-link.active-custom {
-      background-color: #fdfdfd !important;  /* bg-light */
-      color: #000 !important;               /* text-dark */
-      border-radius: 10px;                  /* rounded-pill */
-      font-weight: 600;
-    }
-  </style>
-</head>
-
-<body>
-  <!-- Navbar -->
-  <nav class="navbar navbar-expand-lg navbar-custom mb-4">
-    <div class="container-fluid px-5">
-      <a class="navbar-brand" href="#"><i class="bi bi-geo-alt-fill"></i> GIS</a>
-      <div class="collapse navbar-collapse">
-        <ul class="navbar-nav ms-auto">
-          <li class="nav-item"><a class="nav-link {% if request.endpoint == 'index' %}active-custom{% endif %}" href="{{ url_for('index') }}"><i class="bi bi-house-door-fill"></i> รายการโปรเจค สร้างด้วย Shape file</a></li>
-          <li class="nav-item"><a class="nav-link {% if request.endpoint == 'projectspeanumber' %}active-custom{% endif %}" href="{{ url_for('projectspeanumber') }}"><i class="bi bi-rocket-takeoff-fill"></i> รายการโปรเจค สร้างด้วย PEA หม้อแปลง (ใหม่)</a></li>
-          {% if user %}
-          <li class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown">
-              <i class="bi bi-person-circle"></i> {{ user.hr_fullname_th }}
-            </a>
-            <ul class="dropdown-menu dropdown-menu-end">
-              <li class="dropdown-item-text text-muted "><p><small>{{ user.hr_fullname_th }} <br>สังกัด : {{ user.hr_department }}</small></p></li>
-              <li><hr class="dropdown-divider"></li>
-              <li>
-                <a class="dropdown-item text-danger" href="{{ url_for('logout') }}">
-                  <i class="bi bi-box-arrow-right"></i> ออกจากระบบ
-                </a>
-              </li>
-            </ul>
-          </li>
-          {% endif %}
-        </ul>
-      </div>
+{% block content %}
+<div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+    <div>
+        <h1 class="text-3xl font-bold text-gray-800">รายการโปรเจค</h1>
+        <p class="text-gray-500 mt-1">จัดการและประมวลผลข้อมูล Shape file</p>
     </div>
-  </nav>
+    <a href="{{ url_for('create') }}" class="inline-flex items-center space-x-2 bg-primary hover:bg-primary-dark text-white px-6 py-3 rounded-xl shadow-md transition-all duration-200 transform hover:-translate-y-1">
+        <i class="bi bi-plus-circle-fill"></i>
+        <span>สร้างโปรเจคใหม่</span>
+    </a>
+</div>
 
-  <!-- Main Content -->
-  <div class="container-fluid px-5">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <h3>รายการโปรเจค สร้างด้วย Shape file</h3>
-      <a href="{{ url_for('create') }}" class="btn btn-custom-primary"><i class="bi bi-plus-circle-fill"></i> สร้างโปรเจคใหม่</a>
-    </div>
-
-    <div class="card shadow-sm">
-      <div class="card-body">
-        <div class="table-responsive">
-          <table class="table table-bordered table-hover align-middle mb-0">
-            <thead class="table-light">
-              <tr>
-                <th>ลำดับ</th>
-                <th>ชื่อโปรเจค</th>
-                <th>รายละเอียด</th>
-                <th>วันที่สร้าง</th>
-                <th>สถานะไฟล์</th>
-                <th class="text-center">จัดการ</th>
-              </tr>
+<div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+    <div class="overflow-x-auto">
+        <table class="w-full text-left">
+            <thead>
+                <tr class="bg-gray-50 text-gray-600 text-sm font-semibold uppercase tracking-wider">
+                    <th class="px-6 py-4">ลำดับ</th>
+                    <th class="px-6 py-4">ชื่อโปรเจค</th>
+                    <th class="px-6 py-4">รายละเอียด</th>
+                    <th class="px-6 py-4">วันที่สร้าง</th>
+                    <th class="px-6 py-4">สถานะไฟล์</th>
+                    <th class="px-6 py-4 text-center">จัดการ</th>
+                </tr>
             </thead>
-            <tbody>
-              {% for project in projects %}
-              <tr>
-                <td>{{ loop.index }}</td>
-                <td>{{ project.project_name }}</td>
-                <td>{{ project.project_detail[:100] }}{% if project.project_detail|length > 100 %}...{% endif %}</td>
-                <td>{{ project.created_at.strftime('%Y-%m-%d %H:%M') if project.created_at else '-' }}</td>
-                <td>
-                  {% if project.file_count >= 5 %}
-                  <span class="badge bg-success">ครบ</span>
-                  {% else %}
-                  <span class="badge bg-danger">ไม่ครบ</span>
-                  {% endif %}
-                </td>
-                <td class="text-center">
-                  <div class="btn-group btn-group-sm">
-                    <a href="{{ url_for('edit', project_id=project.id) }}" class="btn btn-warning"><i class="bi bi-pencil-square"></i></a>
-                    <button class="btn btn-danger" onclick="confirmDelete({{ project.id }})"><i class="bi bi-trash"></i></button>
-                    {% if project.file_count >= 5 %}
-                    <button class="btn btn-custom-primary" onclick="runProject({{ project.id }})"><i class="bi bi-play-fill"></i></button>
-                    {% endif %}
-                    {% if project.has_output %}
-                    <a href="{{ url_for('map_view', project_id=project.id) }}" class="btn btn-custom-success"><i class="bi bi-eye-fill"></i></a>
-                    {% endif %}
-                  </div>
-                </td>
-              </tr>
-              {% endfor %}
+            <tbody class="divide-y divide-gray-100">
+                {% for project in projects %}
+                <tr class="hover:bg-primary-light/10 transition-colors group">
+                    <td class="px-6 py-4 text-sm text-gray-500">{{ loop.index }}</td>
+                    <td class="px-6 py-4">
+                        <span class="font-medium text-gray-800">{{ project.project_name }}</span>
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-500">
+                        <div class="max-w-xs truncate" title="{{ project.project_detail }}">
+                            {{ project.project_detail if project.project_detail else '-' }}
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-500">
+                        {{ project.created_at.strftime('%Y-%m-%d %H:%M') if project.created_at else '-' }}
+                    </td>
+                    <td class="px-6 py-4">
+                        {% if project.file_count >= 5 %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            <span class="w-1.5 h-1.5 mr-1.5 rounded-full bg-green-500"></span>
+                            ครบ ({{ project.file_count }} ไฟล์)
+                        </span>
+                        {% else %}
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                            <span class="w-1.5 h-1.5 mr-1.5 rounded-full bg-red-500"></span>
+                            ไม่ครบ ({{ project.file_count }}/5)
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 text-center">
+                        <div class="flex items-center justify-center space-x-2">
+                            <a href="{{ url_for('edit', project_id=project.id) }}" 
+                               class="p-2 text-yellow-600 hover:bg-yellow-50 rounded-lg transition-colors" title="แก้ไข">
+                                <i class="bi bi-pencil-square text-lg"></i>
+                            </a>
+                            <button onclick="confirmDelete({{ project.id }})" 
+                                    class="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="ลบ">
+                                <i class="bi bi-trash text-lg"></i>
+                            </button>
+                            
+                            {% if project.file_count >= 5 %}
+                            <button onclick="runProject({{ project.id }})" 
+                                    class="p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors" title="ประมวลผล">
+                                <i class="bi bi-play-fill text-xl"></i>
+                            </button>
+                            {% endif %}
+                            
+                            {% if project.has_output %}
+                            <a href="{{ url_for('map_view', project_id=project.id) }}" 
+                               class="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors" title="ดูแผนที่">
+                                <i class="bi bi-eye-fill text-lg"></i>
+                            </a>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not projects %}
+                <tr>
+                    <td colspan="6" class="px-6 py-12 text-center text-gray-500 italic">
+                        ยังไม่มีโปรเจคในขณะนี้
+                    </td>
+                </tr>
+                {% endif %}
             </tbody>
-          </table>
-        </div>
-      </div>
+        </table>
     </div>
-  </div>
+</div>
+{% endblock %}
 
-  <!-- JS -->
-  <script>
+{% block scripts %}
+<script>
     function confirmDelete(projectId) {
-      Swal.fire({
-        title: 'แน่ใจหรือไม่?',
-        text: "การลบนี้จะไม่สามารถย้อนกลับได้!",
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonText: 'ใช่, ลบเลย!',
-        cancelButtonText: 'ยกเลิก'
-      }).then((result) => {
-        if (result.isConfirmed) {
-          fetch(`/delete/${projectId}`, {
-            method: 'POST'
-          }).then(response => {
-            if (response.ok) {
-              Swal.fire('ลบแล้ว!', 'โปรเจคถูกลบเรียบร้อย', 'success')
-                .then(() => location.reload());
-            } else {
-              Swal.fire('ผิดพลาด', 'ไม่สามารถลบโปรเจคได้', 'error');
+        Swal.fire({
+            title: 'แน่ใจหรือไม่?',
+            text: "การลบนี้จะไม่สามารถย้อนกลับได้!",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#7e468f',
+            cancelButtonColor: '#6b7280',
+            confirmButtonText: 'ใช่, ลบเลย!',
+            cancelButtonText: 'ยกเลิก',
+            customClass: {
+                popup: 'rounded-2xl'
             }
-          });
-        }
-      });
+        }).then((result) => {
+            if (result.isConfirmed) {
+                fetch(`/delete/${projectId}`, {
+                    method: 'POST'
+                }).then(response => {
+                    if (response.ok) {
+                        Swal.fire({
+                            title: 'ลบแล้ว!',
+                            text: 'โปรเจคถูกลบเรียบร้อย',
+                            icon: 'success',
+                            confirmButtonColor: '#7e468f'
+                        }).then(() => location.reload());
+                    } else {
+                        Swal.fire('ผิดพลาด', 'ไม่สามารถลบโปรเจคได้', 'error');
+                    }
+                });
+            }
+        });
     }
 
     function runProject(projectId) {
-      Swal.fire({
-        title: 'กำลังประมวลผล...',
-        didOpen: () => {
-          Swal.showLoading()
-        },
-        allowOutsideClick: false
-      });
+        showLoading('กำลังประมวลผล...');
 
-      fetch(`/run/${projectId}`, {
-        method: 'POST'
-      })
+        fetch(`/run/${projectId}`, {
+            method: 'POST'
+        })
         .then(response => response.json())
         .then(data => {
-          if (data.error) {
-            Swal.fire('ผิดพลาด', data.error, 'error');
-          } else {            
-            Swal.fire(`สำเร็จ`, `${data.message}`, 'success').then(() => {
-              location.reload();  // ดึง index ใหม่ที่มีข้อมูล has_output อัปเดตแล้ว
-            });
-          }
+            if (data.error) {
+                Swal.fire({
+                    title: 'ผิดพลาด',
+                    text: data.error,
+                    icon: 'error',
+                    confirmButtonColor: '#7e468f'
+                });
+            } else {            
+                Swal.fire({
+                    title: 'สำเร็จ',
+                    text: data.message,
+                    icon: 'success',
+                    confirmButtonColor: '#7e468f'
+                }).then(() => {
+                    location.reload();
+                });
+            }
         })
         .catch(error => {
-          Swal.fire('ผิดพลาด', 'ไม่สามารถประมวลผลได้', 'error');
-          console.error(error);
+            Swal.fire('ผิดพลาด', 'ไม่สามารถประมวลผลได้', 'error');
+            console.error(error);
         });
     }
-  </script>
-</body>
-
-</html>
+</script>
+{% endblock %}

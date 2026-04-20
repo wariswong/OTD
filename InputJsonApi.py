@@ -85,7 +85,7 @@ def setup_run_file_logger(facility_id, folder="logs", info_only=False):
 # Globals (config)
 # -------------------------------------------------------------------
 TR_LAYER_17    = "http://gisne2.pea.co.th/arcgis/rest/services/PEA/MapServer/17/query"
-BALANCE_BASE   = "http://172.16.184.234/arcgis/rest/services/PEA/MapServer/exts/BalanceLoad/BalanceLoad"
+BALANCE_BASE   = "http://gisne2.pea.co.th/arcgis/rest/services/PEA/MapServer/exts/BalanceLoad/BalanceLoad"
 PEA_QUERY_BASE = "http://gisne2.pea.co.th/arcgis/rest/services/PEA_QUERY/MapServer"
 
 BAL_TABLE_ID   = 31          # ตารางใน PEA_QUERY

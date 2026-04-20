@@ -1,164 +1,178 @@
-<!DOCTYPE html>
-<html lang="th">
+{% extends "base.html" %}
 
-<head>
-  <meta charset="UTF-8">
-  <title>{{ 'แก้ไขโปรเจค' if mode == 'edit' else 'สร้างโปรเจค' }}</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-  <style>
-    body {
-      background-color: #f8f9fa;
-    }
+{% block title %}สร้างโปรเจค (Transformer) | GIS OTD{% endblock %}
 
-    .navbar-custom {
-      background-image: linear-gradient(0deg, #690089, #7e468f);
-      color: white;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
-    }
-
-    .navbar-custom .nav-link,
-    .navbar-custom .navbar-brand {
-      color: white;
-    }
-
-    .navbar-custom .nav-link:hover {
-      color: #f8f9fa;
-    }
-
-    .btn-custom-primary {
-      background-color: #7e468f;
-      border-color: #7e468f;
-      color: #fff;
-    }
-
-    .btn-custom-primary:hover {
-      background-color: #690089;
-      border-color: #690089;
-      color: #fff;
-    }
-
-    .card {
-      background-color: #ffffff;
-      border-color: #dfd2e3;
-    }
-  </style>
-</head>
-
-<body>
-  <!-- Navbar -->
-  <nav class="navbar navbar-expand-lg navbar-custom mb-4">
-    <div class="container-fluid px-5">
-      <a class="navbar-brand" href="#"><i class="bi bi-geo-alt-fill"></i> GIS</a>
-      <div class="collapse navbar-collapse">
-        <ul class="navbar-nav ms-auto">
-          <li class="nav-item"><a class="nav-link" href="{{ url_for('projectspeanumber') }}"><i class="bi bi-house-door-fill"></i> หน้าแรก</a></li>
-          {% if user %}
-          <li class="nav-item dropdown">
-            <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown">
-              <i class="bi bi-person-circle"></i> {{ user.hr_fullname_th }}
-            </a>
-            <ul class="dropdown-menu dropdown-menu-end">
-              <li class="dropdown-item-text text-muted "><p><small>{{ user.hr_fullname_th }} <br>สังกัด : {{ user.hr_department }}</small></p></li>
-              <li><hr class="dropdown-divider"></li>
-              <li>
-                <a class="dropdown-item text-danger" href="{{ url_for('logout') }}">
-                  <i class="bi bi-box-arrow-right"></i> ออกจากระบบ
-                </a>
-              </li>
-            </ul>
-          </li>
-          {% endif %}
-        </ul>
-      </div>
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <div class="mb-8">
+        <a href="{{ url_for('projectspeanumber') }}" class="inline-flex items-center text-gray-500 hover:text-primary transition-colors mb-4">
+            <i class="bi bi-arrow-left mr-2"></i>
+            <span>กลับไปยังหน้ารายการ</span>
+        </a>
+        <h1 class="text-3xl font-bold text-gray-800">สร้างโปรเจคด้วยหมายเลขหม้อแปลง</h1>
+        <p class="text-gray-500 mt-1">ระบุหมายเลข PEA ของหม้อแปลงเพื่อดึงข้อมูลจากระบบ GIS</p>
     </div>
-  </nav>
 
-  <!-- Form Card -->
-  <div class="container-fluid px-5">
-    <div class="card shadow-sm">
-      <div class="card-body">
-        <h4 class="mb-4">{{ 'แก้ไขโปรเจค' if mode == 'edit' else 'สร้างโปรเจคใหม่' }}</h4>
-        <form id="uploadForm" enctype="multipart/form-data">
-          <input type="hidden" name="project_id" value="{{ project.id if project else '' }}">
+    <div class="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+        <div class="p-8">
+            <form id="uploadForm" class="space-y-6">
+                <input type="hidden" name="project_id" value="{{ project.id if project else '' }}">
 
-          <div class="mb-3">
-            <label>หมายเลข PEA Number ของหม้อแปลง</label>
-            <input type="text" name="facility_id" class="form-control" required value="{{ project.facility_id if project else '' }}" placeholder="เช่น 62-003920">
-          </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2 flex justify-between">
+                        <span>หมายเลข PEA Number ของหม้อแปลง <span class="text-red-500">*</span></span>
+                        <span class="text-xs text-primary bg-primary-light/30 px-2 py-0.5 rounded-full">Format: XX-XXXXXX</span>
+                    </label>
+                    <input type="text" name="facility_id" required 
+                           value="{{ project.facility_id if project else '' }}"
+                           class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all outline-none text-xl tracking-wider font-mono"
+                           placeholder="62-003920">
+                </div>
 
-          <div class="mb-3">
-            <label>รายละเอียดงาน</label>
-            <textarea name="project_detail" class="form-control" rows="3">{{ project.project_detail if project else '' }}</textarea>
-          </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">เขตพื้นที่ (Region/Area)</label>
+                    <select name="region" id="regionSelector" required
+                            class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all outline-none">
+                        <option value="" disabled selected>กรุณาเลือกเขตพื้นที่</option>
+                        <option value="N1">N1 (ภาคเหนือ - A)</option>
+                        <option value="N2">N2 (ภาคเหนือ - B)</option>
+                        <option value="N3">N3 (ภาคเหนือ - C)</option>
+                        <option value="NE1">NE1 (ภาคตะวันออกเฉียงเหนือ - D)</option>
+                        <option value="NE2">NE2 (ภาคตะวันออกเฉียงเหนือ - E)</option>
+                        <option value="NE3">NE3 (ภาคตะวันออกเฉียงเหนือ - F)</option>
+                        <option value="C1">C1 (ภาคกลาง - G)</option>
+                        <option value="C2">C2 (ภาคกลาง - H)</option>
+                        <option value="C3">C3 (ภาคกลาง - I)</option>
+                        <option value="S1">S1 (ภาคใต้ - J)</option>
+                        <option value="S2">S2 (ภาคใต้ - K)</option>
+                        <option value="S3">S3 (ภาคใต้ - L)</option>
+                        <option value="Z">Z (กองบริหาร - Z)</option>
+                    </select>
+                </div>
 
-          <div class="d-flex justify-content-between">
-            <a href="/" class="btn btn-secondary"><i class="bi bi-arrow-left"></i> กลับ</a>
-            <button type="submit" class="btn btn-custom-primary"><i class="bi bi-check-circle"></i> {{ 'อัปเดต' if mode == 'edit' else 'บันทึก' }}</button>
-          </div>
-        </form>
-      </div>
+
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">รายละเอียดงาน</label>
+                    <textarea name="project_detail" rows="4"
+                              class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all outline-none"
+                              placeholder="ระบุรายละเอียดเพิ่มเติม เช่น พื้นที่งาน หรือ ชื่องาน">{{ project.project_detail if project else '' }}</textarea>
+                </div>
+
+                <div class="p-6 bg-amber-50 rounded-2xl border border-amber-100">
+                    <p class="text-sm text-amber-800 flex items-start">
+                        <i class="bi bi-exclamation-triangle-fill mr-3 text-amber-500 mt-0.5"></i>
+                        <span>
+                            <strong>หมายเหตุ:</strong> ระบบจะใช้เวลาประมาณ 1-2 นาที ในการดึงข้อมูลจาก GIS Server ของ กฟภ. และประมวลผลเบื้องต้น กรุณาอย่าปิดหน้าต่างนี้จนกว่าจะดำเนินการเสร็จสิ้น
+                        </span>
+                    </p>
+                </div>
+
+                <div class="pt-6 border-t border-gray-100 flex justify-end space-x-4">
+                    <button type="submit" class="inline-flex items-center space-x-2 bg-primary hover:bg-primary-dark text-white px-8 py-3 rounded-xl shadow-lg transition-all duration-200 transform hover:-translate-y-1">
+                        <i class="bi bi-lightning-charge-fill"></i>
+                        <span>ดึงข้อมูลและสร้างโปรเจค</span>
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
-  </div>
+</div>
+{% endblock %}
 
-  <!-- JS -->
-  <script>
+{% block scripts %}
+<script>
     const form = document.getElementById('uploadForm');
+    const regionSelector = document.getElementById('regionSelector');
+
+    // Auto-select region based on hr_business_area
+    document.addEventListener('DOMContentLoaded', () => {
+        const businessArea = "{{ user.hr_business_area if user else '' }}";
+        if (businessArea && businessArea.length > 0) {
+            const firstChar = businessArea.charAt(0).toUpperCase();
+            const mapping = {
+                'A': 'N1', 'B': 'N2', 'C': 'N3',
+                'D': 'NE1', 'E': 'NE2', 'F': 'NE3',
+                'G': 'C1', 'H': 'C2', 'I': 'C3',
+                'J': 'S1', 'K': 'S2', 'L': 'S3',
+                'Z': 'Z'
+            };
+            
+            if (mapping[firstChar]) {
+                regionSelector.value = mapping[firstChar];
+                console.log("Auto-selected region:", mapping[firstChar], "from", businessArea);
+            }
+        }
+    });
 
     form.addEventListener('submit', function (e) {
-      e.preventDefault();
+        e.preventDefault();
 
-      Swal.fire({
-        title: '{{ "ยืนยันการอัปเดต?" if mode == "edit" else "ยืนยันการบันทึก?" }}',
-        icon: 'question',
-        showCancelButton: true,
-        confirmButtonText: 'ตกลง'
-      }).then(result => {
-        if (result.isConfirmed) {
-          const formData = new FormData(form);
-          //Swal.showLoading();
-          Swal.fire({
-            title: 'กำลังประมวลผล...',
-            didOpen: () => {
-              Swal.showLoading()
-            },
-            allowOutsideClick: false
-          });
-
-          fetch('{{ "/updatePeaNoProjects" if mode == "edit" else "/createPeaNoProjects" }}', {
-            method: 'POST',
-            body: formData
-          })
-          .then(async res => {
-            const data = await res.json();
-
-            if (!res.ok) {
-              // ❌ backend error (400 / 500)
-              throw new Error(data.error || 'เกิดข้อผิดพลาดจากระบบ');
+        Swal.fire({
+            title: 'ยืนยันการบันทึก?',
+            text: 'ระบบจะส่งคำขอไปยัง GIS Server เพื่อดึงข้อมูลหม้อแปลงและผู้ใช้ไฟในระบบ',
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#7e468f',
+            cancelButtonColor: '#6b7280',
+            confirmButtonText: 'ตกลง',
+            cancelButtonText: 'ยกเลิก',
+            customClass: {
+                popup: 'rounded-2xl'
             }
+        }).then(result => {
+            if (result.isConfirmed) {
+                const formData = new FormData(form);
+                
+                Swal.fire({
+                    title: 'กำลังเชื่อมต่อ GIS Server...',
+                    html: '<div class="mt-2 text-sm text-gray-500 font-sans">กำลังดึงข้อมูลและประมวลผล กรุณารอสักครู่...</div>',
+                    didOpen: () => {
+                        Swal.showLoading()
+                    },
+                    allowOutsideClick: false,
+                    customClass: {
+                        popup: 'rounded-2xl'
+                    }
+                });
 
-            // ✅ backend success (200)
-            return data;
-          })
-          .then(data => {
-            Swal.fire('สำเร็จ', data.message || 'ดำเนินการสำเร็จ', 'success')
-              .then(() => {
-                window.location.href = "/projectspeanumber";
-              });
-          })
-          .catch(err => {
-            Swal.fire({
-              title: "บันทึกไม่สำเร็จ",
-              text: "กรุณาตรวจสอบขหมายเลข PEA number อีกครั้ง, และตรวจสอบการเชื่อมต่ออเครือข่ายภายในของ กฟภ.",
-              icon: "error"
-            });
-          });
-        }
-      });
+                fetch('{{ "/updatePeaNoProjects" if mode == "edit" else "/createPeaNoProjects" }}', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(async res => {
+                    const data = await res.json();
+                    if (!res.ok) {
+                        throw new Error(data.error || 'เกิดข้อผิดพลาดจากระบบ');
+                    }
+                    return data;
+                })
+                .then(data => {
+                    Swal.fire({
+                        title: 'สำเร็จ',
+                        text: data.message || 'สร้างโปรเจคสำเร็จ',
+                        icon: 'success',
+                        confirmButtonColor: '#7e468f'
+                    }).then(() => {
+                        window.location.href = "/projectspeanumber";
+                    });
+                })
+                .catch(err => {
+                    Swal.fire({
+                        title: "ไม่สามารถดำเนินการได้",
+                        html: '<div class="text-left text-sm font-sans">' + 
+                              '<p class="mb-2"><strong>สาเหตุที่เป็นไปได้:</strong></p>' +
+                              '<ul class="list-disc ml-4 space-y-1">' +
+                              '<li>ไม่พบหมายเลข PEA number นี้ในระบบ</li>' +
+                              '<li>เครือข่ายภายใน กฟภ. (VPN/WAN) ขัดข้อง</li>' +
+                              '<li>GIS Server ไม่ตอบสนอง</li>' +
+                              '</ul>' +
+                              '</div>',
+                        icon: "error",
+                        confirmButtonColor: '#7e468f'
+                    });
+                });
+            }
+        });
     });
-  </script>
-</body>
-
-</html>
+</script>
+{% endblock %}

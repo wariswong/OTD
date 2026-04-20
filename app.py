@@ -28,7 +28,7 @@ ALLOWED_EXTENSIONS = {'shp'}
 db_config = {
     'host': 'localhost',
     'user': 'root',
-    'password': '++dim.C.2++',
+    'password': '',
     'database': 'odt'
 }
 
@@ -439,6 +439,7 @@ def create_pea_no_project():
 
     facility_id = request.form.get("facility_id", "").strip()
     project_detail = request.form.get("project_detail", "").strip()
+    region = request.form.get("region", "").strip()
 
     if not facility_id :
         return jsonify({"error": "facility_id ต้องระบุ"}), 400
@@ -453,9 +454,9 @@ def create_pea_no_project():
         # 1) CREATE DB RECORD
         cur.execute("""
             INSERT INTO pea_no_projects
-            (project_name, project_detail, owner_id, created_at)
-            VALUES (%s, %s, %s, NOW())
-        """, (facility_id, project_detail, employee_id))
+            (project_name, project_detail, owner_id, region, created_at)
+            VALUES (%s, %s, %s, %s, NOW())
+        """, (facility_id, project_detail, employee_id, region))
         conn.commit()
 
         project_id = str(cur.lastrowid)
