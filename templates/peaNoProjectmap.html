@@ -45,7 +45,7 @@
       <a class="navbar-brand" href="#"><i class="bi bi-geo-alt-fill"></i> GIS</a>
       <div class="collapse navbar-collapse">
         <ul class="navbar-nav ms-auto">
-          <li class="nav-item"><a class="nav-link" href="{{ url_for('projectspeanumber') }}"><i class="bi bi-house-door-fill"></i> หน้าแรก</a></li>
+          <li class="nav-item"><a class="nav-link" href="{{ url_for('index') }}"><i class="bi bi-house-door-fill"></i> หน้าแรก</a></li>
           {% if user %}
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown">
@@ -70,7 +70,7 @@
   
   <div class="container-fluid px-5 mb-3">    
     <div class="d-flex justify-content-between mb-3">
-      <a href="/" class="btn btn-secondary"><i class="bi bi-arrow-left"></i> กลับ</a>
+      <a href="/projectspeanumber" class="btn btn-secondary"><i class="bi bi-arrow-left"></i> กลับ</a>
       <button id="reprocessBtn" class="btn btn-warning">Re-Process</button>
     </div>
       <div class="row">
@@ -92,7 +92,7 @@
               <div id="coordinateDisplay" class="small text-muted"></div>
             </div>
           </div>
-          <a href="{{ url_for('download_project_files', project_id=project) }}" class="col-12 btn btn-outline-primary mb-3">
+          <a href="{{ url_for('download_pea_no_project_files', project_id=project) }}" class="col-12 btn btn-outline-primary mb-3">
             <i class="bi bi-download"></i> ดาวน์โหลดไฟล์ผลลัพธ์
           </a>
         </div>
@@ -187,7 +187,7 @@
                             <div class="progress-bar {% if percent1 >= 80 %}bg-danger{% elif percent1 >= 50 %}bg-warning{% else %}bg-info{% endif %}" role="progressbar" style="width: {{ percent1 }}%;" aria-valuenow="{{ percent1 }}" aria-valuemin="0" aria-valuemax="100">{{ percent1 }}%</div>
                           </div>
                         </div>
-                        <div class="row"><div class="col-8 text-start"><b>โหลดคาดการณ์อีก 4 ปี (เพิ่มปีละ 6%)</b></div><div class="col-4 text-end"><b>{{ result.future_g1_load }}</b> kW</div></div>
+                        <div class="row"><div class="col-8 text-start"><b>โหลดคาดการณ์อีก 4 ปี (เพิ่มปีละ 1%)</b></div><div class="col-4 text-end"><b>{{ result.future_g1_load }}</b> kW</div></div>
                         <div class="mb-3">
                           <div class="small text-muted">% โหลดหม้อแปลง</div>
                           {% set percent2 = (result.future_g1_load/(result.rating_g1*0.875)*100)|round(1) %}
@@ -216,7 +216,7 @@
                             <div class="progress-bar {% if percent3 >= 80 %}bg-danger{% elif percent3 >= 50 %}bg-warning{% else %}bg-info{% endif %}" role="progressbar" style="width: {{ percent3 }}%;" aria-valuenow="{{ percent3 }}" aria-valuemin="0" aria-valuemax="100">{{ percent3 }}%</div>
                           </div>
                         </div>
-                        <div class="row"><div class="col-8 text-start"><b>โหลดคาดการณ์อีก 4 ปี (เพิ่มปีละ 6%)</b></div><div class="col-4 text-end"><b>{{ result.future_g2_load }}</b> kW</div></div>
+                        <div class="row"><div class="col-8 text-start"><b>โหลดคาดการณ์อีก 4 ปี (เพิ่มปีละ 1%)</b></div><div class="col-4 text-end"><b>{{ result.future_g2_load }}</b> kW</div></div>
                         <div class="mb-3">
                           <div class="small text-muted">% โหลดหม้อแปลง</div>
                           {% set percent4 = (result.future_g2_load/(result.rating_g2*0.875)*100)|round(1) %}
@@ -262,7 +262,7 @@
 
         <strong>Section 2</strong></br>
         <strong>การบาลานซ์โหลดหม้อแปลง</strong>
-        <div class="row">
+        <div class="row mb-5">
           <div class="col-md-6">
             <div class="card border-light shadow-lg h-100 mt-4" style="border-radius:20px; border:none; box-shadow:0 4px 16px rgba(0,0,0,0.12); overflow:hidden;">
               <div class="card-header text-white text-center fs-5 fw-bold" style="background:#999; border-radius:20px 20px 0 0; border-bottom:none;">
@@ -275,7 +275,7 @@
                     {% set max_g1 = [result.group1_load_balance_before.A, result.group1_load_balance_before.B, result.group1_load_balance_before.C]|max %}
                     {% for phase in ['A', 'B', 'C'] %}
                     {% set value = result.group1_load_balance_before[phase] %}
-                    {% set percent = ((value / (result.rating_g2*0.875/3)*100))|round(1) if max_g1 else 0 %}
+                    {% set percent = ((value / (result.rating_g1*0.875/3)*100))|round(1) if max_g1 else 0 %}
                     <div class="mb-2">
                       <div class="d-flex justify-content-between">
                         <span>Phase {{ phase }}</span>
@@ -455,7 +455,7 @@
                   </tr>
                   <tr>
                     <td>2.</td>
-                    <td class="text-start"><strong>โหลดคาดการณ์อีก 4 ปี (เพิ่มปีละ 6%)</strong></td>
+                    <td class="text-start"><strong>โหลดคาดการณ์อีก 4 ปี (เพิ่มปีละ 1%)</strong></td>
                     <td style="background:#e4e4e4;"> - </td>
                     <td style="background:#b6f3ff;">{{ result.future_g1_load }} kW</td>
                     <td style="background:#ffc9db;">{{ result.future_g2_load }} kW</td>
@@ -603,7 +603,7 @@
 
   // LV Lines
   const lvLineLayer = new GeoJSONLayer({
-    url: "/output/{{project}}/lv_lines.geojson",
+    url: "/pea_no_projects/output/{{project}}/lv_lines.geojson",
     title: "ระบบจำหน่าย 400/230 V",
     renderer: {
       type: "simple",
@@ -622,7 +622,7 @@
 
   // // MV Lines
   const mvLineLayer = new GeoJSONLayer({
-    url: "/output/{{project}}/mv_lines.geojson",
+    url: "/pea_no_projects/output/{{project}}/mv_lines.geojson",
     title: "ระบบจำหน่าย 22 kV",
     renderer: {
       type: "simple",
@@ -641,7 +641,7 @@
 
   // Meters (Points)
   const meterLayer = new GeoJSONLayer({
-    url: "/output/{{project}}/meter_groups.geojson",
+    url: "/pea_no_projects/output/{{project}}/meter_groups.geojson",
     title: "กลุ่มของมิเตอร์",
     renderer: {
       type: "unique-value",        // หรือ simple ถ้าต้องการสีเดียว
@@ -694,7 +694,7 @@
   });
 
   const featureGroups = new GeoJSONLayer({
-    url: "/output/{{project}}/feature_groups.geojson",
+    url: "/pea_no_projects/output/{{project}}/feature_groups.geojson",
     title: "หม้อแปลงและจุดแบ่งโหลด",
     renderer: {
       type: "unique-value",
@@ -843,7 +843,7 @@
   view.ui.add(legend, "top-right");
 
   // โหลด edge_diffs.json
-  fetch("/output/{{project}}/edge_diffs.json")
+  fetch("/pea_no_projects/output/{{project}}/edge_diffs.json")
     .then(response => response.json())
     .then(data => {
       const selector = document.getElementById("splittingSelector");
@@ -942,21 +942,25 @@
     });
 
 
-    fetch(`/reprocess/{{ project }}`, {
+    fetch(`/reprocessPeaNoProject/{{ project }}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sp_index: parseInt(selectedIndex) })
     })
     .then(res => res.json())
     .then(data => {
-      if (data.message) {
-        alert(data.message);
-        location.reload(); // หรือ update UI ใหม่
-      } else {
-        alert("เกิดข้อผิดพลาด: " + data.error);
-      }
-    })
-    .catch(err => alert("Error: " + err));
+          if (data.error) {
+            Swal.fire('ผิดพลาด', data.error, 'error');
+          } else {            
+            Swal.fire(`สำเร็จ`, `${data.message}`, 'success').then(() => {
+              location.reload();  // ดึง index ใหม่ที่มีข้อมูล has_output อัปเดตแล้ว
+            });
+          }
+        })
+    .catch(error => {
+      Swal.fire('ผิดพลาด', 'ไม่สามารถประมวลผลได้', 'error');
+      console.error(error);
+    });
   });
   </script>
 </body>

@@ -85,34 +85,14 @@
           <input type="hidden" name="project_id" value="{{ project.id if project else '' }}">
 
           <div class="mb-3">
-            <label>ชื่อของงาน</label>
-            <input type="text" name="project_name" class="form-control" required value="{{ project.project_name if project else '' }}">
+            <label>หมายเลข PEA Number ของหม้อแปลง</label>
+            <input type="text" name="facility_id" class="form-control" required value="{{ project.facility_id if project else '' }}" placeholder="เช่น 62-003920">
           </div>
 
           <div class="mb-3">
             <label>รายละเอียดงาน</label>
             <textarea name="project_detail" class="form-control" rows="3">{{ project.project_detail if project else '' }}</textarea>
           </div>
-
-          <div class="mb-3">
-            <label>เลือกโฟลเดอร์ไฟล์</label>
-            <input type="file" name="folder_files" class="form-control" webkitdirectory directory multiple {{ '' if mode == 'edit' else 'required' }}>
-            <div class="form-text">ไฟล์ในโฟลเดอร์ควรขึ้นต้นด้วย Meter, Lv, Tr, Mv, Eservice</div>
-          </div>
-
-          {% if existing_files %}
-          <div class="mt-3 mb-3">
-            <label>ไฟล์ที่อัปโหลดแล้ว:</label>
-            <ul class="list-group">
-              {% for type, filelist in existing_files.items() %}
-                <li class="list-group-item">
-                  <strong>{{ type|capitalize }}</strong>:
-                  {{ filelist | join(', ') }}
-                </li>
-              {% endfor %}
-            </ul>
-          </div>
-          {% endif %}
 
           <div class="d-flex justify-content-between">
             <a href="/" class="btn btn-secondary"><i class="bi bi-arrow-left"></i> กลับ</a>
@@ -138,21 +118,43 @@
       }).then(result => {
         if (result.isConfirmed) {
           const formData = new FormData(form);
-          Swal.showLoading();
+          //Swal.showLoading();
+          Swal.fire({
+            title: 'กำลังประมวลผล...',
+            didOpen: () => {
+              Swal.showLoading()
+            },
+            allowOutsideClick: false
+          });
 
-          fetch('{{ "/update" if mode == "edit" else "/upload" }}', {
+          fetch('{{ "/updatePeaNoProjects" if mode == "edit" else "/createPeaNoProjects" }}', {
             method: 'POST',
             body: formData
           })
-            .then(res => res.json())
-            .then(data => {
-              Swal.fire('สำเร็จ', data.message || 'ดำเนินการสำเร็จ', 'success').then(() => {
-                window.location.href = "/";
+          .then(async res => {
+            const data = await res.json();
+
+            if (!res.ok) {
+              // ❌ backend error (400 / 500)
+              throw new Error(data.error || 'เกิดข้อผิดพลาดจากระบบ');
+            }
+
+            // ✅ backend success (200)
+            return data;
+          })
+          .then(data => {
+            Swal.fire('สำเร็จ', data.message || 'ดำเนินการสำเร็จ', 'success')
+              .then(() => {
+                window.location.href = "/projectspeanumber";
               });
-            })
-            .catch(err => {
-              Swal.fire('ผิดพลาด', err.message, 'error');
+          })
+          .catch(err => {
+            Swal.fire({
+              title: "บันทึกไม่สำเร็จ",
+              text: "กรุณาตรวจสอบขหมายเลข PEA number อีกครั้ง, และตรวจสอบการเชื่อมต่ออเครือข่ายภายในของ กฟภ.",
+              icon: "error"
             });
+          });
         }
       });
     });

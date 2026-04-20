@@ -3,6 +3,8 @@ from werkzeug.utils import secure_filename
 import os, shutil
 import mysql.connector
 from processNew_no_gui import run_process_from_project_folder
+from InputJsonApi import run_once_with_facilityid, run_pipeline_for_facilityid
+from processNew_no_gui_peanumber import main_pipeline
 import logging
 from collections import defaultdict
 import json
@@ -11,6 +13,7 @@ import io
 import requests
 from dotenv import load_dotenv
 import urllib.parse
+from flask import send_from_directory
 
 load_dotenv()
 
@@ -25,7 +28,7 @@ ALLOWED_EXTENSIONS = {'shp'}
 db_config = {
     'host': 'localhost',
     'user': 'root',
-    'password': '',
+    'password': '++dim.C.2++',
     'database': 'odt'
 }
 
@@ -51,6 +54,11 @@ def login_required(f):
             return redirect(url_for("login"))
         return f(*args, **kwargs)
     return decorated
+
+@app.context_processor
+def inject_request():
+    # from flask import request
+    return dict(request=request)
 
 @app.route("/login")
 def login():
@@ -88,7 +96,7 @@ def login_callback():
     userinfo = u.json()
     session["user"] = userinfo  # เก็บข้อมูล user
     print(userinfo)
-    return redirect(url_for("index"))
+    return redirect(url_for("projectspeanumber"))
 
 @app.route("/logout")
 def logout():
@@ -115,6 +123,37 @@ def allowed_file(fn):
 @app.route('/')
 @login_required
 def index():
+    try:
+        user = session.get("user", {})
+        employee_id = user.get("hr_employee_id")
+
+        conn = get_db()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("""
+            SELECT p.*, 
+                (SELECT COUNT(*) FROM project_files pf WHERE pf.project_id=p.id) AS file_count 
+            FROM projects p
+            WHERE p.owner_id = %s
+            ORDER BY p.created_at DESC
+        """, (employee_id,))
+        projects = cur.fetchall()
+        cur.close(); conn.close()
+
+        for project in projects:
+            output_path = os.path.join("output", str(project["id"]))
+            project["has_output"] = os.path.exists(output_path) and len(os.listdir(output_path)) > 0
+
+        return render_template('index.html', projects=projects, user=user)
+    except Exception as e:
+        import traceback
+        logging.error(f"Error in index route: {e}\n{traceback.format_exc()}")
+        return "เกิดข้อผิดพลาดในระบบ กรุณาติดต่อผู้ดูแล", 500
+
+    # return render_template('index.html', projects=projects, user=user)
+
+@app.route('/projectspeanumber')
+@login_required
+def projectspeanumber():
 
     user = session.get("user", {})
     employee_id = user.get("hr_employee_id")
@@ -122,9 +161,8 @@ def index():
     conn = get_db()
     cur = conn.cursor(dictionary=True)
     cur.execute("""
-        SELECT p.*, 
-               (SELECT COUNT(*) FROM project_files pf WHERE pf.project_id=p.id) AS file_count 
-        FROM projects p
+        SELECT p.* 
+        FROM pea_no_projects p
         WHERE p.owner_id = %s
         ORDER BY p.created_at DESC
     """, (employee_id,))
@@ -132,19 +170,22 @@ def index():
     cur.close(); conn.close()
 
     for project in projects:
-        output_path = os.path.join("output", str(project["id"]))
+        output_path = os.path.join("pea_no_projects","output", str(project["id"]))
         project["has_output"] = os.path.exists(output_path) and len(os.listdir(output_path)) > 0
 
-    return render_template('index.html', projects=projects, user=user)
-
-
-    # return render_template('index.html', projects=projects, user=user)
+    return render_template('projectspeanumber.html', projects=projects, user=user)    
 
 @app.route('/create')
 @login_required
 def create():
     user = session.get("user", {})
     return render_template('form.html', mode='create', project={}, user=user)
+
+@app.route('/createPeaNumber')
+@login_required
+def createPeaNumber():
+    user = session.get("user", {})
+    return render_template('formPeaNumber.html', mode='create', project={}, user=user)
 
 @app.route('/edit/<int:project_id>')
 @login_required
@@ -390,6 +431,259 @@ def download_project_files(project_id):
         download_name=f'project_{project_id}_results.zip'
     )
 
+@app.route('/createPeaNoProjects', methods=['POST'])
+@login_required
+def create_pea_no_project():
+    user = session.get("user", {})
+    employee_id = user.get("hr_employee_id")
+
+    facility_id = request.form.get("facility_id", "").strip()
+    project_detail = request.form.get("project_detail", "").strip()
+
+    if not facility_id :
+        return jsonify({"error": "facility_id ต้องระบุ"}), 400
+
+    conn = get_db()
+    cur = conn.cursor(dictionary=True)
+
+    project_id = None
+    project_dir = None
+
+    try:
+        # 1) CREATE DB RECORD
+        cur.execute("""
+            INSERT INTO pea_no_projects
+            (project_name, project_detail, owner_id, created_at)
+            VALUES (%s, %s, %s, NOW())
+        """, (facility_id, project_detail, employee_id))
+        conn.commit()
+
+        project_id = str(cur.lastrowid)
+
+        # 2) CREATE PROJECT FOLDER
+        # project_dir = os.path.join("pea_no_projects", str(project_id))
+        # os.makedirs(project_dir, exist_ok=False)
+
+        # # 3) RUN FUNCTION 2 (BASE)
+        # base_result = run_once_with_facilityid(
+        #     facilityid=facility_id,
+        #     output_dir=project_dir,
+        #     file_prefix=str(project_id)
+        # )
+
+        # print(f"Running pipeline for facility_id={project_name}, project_id={project_id}")
+
+        # 4) RUN FUNCTION 1 (PIPELINE)
+
+        # facility_id = project_name  # ใช้ project_name เป็น facility_id
+
+        pipeline_result = run_pipeline_for_facilityid(
+            project_id=project_id,
+            facility_id=facility_id,
+        )
+
+        # # 5) UPDATE DB → READY
+        # cur.execute("""
+        #     UPDATE pea_no_projects
+        #     SET status='ready',
+        #         base_json_path=%s,
+        #         merged_json_path=%s
+        #     WHERE id=%s
+        # """, (
+        #     base_result["out_path"],
+        #     pipeline_result["out_json"],
+        #     project_id
+        # ))
+        # conn.commit()
+
+        return jsonify({
+            "message": "สร้างโปรเจคสำเร็จ",
+            "project_id": project_id
+        }), 200
+
+    except Exception as e:
+        logging.exception("CREATE PEA PROJECT FAILED")
+
+        # 🔥 ROLLBACK
+        conn.rollback()
+
+        if project_dir and os.path.exists(project_dir):
+            shutil.rmtree(project_dir)
+
+        if project_id:
+            cur.execute("DELETE FROM pea_no_projects WHERE id=%s", (project_id,))
+            conn.commit()
+
+        return jsonify({"error": str(e)}), 500
+
+    finally:
+        cur.close()
+        conn.close()
+
+@app.route('/runPeaNoProjects/<int:project_id>', methods=['POST'])
+@login_required
+def run_pea_no_project(project_id):
+    conn = get_db()
+    cur = conn.cursor(dictionary=True)
+
+    try:
+        # 1) ดึง project + facility_id จาก DB
+        cur.execute("""
+            SELECT id, project_name
+            FROM pea_no_projects
+            WHERE id = %s
+        """, (project_id,))
+        project = cur.fetchone()
+
+        if not project:
+            return jsonify({"error": "ไม่พบโปรเจค"}), 404
+
+        facility_id = project["project_name"]
+
+        logging.info(
+            f"[RUN] project_id={project_id}, facility_id={facility_id}"
+        )
+
+        # 2) Run pipeline
+        main_pipeline(
+            project_id=str(project_id),
+            facility_id=facility_id
+        )
+
+        return jsonify({
+            "success": True,
+            "message": "ประมวลผลเสร็จสิ้น"
+        })
+
+    except Exception as e:
+        logging.exception("Error in running project")
+
+        conn.rollback()
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+    finally:
+        cur.close()
+        conn.close()
+
+@app.route('/peaNoMap/<int:project_id>', methods=['GET'])
+@login_required
+def pea_no_project_map_view(project_id):
+    with open(f"pea_no_projects/output/{project_id}/results.json", "r", encoding="utf-8") as f:
+        result_data = json.load(f)
+
+    user = session.get("user", {})   
+
+    return render_template("peaNoProjectmap.html", project=project_id, result=result_data, user=user)
+
+@app.route('/downloadPeaNoProject/<int:project_id>')
+def download_pea_no_project_files(project_id):
+    folder_path = f'pea_no_projects/output/{project_id}/downloads'
+
+    if not os.path.exists(folder_path):
+        return "ไม่พบโฟลเดอร์ดาวน์โหลด", 404
+
+    # สร้าง ZIP ไฟล์ในหน่วยความจำ
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        for root, _, files in os.walk(folder_path):
+            for file in files:
+                full_path = os.path.join(root, file)
+                relative_path = os.path.relpath(full_path, folder_path)
+                zipf.write(full_path, arcname=relative_path)
+    zip_buffer.seek(0)
+
+    return send_file(
+        zip_buffer,
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name=f'project_{project_id}_results.zip'
+    )
+
+@app.route('/reprocessPeaNoProject/<int:project_id>', methods=['POST'])
+def pea_no_project_reprocess_with_index(project_id):
+    conn = get_db()
+    cur = conn.cursor(dictionary=True)
+    try:
+        data = request.get_json(silent=True) or {}
+        sp_index = data.get("sp_index", 0)
+
+        # 1) ดึง project + facility_id จาก DB
+        cur.execute("""
+            SELECT id, project_name
+            FROM pea_no_projects
+            WHERE id = %s
+        """, (project_id,))
+        project = cur.fetchone()
+
+        if not project:
+            return jsonify({"error": "ไม่พบโปรเจค"}), 404
+
+        facility_id = project["project_name"]
+
+        logging.info(
+            f"[RUN] project_id={project_id}, facility_id={facility_id}"
+        )
+
+        result = main_pipeline(project_id=str(project_id), facility_id=facility_id, sp_index=sp_index)
+        return jsonify({
+            "success": True,
+            "message": "ประมวลผลเสร็จสิ้น"
+        })
+
+    except Exception as e:
+        logging.exception("Error in running project")
+
+        conn.rollback()
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+    finally:
+        cur.close()
+        conn.close()
+
+@app.route('/pea_no_project_delete/<int:project_id>', methods=['POST'])
+def peaNoProjectDelete(project_id):
+    # ใช้ project_id เป็นชื่อโฟลเดอร์โดยตรง
+    folder = secure_filename(str(project_id))  # เป็น string เสมอ
+
+    input_folder_path = os.path.join("pea_no_projects", "input", folder)
+    output_folder_path = os.path.join("pea_no_projects", "output", folder)
+
+    # เชื่อมต่อ DB และลบข้อมูล
+    conn = get_db()
+    cur = conn.cursor()
+    # cur.execute("DELETE FROM project_files WHERE project_id=%s", (project_id,))
+    cur.execute("DELETE FROM pea_no_projects WHERE id=%s", (project_id,))
+    conn.commit()
+    cur.close(); conn.close()
+
+    # ลบโฟลเดอร์จริง
+    try:
+        if os.path.isdir(input_folder_path):
+            shutil.rmtree(input_folder_path)
+        if os.path.isdir(output_folder_path):
+            shutil.rmtree(output_folder_path)
+    except Exception as e:
+        # ถ้ามี error ระหว่างลบ ให้ log ไว้ (ไม่หยุดการทำงานหลัก)
+        logging.error(f"เกิดข้อผิดพลาดในการลบโฟลเดอร์: {e}")
+
+    return jsonify({'message': 'ลบสำเร็จ'}), 200
+
+@app.route('/pea_no_projects/output/<int:project_id>/<path:filename>')
+def serve_project_output(project_id, filename):
+    base_dir = os.path.join(
+        os.getcwd(),
+        "pea_no_projects",
+        "output",
+        str(project_id)
+    )
+    return send_from_directory(base_dir, filename)
+
 if __name__ == '__main__':
     # app.run(debug=True)
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000)

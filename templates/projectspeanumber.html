@@ -57,7 +57,7 @@
 
     /* ปรับระยะ padding ของเมนูเมื่อ active ให้ดูเป็นเม็ดยา */
     .nav-link.active-custom {
-      background-color: #fdfdfd !important;  /* bg-light */
+      background-color: #ffffff !important;  /* bg-light */
       color: #000 !important;               /* text-dark */
       border-radius: 10px;                  /* rounded-pill */
       font-weight: 600;
@@ -98,8 +98,11 @@
   <!-- Main Content -->
   <div class="container-fluid px-5">
     <div class="d-flex justify-content-between align-items-center mb-3">
-      <h3>รายการโปรเจค สร้างด้วย Shape file</h3>
-      <a href="{{ url_for('create') }}" class="btn btn-custom-primary"><i class="bi bi-plus-circle-fill"></i> สร้างโปรเจคใหม่</a>
+      <h3>รายการโปรเจค สร้างด้วย PEA หม้อแปลง</h3>
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <a href="{{ url_for('static', filename='asset/file/manual.pdf') }}" class="btn btn-custom-primary me-2"><i class="bi bi-book-half"></i> คู่มือการใช้งาน</a>
+        <a href="{{ url_for('createPeaNumber') }}" class="btn btn-custom-primary"><i class="bi bi-plus-circle-fill"></i> สร้างโปรเจคใหม่</a>
+      </div>
     </div>
 
     <div class="card shadow-sm">
@@ -111,8 +114,7 @@
                 <th>ลำดับ</th>
                 <th>ชื่อโปรเจค</th>
                 <th>รายละเอียด</th>
-                <th>วันที่สร้าง</th>
-                <th>สถานะไฟล์</th>
+                <th>วันที่สร้าง</th>                
                 <th class="text-center">จัดการ</th>
               </tr>
             </thead>
@@ -123,22 +125,16 @@
                 <td>{{ project.project_name }}</td>
                 <td>{{ project.project_detail[:100] }}{% if project.project_detail|length > 100 %}...{% endif %}</td>
                 <td>{{ project.created_at.strftime('%Y-%m-%d %H:%M') if project.created_at else '-' }}</td>
-                <td>
-                  {% if project.file_count >= 5 %}
-                  <span class="badge bg-success">ครบ</span>
-                  {% else %}
-                  <span class="badge bg-danger">ไม่ครบ</span>
-                  {% endif %}
-                </td>
+                
                 <td class="text-center">
                   <div class="btn-group btn-group-sm">
-                    <a href="{{ url_for('edit', project_id=project.id) }}" class="btn btn-warning"><i class="bi bi-pencil-square"></i></a>
+                    <!-- <a href="{{ url_for('edit', project_id=project.id) }}" class="btn btn-warning"><i class="bi bi-pencil-square"></i></a> -->
                     <button class="btn btn-danger" onclick="confirmDelete({{ project.id }})"><i class="bi bi-trash"></i></button>
-                    {% if project.file_count >= 5 %}
+                    
                     <button class="btn btn-custom-primary" onclick="runProject({{ project.id }})"><i class="bi bi-play-fill"></i></button>
-                    {% endif %}
+                    
                     {% if project.has_output %}
-                    <a href="{{ url_for('map_view', project_id=project.id) }}" class="btn btn-custom-success"><i class="bi bi-eye-fill"></i></a>
+                    <a href="{{ url_for('pea_no_project_map_view', project_id=project.id) }}" class="btn btn-custom-success"><i class="bi bi-eye-fill"></i></a>
                     {% endif %}
                   </div>
                 </td>
@@ -163,7 +159,7 @@
         cancelButtonText: 'ยกเลิก'
       }).then((result) => {
         if (result.isConfirmed) {
-          fetch(`/delete/${projectId}`, {
+          fetch(`/pea_no_project_delete/${projectId}`, {
             method: 'POST'
           }).then(response => {
             if (response.ok) {
@@ -186,7 +182,7 @@
         allowOutsideClick: false
       });
 
-      fetch(`/run/${projectId}`, {
+      fetch(`/runPeaNoProjects/${projectId}`, {
         method: 'POST'
       })
         .then(response => response.json())
