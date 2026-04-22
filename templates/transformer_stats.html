@@ -1,0 +1,373 @@
+{% extends "base.html" %}
+
+{% block container_class %}max-w-none px-4 md:px-10{% endblock %}
+
+{% block title %}ข้อมูลสถิติหม้อแปลง | GIS OTD{% endblock %}
+
+{% block content %}
+<div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+    <div>
+        <h1 class="text-3xl font-bold text-gray-800">ข้อมูลสถิติหม้อแปลง</h1>
+        <p class="text-gray-500 mt-1">รายการหม้อแปลงในพื้นที่ {{ region }}</p>
+    </div>
+    <div class="flex flex-col md:flex-row items-center gap-4 w-full md:w-auto">
+        <!-- Search Bar -->
+        <form action="{{ url_for('transformer_stats') }}" method="GET" class="relative w-full md:w-64 group">
+            <input type="text" name="q" value="{{ search_query }}" placeholder="ค้นหา ID หรือสถานที่..." 
+                   class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all outline-none bg-white">
+            <i class="bi bi-search absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-primary transition-colors"></i>
+            {% if search_query %}
+            <a href="{{ url_for('transformer_stats') }}" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500">
+                <i class="bi bi-x-circle-fill"></i>
+            </a>
+            {% endif %}
+        </form>
+        
+        <span class="bg-primary/10 text-primary px-4 py-2.5 rounded-xl text-sm font-semibold border border-primary/20 whitespace-nowrap">
+            ทั้งหมด {{ total_rows }} รายการ
+        </span>
+    </div>
+</div>
+
+<div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+    <div class="overflow-x-auto">
+        <table class="min-w-full w-max text-left border-collapse bg-white">
+            <thead>
+                <tr class="bg-gray-50 text-gray-600 text-xs font-semibold uppercase tracking-wider">
+                    <th class="px-6 py-4 border-b sticky-col">FACILITY ID</th>
+                    <th class="px-6 py-4 border-b">GIS TAG</th>
+                    <th class="px-6 py-4 border-b">LOCATION</th>
+                    <th class="px-6 py-4 border-b">RATE KVA</th>
+                    <th class="px-6 py-4 border-b">PLOAD PEAK</th>
+                    <th class="px-6 py-4 border-b">PLOAD KW</th>
+                    <th class="px-6 py-4 border-b">LOSS</th>
+                    <th class="px-6 py-4 border-b">FEEDER</th>
+                    <th class="px-6 py-4 border-b">VMIN PEAK</th>
+                    <th class="px-6 py-4 border-b">OPSATRSUMMAY.LEN</th>
+                    <th class="px-6 py-4 border-b">NAME</th>
+                    <th class="px-6 py-4 border-b">PEAK MONTH</th>
+                    <th class="px-6 py-4 border-b text-center">pct_ia</th>
+                    <th class="px-6 py-4 border-b text-center">pct_ib</th>
+                    <th class="px-6 py-4 border-b text-center">pct_ic</th>
+                    <th class="px-6 py-4 border-b">สรุปปัญหา</th>
+                    <th class="px-6 py-4 border-b">แนวทางการแก้ไข</th>
+                    <th class="px-6 py-4 border-b text-center">MAP</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+                {% for row in stats %}
+                <tr class="hover:bg-primary-light/5 transition-colors group">
+                    <td class="px-6 py-4 text-sm font-mono text-primary font-semibold sticky-col">
+                        {{ row.facility_id }}
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-600 max-w-xs truncate" title="{{ row.gistag }}">
+                        {{ row.gistag }}
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-600 max-w-xs truncate" title="{{ row.location }}">
+                        {{ row.location }}
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-500">{{ row.rate_kva }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">{{ row.pload_peak }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">{{ row.pload_kw }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">{{ row.loss }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">{{ row.feeder_id }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">{{ row.vmin_peak }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">{{ row.opsa_trsummary_len }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">{{ row.name }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">{{ row.peak_month }}</td>
+                    <td class="px-6 py-4 text-sm text-center font-mono text-gray-700">{{ "%.1f"|format(row.ia_peak|float) if row.ia_peak else '-' }}</td>
+                    <td class="px-6 py-4 text-sm text-center font-mono text-gray-700">{{ "%.1f"|format(row.ib_peak|float) if row.ib_peak else '-' }}</td>
+                    <td class="px-6 py-4 text-sm text-center font-mono text-gray-700">{{ "%.1f"|format(row.ic_peak|float) if row.ic_peak else '-' }}</td>
+                    <!-- <td class="px-6 py-4 text-center">
+                        {% set vals = [row.ia_peak, row.ib_peak, row.ic_peak]|reject('none')|list %}
+                        {% set max_i = vals|max|default(0)|float %}
+                        {% set min_i = vals|min|default(0)|float %}
+                        {% set unb = ((max_i - min_i) / max_i * 100) if max_i > 0 else 0 %}
+                        <span class="px-2 py-1 rounded text-xs font-bold {{ 'bg-red-100 text-red-700' if unb > 30 else 'bg-green-100 text-green-700' }}">
+                            {{ "%.1f"|format(unb) }}%
+                        </span>
+                    </td> -->
+                    <td class="px-6 py-4 text-sm whitespace-normal break-words {{ 'bg-red-50/50 text-red-700 font-medium' if row.problem_summary else 'text-gray-600' }}" style="min-width: 300px;">
+                        {{ row.problem_summary if row.problem_summary else '-' }}
+                    </td>
+                    <td class="px-6 py-4 text-sm whitespace-normal break-words {{ 'bg-blue-50/50 text-blue-700 font-medium' if row.fix_guideline else 'text-gray-600' }}" style="min-width: 400px;">
+                        {{ row.fix_guideline if row.fix_guideline else '-' }}
+                    </td>
+                    <td class="px-6 py-4 text-center">
+                        <button onclick='openMap({{ row|tojson|safe }})' 
+                                class="p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors border border-primary/10 bg-white">
+                            <i class="bi bi-geo-alt-fill"></i>
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not stats %}
+                <tr>
+                    <td colspan="10" class="px-6 py-12 text-center text-gray-400 italic">
+                        ไม่พบข้อมูลในพื้นที่ของคุณ
+                    </td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+    
+    <!-- Pagination -->
+    {% if total_pages > 1 %}
+    <div class="px-6 py-4 bg-gray-50/50 border-t border-gray-100 flex items-center justify-between">
+        <div class="text-sm text-gray-500">
+            แสดงหน้า {{ page }} จาก {{ total_pages }} (ทั้งหมด {{ total_rows }} รายการ)
+        </div>
+        <div class="flex space-x-2">
+            {% if page > 1 %}
+            <a href="{{ url_for('transformer_stats', page=page-1, q=search_query) }}" class="p-2 border rounded-lg hover:bg-white transition-colors">
+                <i class="bi bi-chevron-left"></i>
+            </a>
+            {% endif %}
+            
+            <div class="flex space-x-1">
+                {% set start = [1, page - 2]|max %}
+                {% set end = [total_pages, start + 4]|min %}
+                {% set start = [1, end - 4]|max %}
+                
+                {% for p in range(start, end + 1) %}
+                <a href="{{ url_for('transformer_stats', page=p, q=search_query) }}" 
+                   class="w-10 h-10 flex items-center justify-center rounded-lg border transition-all duration-200 {{ 'bg-primary text-white border-primary shadow-md' if p == page else 'bg-white text-gray-600 hover:border-primary/50' }}">
+                   {{ p }}
+                </a>
+                {% endfor %}
+            </div>
+
+            {% if page < total_pages %}
+            <a href="{{ url_for('transformer_stats', page=page+1, q=search_query) }}" class="p-2 border rounded-lg hover:bg-white transition-colors">
+                <i class="bi bi-chevron-right"></i>
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Map Modal -->
+<div id="mapModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+    <div class="bg-white rounded-[2.5rem] w-full max-w-5xl h-[85vh] shadow-2xl relative overflow-hidden flex flex-col glass">
+        <!-- Modal Header -->
+        <div class="px-8 py-6 border-b flex justify-between items-center bg-white/50">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                    <i class="bi bi-geo-alt-fill text-xl"></i>
+                </div>
+                <div>
+                    <h3 id="modalTitle" class="font-black text-gray-800 tracking-tight leading-none">Transformer Location</h3>
+                    <p id="modalSubtitle" class="text-[10px] text-gray-400 uppercase font-black tracking-widest mt-1"></p>
+                </div>
+            </div>
+            <button onclick="closeMap()" class="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-red-50 text-gray-400 hover:text-red-500 transition-all border border-transparent hover:border-red-100">
+                <i class="bi bi-x-lg text-xl"></i>
+            </button>
+        </div>
+        
+        <!-- Map Container -->
+        <div id="modalMapView" class="flex-grow bg-gray-50 relative">
+            <div id="loader" class="absolute inset-0 flex items-center justify-center bg-white/80 z-20 transition-opacity">
+                <div class="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent"></div>
+            </div>
+        </div>
+        
+        <!-- Modal Footer Info -->
+        <div id="modalFooter" class="px-8 py-4 bg-gray-50/80 border-t flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center space-x-6">
+                <div>
+                    <p class="text-[9px] font-black text-gray-400 uppercase mb-0.5">UTM Coordinates (WGS84 47N)</p>
+                    <p id="coordUTM" class="text-xs font-mono text-gray-700 font-bold"></p>
+                </div>
+                <div class="w-px h-8 bg-gray-200"></div>
+                <div>
+                    <p class="text-[9px] font-black text-gray-400 uppercase mb-0.5">Decimal Degrees (Lat, Lon)</p>
+                    <p id="coordDec" class="text-xs font-mono text-gray-700 font-bold"></p>
+                </div>
+            </div>
+            <div id="problemBadge" class="hidden px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://js.arcgis.com/4.29/esri/themes/light/main.css">
+<style>
+    .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
+    .esri-ui .esri-component { box-shadow: none !important; border-radius: 12px !important; overflow: hidden; border: 1px solid rgba(0,0,0,0.05); }
+
+    /* Sticky Column & Header Styles */
+    .sticky-col {
+        position: sticky;
+        left: 0;
+    }
+    
+    th.sticky-col {
+        background-color: #f9fafb !important;
+        z-index: 40 !important; /* Top-left corner must be highest */
+        opacity: 1 !important;
+    }
+    
+    td.sticky-col {
+        background-color: white !important;
+        z-index: 20 !important;
+        opacity: 1 !important;
+    }
+
+    tr:hover td.sticky-col {
+        background-color: #f7f0f8 !important; /* Matches hover:bg-primary-light/5 */
+    }
+
+    /* Column Shadow */
+    .sticky-col::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: 8px;
+        background: linear-gradient(to right, rgba(0,0,0,0.05), transparent);
+        pointer-events: none;
+        transform: translateX(100%);
+    }
+    
+    thead tr {
+        position: sticky;
+        top: 0;
+        z-index: 30;
+        background-color: #f9fafb;
+        box-shadow: 0 1px 0 rgba(0,0,0,0.05);
+    }
+
+    tr:hover td.sticky-col {
+        background-color: #f7f0f8 !important; /* Matches hover:bg-primary-light/5 */
+    }
+
+    /* Column Shadow */
+    .sticky-col::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: 8px;
+        background: linear-gradient(to right, rgba(0,0,0,0.05), transparent);
+        pointer-events: none;
+        transform: translateX(100%);
+    }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://js.arcgis.com/4.29/"></script>
+<script>
+    let mapView = null;
+
+    function openMap(data) {
+        document.getElementById('mapModal').classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+        
+        document.getElementById('modalTitle').innerText = data.facility_id;
+        document.getElementById('modalSubtitle').innerText = data.location;
+        document.getElementById('coordUTM').innerText = `X: ${data.x.toLocaleString()} | Y: ${data.y.toLocaleString()}`;
+        document.getElementById('coordDec').innerText = `${data.lat.toFixed(6)}, ${data.lon.toFixed(6)}`;
+        
+        const loader = document.getElementById('loader');
+        loader.classList.remove('opacity-0', 'pointer-events-none');
+
+        // Calculate unbalance for the badge
+        const vals = [data.ia_peak, data.ib_peak, data.ic_peak].filter(v => v !== null);
+        const max_i = vals.length > 0 ? Math.max(...vals) : 0;
+        const min_i = vals.length > 0 ? Math.min(...vals) : 0;
+        const unb = max_i > 0 ? ((max_i - min_i) / max_i * 100) : 0;
+        
+        const badge = document.getElementById('problemBadge');
+        badge.classList.remove('hidden', 'bg-red-100', 'text-red-700', 'bg-green-100', 'text-green-700');
+        if (unb > 30) {
+            badge.innerText = `Unbalance ${unb.toFixed(1)}% (Limit Exceeded)`;
+            badge.classList.add('bg-red-100', 'text-red-700');
+        } else {
+            badge.innerText = `Unbalance ${unb.toFixed(1)}% (Normal)`;
+            badge.classList.add('bg-green-100', 'text-green-700');
+        }
+        badge.classList.remove('hidden');
+
+        require([
+            "esri/Map",
+            "esri/views/MapView",
+            "esri/Graphic"
+        ], function(Map, MapView, Graphic) {
+            
+            if (!mapView) {
+                const map = new Map({
+                    basemap: "streets-navigation-vector"
+                });
+
+                mapView = new MapView({
+                    container: "modalMapView",
+                    map: map,
+                    zoom: 17,
+                    ui: { components: ["zoom", "compass"] }
+                });
+
+                mapView.when(() => {
+                    loader.classList.add('opacity-0', 'pointer-events-none');
+                });
+            } else {
+                loader.classList.add('opacity-0', 'pointer-events-none');
+            }
+
+            mapView.graphics.removeAll();
+
+            const point = {
+                type: "point",
+                longitude: data.lon,
+                latitude: data.lat
+            };
+
+            const markerSymbol = {
+                type: "simple-marker",
+                color: [126, 70, 143], // Primary color
+                size: "18px",
+                outline: {
+                    color: [255, 255, 255],
+                    width: 2
+                }
+            };
+
+            const pointGraphic = new Graphic({
+                geometry: point,
+                symbol: markerSymbol,
+                popupTemplate: {
+                    title: data.facility_id,
+                    content: data.location
+                }
+            });
+
+            mapView.graphics.add(pointGraphic);
+            
+            // Wait longer for modal transition and ensure container is ready
+            setTimeout(() => {
+                if (mapView) {
+                    mapView.center = point;
+                    mapView.goTo({ target: point, zoom: 17 }, { animate: true, duration: 600 });
+                }
+            }, 500);
+        });
+    }
+
+    function closeMap() {
+        document.getElementById('mapModal').classList.add('hidden');
+        document.body.style.overflow = 'auto';
+    }
+
+    // Close on ESC
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeMap();
+    });
+</script>
+{% endblock %}

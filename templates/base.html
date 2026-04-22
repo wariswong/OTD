@@ -74,8 +74,8 @@
                 </a>
 
                 <div class="hidden lg:flex items-center space-x-6">
-                    <a class="flex items-center space-x-1 px-4 py-2 rounded-full transition-all duration-200 {% if request.endpoint == 'index' %}bg-white text-primary font-semibold{% else %}text-white hover:bg-white/10{% endif %}" 
-                       href="{{ url_for('index') }}">
+                    <a class="flex items-center space-x-1 px-4 py-2 rounded-full transition-all duration-200 {% if request.endpoint == 'shape_projects' %}bg-white text-primary font-semibold{% else %}text-white hover:bg-white/10{% endif %}" 
+                       href="{{ url_for('shape_projects') }}">
                         <i class="bi bi-house-door-fill"></i>
                         <span>Shape File Projects</span>
                     </a>
@@ -83,6 +83,11 @@
                        href="{{ url_for('projectspeanumber') }}">
                         <i class="bi bi-rocket-takeoff-fill"></i>
                         <span>PEA Transformer Projects</span>
+                    </a>
+                    <a class="flex items-center space-x-1 px-4 py-2 rounded-full transition-all duration-200 {% if request.endpoint == 'transformer_stats' %}bg-white text-primary font-semibold{% else %}text-white hover:bg-white/10{% endif %}" 
+                       href="{{ url_for('transformer_stats') }}">
+                        <i class="bi bi-bar-chart-fill"></i>
+                        <span>Transformer Statistics</span>
                     </a>
                     
                     {% if user %}
@@ -119,11 +124,14 @@
         <!-- Mobile Menu -->
         <div class="lg:hidden hidden bg-primary-dark shadow-inner text-white px-4 pb-4 animate-fade-in" id="mobile-menu">
             <div class="flex flex-col space-y-2 mt-4">
-                <a class="p-3 rounded-lg {% if request.endpoint == 'index' %}bg-white text-primary font-semibold{% else %}hover:bg-white/10{% endif %}" href="{{ url_for('index') }}">
+                <a class="p-3 rounded-lg {% if request.endpoint == 'shape_projects' %}bg-white text-primary font-semibold{% else %}hover:bg-white/10{% endif %}" href="{{ url_for('shape_projects') }}">
                     <i class="bi bi-house-door-fill mr-2"></i> Shape File Projects
                 </a>
                 <a class="p-3 rounded-lg {% if request.endpoint == 'projectspeanumber' %}bg-white text-primary font-semibold{% else %}hover:bg-white/10{% endif %}" href="{{ url_for('projectspeanumber') }}">
                     <i class="bi bi-rocket-takeoff-fill mr-2"></i> PEA Transformer Projects
+                </a>
+                <a class="p-3 rounded-lg {% if request.endpoint == 'transformer_stats' %}bg-white text-primary font-semibold{% else %}hover:bg-white/10{% endif %}" href="{{ url_for('transformer_stats') }}">
+                    <i class="bi bi-bar-chart-fill mr-2"></i> Transformer Statistics
                 </a>
                 {% if user %}
                 <div class="border-t border-white/20 pt-2 text-sm">

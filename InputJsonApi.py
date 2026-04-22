@@ -84,24 +84,63 @@ def setup_run_file_logger(facility_id, folder="logs", info_only=False):
 # -------------------------------------------------------------------
 # Globals (config)
 # -------------------------------------------------------------------
-TR_LAYER_17    = "http://gisne2.pea.co.th/arcgis/rest/services/PEA/MapServer/17/query"
-BALANCE_BASE   = "http://gisne2.pea.co.th/arcgis/rest/services/PEA/MapServer/exts/BalanceLoad/BalanceLoad"
-PEA_QUERY_BASE = "http://gisne2.pea.co.th/arcgis/rest/services/PEA_QUERY/MapServer"
+# -------------------------------------------------------------------
+# PEA GIS API Configuration Class
+# -------------------------------------------------------------------
+class PEAGisApi:
+    """
+    Class for managing PEA GIS API URLs based on region.
+    Example region: 'n1', 'n2', 'ne2', 's1', 'c1'
+    """
+    def __init__(self, region: str = "ne2"):
+        # Default to 'ne2' if region is empty
+        self.region = region if region and region.strip() else "ne2"
+        self.host = f"gis{self.region}.pea.co.th"
+        
+        logging.info(f"[GIS API] Using region: {self.region} (Host: {self.host})")
+        
+        # Base URLs
+        self.base_pea   = f"http://{self.host}/arcgis/rest/services/PEA/MapServer"
+        self.base_query = f"http://{self.host}/arcgis/rest/services/PEA_QUERY/MapServer"
+        self.base_geom  = f"http://{self.host}/arcgis/rest/services/Utilities/Geometry/GeometryServer"
+
+    @property
+    def tr_layer_url(self):
+        # เดิม TR_LAYER_17
+        return f"{self.base_pea}/17/query"
+
+    @property
+    def balance_base_url(self):
+        # เดิม BALANCE_BASE
+        return f"{self.base_pea}/exts/BalanceLoad/BalanceLoad"
+
+    @property
+    def pea_query_base_url(self):
+        # เดิม PEA_QUERY_BASE
+        return self.base_query
+
+    @property
+    def geom_buffer_url(self):
+        # เดิม GEOM_BUFFER_URL
+        return f"{self.base_geom}/buffer"
+
+    @property
+    def geom_project_url(self):
+        # เดิม GEOM_PROJECT_URL
+        return f"{self.base_geom}/project"
 
 BAL_TABLE_ID   = 31          # ตารางใน PEA_QUERY
 BAL_KEY_TABLE  = "PEAMETER"  # คีย์ฝั่งตาราง
 BAL_KEY_BAL    = "PEANO"     # คีย์ฝั่ง BalanceLoad
 
-# -------------------------------------------------------------------
-# GeometryServer buffer + Spatial Query (MV layer 26)
-# -------------------------------------------------------------------
-GEOM_BUFFER_URL = "http://gisne2.pea.co.th/arcgis/rest/services/Utilities/Geometry/GeometryServer/buffer"
 MV_LAYER_ID     = 26  # DS_MVconductor ใน PEA_QUERY/MapServer/26
-
 SR_UTM47 = 32647
-GEOM_PROJECT_URL = "http://gisne2.pea.co.th/arcgis/rest/services/Utilities/Geometry/GeometryServer/project"
 
-def project_geoms(geoms, in_wkid: int, out_wkid: int):
+# -------------------------------------------------------------------
+# GeometryServer utility functions
+# -------------------------------------------------------------------
+def project_geoms(geoms, in_wkid: int, out_wkid: int, api: PEAGisApi = None):
+    if api is None: api = PEAGisApi()
     # รับ list ของ geometry (ArcGIS JSON: points/paths/rings) แล้วเรียก GeometryServer /project ทีละชนิด
     payload = {"f":"pjson", "inSR": in_wkid, "outSR": out_wkid}
     # รองรับทั้ง point และ polyline
@@ -114,10 +153,11 @@ def project_geoms(geoms, in_wkid: int, out_wkid: int):
         geom_type = "esriGeometryPolyline"
         to_proj = {"geometryType": geom_type, "geometries": [{"paths": g["paths"]} for g in geoms]}
     payload["geometries"] = json.dumps(to_proj)
-    res = http_json_post(GEOM_PROJECT_URL, payload)
+    res = http_json_post(api.geom_project_url, payload)
     return res.get("geometries", [])
 
-def reproject_balance_to_32647(balance_json: dict) -> dict:
+def reproject_balance_to_32647(balance_json: dict, api: PEAGisApi = None) -> dict:
+    if api is None: api = PEAGisApi()
     # เดา/อ่าน SR ต้นทาง
     sr_in = (balance_json.get("spatialReference") or {}).get("wkid")
     if not sr_in:
@@ -133,11 +173,11 @@ def reproject_balance_to_32647(balance_json: dict) -> dict:
     for f in collect_features(balance_json):
         g = f.get("geometry") or {}
         if "x" in g and "y" in g:  # point
-            new = project_geoms([{"x": g["x"], "y": g["y"]}], int(sr_in), SR_UTM47)
+            new = project_geoms([{"x": g["x"], "y": g["y"]}], int(sr_in), SR_UTM47, api=api)
             if new:
                 f["geometry"]["x"], f["geometry"]["y"] = new[0]["x"], new[0]["y"]
         elif "paths" in g:         # polyline
-            new = project_geoms([{"paths": g["paths"]}], int(sr_in), SR_UTM47)
+            new = project_geoms([{"paths": g["paths"]}], int(sr_in), SR_UTM47, api=api)
             if new:
                 f["geometry"]["paths"] = new[0]["paths"]
         elif "rings" in g:         # polygon (เผื่อไว้)
@@ -148,7 +188,8 @@ def reproject_balance_to_32647(balance_json: dict) -> dict:
     balance_json["spatialReference"] = {"wkid": SR_UTM47}
     return balance_json
 
-def project_point(x: float, y: float, in_wkid: int, out_wkid: int) -> tuple[float, float]:
+def project_point(x: float, y: float, in_wkid: int, out_wkid: int, api: PEAGisApi = None) -> tuple[float, float]:
+    if api is None: api = PEAGisApi()
     params = {
         "f": "pjson",
         "inSR": in_wkid,
@@ -158,13 +199,14 @@ def project_point(x: float, y: float, in_wkid: int, out_wkid: int) -> tuple[floa
             "geometries": [{"x": x, "y": y}]
         })
     }
-    data = http_json_post(GEOM_PROJECT_URL, params)
+    data = http_json_post(api.geom_project_url, params)
     g = (data or {}).get("geometries") or []
     if not g:
         raise RuntimeError("Project point failed")
     return float(g[0]["x"]), float(g[0]["y"])
 
-def buffer_point_utm47(x: float, y: float, distance_m: float = 200.0) -> dict:
+def buffer_point_utm47(x: float, y: float, distance_m: float = 200.0, api: PEAGisApi = None) -> dict:
+    if api is None: api = PEAGisApi()
     """
     Buffer จุด (x,y) ใน WKID=32647 → คืน polygon (32647)
     """
@@ -183,16 +225,17 @@ def buffer_point_utm47(x: float, y: float, distance_m: float = 200.0) -> dict:
         "bufferSR": SR_UTM47,
         "geometries": json.dumps(in_geom)
     }
-    data = http_json_post(GEOM_BUFFER_URL, params)
+    data = http_json_post(api.geom_buffer_url, params)
     if "geometries" not in data or not data["geometries"]:
         raise RuntimeError("GeometryServer/buffer: ไม่ได้ geometry กลับมา")
     return data["geometries"][0]
 
-def spatial_query_mv_within(buffer_geom: dict, out_fields="*", where="1=1") -> dict:
+def spatial_query_mv_within(buffer_geom: dict, out_fields="*", where="1=1", api: PEAGisApi = None) -> dict:
+    if api is None: api = PEAGisApi()
     """
     Query PEA_QUERY/26 (DS_MVconductor) โดย geometry=buffer polygon (32647 ทั้งขาเข้า-ขาออก)
     """
-    layer_url = f"{PEA_QUERY_BASE}/{MV_LAYER_ID}/query"
+    layer_url = f"{api.pea_query_base_url}/{MV_LAYER_ID}/query"
     params = {
         "f": "pjson",
         "where": where,
@@ -208,6 +251,7 @@ def spatial_query_mv_within(buffer_geom: dict, out_fields="*", where="1=1") -> d
     if "error" in data:
         raise RuntimeError(f"MV(26) query error: {data['error'].get('message')}")
     return data
+
 
 def merge_balance_and_mv_to_file(balance_json_path: str, mv_featureset: dict, out_path: str) -> str:
     base = _load_json(balance_json_path)
@@ -259,7 +303,8 @@ def _sql_eq(field: str, value: str) -> str:
 # -------------------------------------------------------------------
 # Core fetchers
 # -------------------------------------------------------------------
-def get_tr_xy_by_facilityid(facilityid: str, timeout=15):
+def get_tr_xy_by_facilityid(facilityid: str, timeout=15, api: PEAGisApi = None):
+    if api is None: api = PEAGisApi()
     params = {
         "where": f"FACILITYID='{facilityid}'",
         "outFields": "*",
@@ -267,7 +312,7 @@ def get_tr_xy_by_facilityid(facilityid: str, timeout=15):
         "outSR": SR_UTM47,   # ขอ 32647 ตรง ๆ
         "f": "pjson",
     }
-    url  = f"{TR_LAYER_17}?{urllib.parse.urlencode(params)}"
+    url  = f"{api.tr_layer_url}?{urllib.parse.urlencode(params)}"
     data = http_json_get(url, timeout=timeout)
 
     feats = (data or {}).get("features") or []
@@ -283,12 +328,13 @@ def get_tr_xy_by_facilityid(facilityid: str, timeout=15):
 
     if sr_resp and int(sr_resp) != SR_UTM47:
         # กันเหนียว: project ฝั่งเรา ถ้า service เพิกเฉย outSR
-        return project_point(x_raw, y_raw, in_wkid=int(sr_resp), out_wkid=SR_UTM47)
+        return project_point(x_raw, y_raw, in_wkid=int(sr_resp), out_wkid=SR_UTM47, api=api)
 
     return x_raw, y_raw
 
 
-def fetch_balance(x: float, y: float) -> dict:
+def fetch_balance(x: float, y: float, api: PEAGisApi = None) -> dict:
+    if api is None: api = PEAGisApi()
     # ส่ง geometry เป็น 32647 และย้ำ inSR/outSR ให้คืน 32647 กลับมา
     geom = {"x": x, "y": y, "spatialReference": {"wkid": SR_UTM47}}
     params = {
@@ -297,8 +343,9 @@ def fetch_balance(x: float, y: float) -> dict:
         "outSR": SR_UTM47,
         "f": "pjson"
     }
-    url = build_url(BALANCE_BASE, params)
+    url = build_url(api.balance_base_url, params)
     return http_json_get(url)
+
 
 
 # -------------------------------------------------------------------
@@ -327,8 +374,9 @@ def extract_keys_from_balance(balance_json: dict, key_balance: str):
             s.add(ks)
     return sorted(s)
 
-def get_table_meta(table_id: int) -> dict:
-    url = f"{PEA_QUERY_BASE}/{table_id}?f=pjson"
+def get_table_meta(table_id: int, api: PEAGisApi = None) -> dict:
+    if api is None: api = PEAGisApi()
+    url = f"{api.pea_query_base_url}/{table_id}?f=pjson"
     meta = http_json_get(url)
     if "error" in meta:
         raise RuntimeError(meta["error"].get("message"))
@@ -362,9 +410,10 @@ def _sql_list(vals, as_string: bool) -> str:
         return ",".join("'{}'".format(str(v).replace("'", "''")) for v in vals)
     return ",".join(str(v) for v in vals)
 
-def query_table_join_map(keys, table_id: int, key_table: str, init_chunk_size=300) -> dict:
-    table_url = f"{PEA_QUERY_BASE}/{table_id}"
-    meta = get_table_meta(table_id)
+def query_table_join_map(keys, table_id: int, key_table: str, init_chunk_size=300, api: PEAGisApi = None) -> dict:
+    if api is None: api = PEAGisApi()
+    table_url = f"{api.pea_query_base_url}/{table_id}"
+    meta = get_table_meta(table_id, api=api)
     is_string = detect_field_is_string(meta, key_table)
     usable, skipped = split_keys_for_type(keys, is_string)
     if not usable:
@@ -425,17 +474,20 @@ def run_once_with_facilityid(
     key_table: str = BAL_KEY_TABLE,
     key_balance: str = BAL_KEY_BAL,
     save: bool = True,
-    project_id: str = None
+    project_id: str = None,
+    region: str = None
 ) -> dict:
-    x, y = get_tr_xy_by_facilityid(facilityid)
-    balance = fetch_balance(x, y)
-    balance = reproject_balance_to_32647(balance)
+    api = PEAGisApi(region)
+    logging.info(f"[run_once] Starting for facilityid={facilityid} in region={api.region}")
+    x, y = get_tr_xy_by_facilityid(facilityid, api=api)
+    balance = fetch_balance(x, y, api=api)
+    balance = reproject_balance_to_32647(balance, api=api)
     if "error" in balance:
         raise RuntimeError(balance["error"].get("message"))
     keys = extract_keys_from_balance(balance, key_balance)
     if not keys:
         raise RuntimeError(f"ไม่พบ {key_balance} ใน BalanceLoad")
-    table_map = query_table_join_map(keys, table_id=table_id, key_table=key_table, init_chunk_size=300)
+    table_map = query_table_join_map(keys, table_id=table_id, key_table=key_table, init_chunk_size=300, api=api)
     joined = join_balance_with_table(balance, table_map, key_balance=key_balance, prefix="")
 
     out_path = None
@@ -1810,8 +1862,10 @@ def log_pipeline_result(facility_id: str, result: dict):
     return msg  # เผื่อเอาไป print หรือแสดงใน GUI ได้ต่อ
 
 
-def run_pipeline_for_facilityid(facility_id: str, project_id: str):
-    logging.info(f"[Balance] Start with FACILITYID={facility_id}")
+def run_pipeline_for_facilityid(facility_id: str, project_id: str, region: str = None):
+    logging.info(f"[Balance] Start with FACILITYID={facility_id} (Region={region})")
+    
+    api = PEAGisApi(region)
 
     # 1) BalanceLoad + Join → เซฟ TRwitmeter{fac}.json (มีแต่จุด/ฟีเจอร์ตาม Balance)
     result = run_once_with_facilityid(        
@@ -1821,6 +1875,7 @@ def run_pipeline_for_facilityid(facility_id: str, project_id: str):
         key_balance=BAL_KEY_BAL,
         save=True,
         project_id=project_id,
+        region=region
     )
     base_json = result["out_path"]
     x, y = result["x"], result["y"]
@@ -1828,8 +1883,8 @@ def run_pipeline_for_facilityid(facility_id: str, project_id: str):
 
     # 2) Buffer 200m รอบ TR แล้ว query MV (layer 26) ภายใน buffer
     try:
-        buf_geom = buffer_point_utm47(x, y, distance_m=200.0)
-        mv_fs    = spatial_query_mv_within(buf_geom, out_fields="*", where="1=1")
+        buf_geom = buffer_point_utm47(x, y, distance_m=200.0, api=api)
+        mv_fs    = spatial_query_mv_within(buf_geom, out_fields="*", where="1=1", api=api)
         base_dir = os.path.join("pea_no_projects", "input", str(project_id))
         os.makedirs(base_dir, exist_ok=True)
 
