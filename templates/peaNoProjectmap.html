@@ -612,6 +612,22 @@
                     { value: 1, symbol: { type: "simple-marker", color: "#06b6d4", size: 8, outline: { color: "white", width: 1.5 } }, label: "เครื่องที่ 1" },
                     { value: 2, symbol: { type: "simple-marker", color: "#ec4899", size: 8, outline: { color: "white", width: 1.5 } }, label: "เครื่องที่ 2" }
                 ]
+            },
+            labelingInfo: [{
+                labelExpressionInfo: { expression: "$feature.voltage_text" },
+                labelPlacement: "above-right",
+                symbol: {
+                    type: "text",
+                    color: "#374151",
+                    font: { size: 9, family: "Arial", weight: "bold" },
+                    haloColor: "white",
+                    haloSize: 1
+                },
+                minScale: 10000 // Only show labels when zoomed in
+            }],
+            popupTemplate: {
+                title: "ข้อมูลมิเตอร์",
+                content: "กลุ่ม: เครื่องที่ {group}<br>แรงดัน:<br>{voltage_text}"
             }
         });
 
