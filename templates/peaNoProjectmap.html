@@ -737,7 +737,7 @@
             }).then(result => {
                 if (result.isConfirmed) {
                     Swal.fire({ title: 'กำลังประมวลผล', text: 'กรุณารอสักครู่...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-                    fetch(`/reprocess_pea_no/{{ project }}`, {
+                    fetch(`/reprocessPeaNoProject/{{ project }}`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({ sp_index: parseInt(idx) })
