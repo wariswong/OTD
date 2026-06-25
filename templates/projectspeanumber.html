@@ -14,7 +14,7 @@
             <i class="bi bi-book-half"></i>
             <span>คู่มือการใช้งาน</span>
         </a>
-        <a href="{{ url_for('createPeaNumber') }}" 
+        <a href="{{ url_for('projects.createPeaNumber') }}" 
            class="inline-flex items-center space-x-2 bg-primary hover:bg-primary-dark text-white px-6 py-3 rounded-xl shadow-md transition-all duration-200 transform hover:-translate-y-1">
             <i class="bi bi-plus-circle-fill"></i>
             <span>สร้างโปรเจคใหม่</span>
@@ -31,6 +31,7 @@
                     <th class="px-6 py-4">ชื่อโปรเจค (PEA No)</th>
                     <th class="px-6 py-4">รายละเอียด</th>
                     <th class="px-6 py-4">วันที่สร้าง</th>
+                    <th class="px-6 py-4 text-center">สถานะ</th>
                     <th class="px-6 py-4 text-center">จัดการ</th>
                 </tr>
             </thead>
@@ -39,7 +40,7 @@
                 <tr class="hover:bg-primary-light/10 transition-colors group">
                     <td class="px-6 py-4 text-sm text-gray-500">{{ loop.index }}</td>
                     <td class="px-6 py-4">
-                        <span class="font-medium text-gray-800">{{ project.project_name }}</span>
+                        <span class="font-mono font-semibold text-primary">{{ project.project_name }}</span>
                     </td>
                     <td class="px-6 py-4 text-sm text-gray-500">
                         <div class="max-w-xs truncate" title="{{ project.project_detail }}">
@@ -50,21 +51,38 @@
                         {{ project.created_at.strftime('%Y-%m-%d %H:%M') if project.created_at else '-' }}
                     </td>
                     <td class="px-6 py-4 text-center">
-                        <div class="flex items-center justify-center space-x-2">
-                            <button onclick="confirmDelete({{ project.id }})" 
-                                    class="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="ลบ">
+                        {% if project.has_output %}
+                        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">
+                            <span class="w-1.5 h-1.5 mr-1.5 rounded-full bg-green-500"></span>
+                            มีผลลัพธ์แล้ว
+                        </span>
+                        {% else %}
+                        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-500">
+                            <span class="w-1.5 h-1.5 mr-1.5 rounded-full bg-gray-400"></span>
+                            ยังไม่ประมวลผล
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 text-center">
+                        <div class="flex items-center justify-center space-x-1">
+                            <button onclick="confirmDelete({{ project.id }})"
+                                    class="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="ลบโปรเจค">
                                 <i class="bi bi-trash text-lg"></i>
                             </button>
-                            
-                            <button onclick="runProject({{ project.id }})" 
+
+                            <button onclick="runProject({{ project.id }})"
                                     class="p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors" title="ประมวลผล">
-                                <i class="bi bi-play-fill text-xl"></i>
+                                <i class="bi bi-play-circle-fill text-xl"></i>
                             </button>
-                            
+
                             {% if project.has_output %}
-                            <a href="{{ url_for('pea_no_project_map_view', project_id=project.id) }}" 
-                               class="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors" title="ดูแผนที่">
-                                <i class="bi bi-eye-fill text-lg"></i>
+                            <a href="{{ url_for('projects.pea_no_project_map_view', project_id=project.id) }}"
+                               class="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors" title="ดูแผนที่ผลลัพธ์">
+                                <i class="bi bi-map-fill text-lg"></i>
+                            </a>
+                            <a href="{{ url_for('projects.download_pea_no_project_files', project_id=project.id) }}"
+                               class="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="ดาวน์โหลดไฟล์ผลลัพธ์">
+                                <i class="bi bi-download text-lg"></i>
                             </a>
                             {% endif %}
                         </div>
@@ -73,8 +91,14 @@
                 {% endfor %}
                 {% if not projects %}
                 <tr>
-                    <td colspan="5" class="px-6 py-12 text-center text-gray-500 italic">
-                        ยังไม่มีโปรเจคในขณะนี้
+                    <td colspan="6" class="px-6 py-16 text-center">
+                        <div class="flex flex-col items-center space-y-3 text-gray-400">
+                            <i class="bi bi-folder2-open text-5xl"></i>
+                            <p class="text-lg font-medium">ยังไม่มีโปรเจคในขณะนี้</p>
+                            <a href="{{ url_for('projects.createPeaNumber') }}" class="text-sm text-primary hover:underline">
+                                + สร้างโปรเจคใหม่
+                            </a>
+                        </div>
                     </td>
                 </tr>
                 {% endif %}

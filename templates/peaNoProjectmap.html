@@ -1,775 +1,944 @@
 {% extends "base.html" %}
 
-{% block title %}แผนที่และผลการประมวลผล (Transformer) | GIS OTD{% endblock %}
+{% block title %}แผนที่และผลการประมวลผล | โปรเจค #{{ project }} | GIS OTD{% endblock %}
 
-{% block container_class %}max-w-[96%] mx-auto px-4 md:px-6{% endblock %}
-
+{% block container_class %}max-w-[98%] mx-auto px-2 md:px-4{% endblock %}
 
 {% block head %}
   <link rel="stylesheet" href="https://js.arcgis.com/4.29/esri/themes/light/main.css">
   <script src="https://js.arcgis.com/4.29/"></script>
   <style>
-
-    #viewDiv {
-      height: 750px;
-      width: 100%;
-      border-radius: 1.5rem;
-    }
+    #viewDiv { height: 75vh; min-height: 500px; width: 100%; border-radius: 1.5rem; }
     .esri-ui .esri-component { box-shadow: none !important; border-radius: 12px !important; overflow: hidden; }
     .esri-legend { border-radius: 16px !important; margin: 10px !important; border: 1px solid rgba(0,0,0,0.05) !important; }
+    #mapInfoPanel { transition: all 0.3s ease; max-height: 380px; }
+    #mapInfoPanel.collapsed { max-height: 44px; overflow: hidden; }
+    .cached-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #22c55e; margin-right: 4px; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    .animate-fade-in { animation: fadeIn 0.35s ease both; }
+    .result-section { animation: fadeIn 0.4s ease both; }
   </style>
 {% endblock %}
 
 {% block content %}
-<div class="mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-    <div class="flex items-center space-x-4">
-        <a href="/projectspeanumber" class="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-white shadow-sm border border-gray-100 text-gray-500 hover:text-primary transition-all">
-            <i class="bi bi-arrow-left"></i>
-        </a>
-        <div>
-            <nav class="flex mb-1" aria-label="Breadcrumb">
-                <ol class="inline-flex items-center space-x-1 text-xs text-gray-400">
-                    <li class="inline-flex items-center">
-                        <a href="/projectspeanumber" class="hover:text-primary">หน้าแรก</a>
-                    </li>
-                    <li>
-                        <div class="flex items-center">
-                            <i class="bi bi-chevron-right mx-1"></i>
-                            <span>แผนที่ผลลัพธ์ Transformer</span>
-                        </div>
-                    </li>
-                </ol>
-            </nav>
-            <h1 class="text-2xl font-bold text-gray-800">โปรเจค <span class="text-primary">#{{ project }}</span></h1>
+
+{# ===== TOP TOOLBAR ===== #}
+<div class="mb-4 space-y-2">
+  {# Row 1: title + action buttons #}
+  <div class="flex items-center justify-between gap-3">
+    <div class="flex items-center gap-3">
+      <a href="/projectspeanumber"
+         class="flex items-center justify-center w-9 h-9 rounded-xl bg-white shadow-sm border border-gray-100 text-gray-500 hover:text-primary transition-all shrink-0">
+        <i class="bi bi-arrow-left text-sm"></i>
+      </a>
+      <div>
+        <nav class="flex mb-0.5">
+          <ol class="inline-flex items-center space-x-1 text-[10px] text-gray-400">
+            <li><a href="/projectspeanumber" class="hover:text-primary">รายการโปรเจค</a></li>
+            <li><div class="flex items-center"><i class="bi bi-chevron-right mx-1"></i><span>ผลลัพธ์</span></div></li>
+          </ol>
+        </nav>
+        <h1 class="text-lg font-black text-gray-800 leading-tight">
+          โปรเจค <span class="text-primary">#{{ project }}</span>
+          {% if result.tr_pea_no and result.tr_pea_no != 'transformerPEA_No' %}
+            <span class="ml-2 text-sm font-bold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-lg">{{ result.tr_pea_no }}</span>
+          {% endif %}
+        </h1>
+      </div>
+    </div>
+    
+    <div class="flex items-center gap-2">
+      <div class="flex flex-wrap items-center gap-2">
+      {# Selector #}
+      <div class="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-sm min-w-[240px]">
+        <i class="bi bi-pin-map text-primary text-sm shrink-0"></i>
+        <select id="splittingSelector"
+                class="flex-1 text-sm font-medium text-gray-700 bg-transparent outline-none cursor-pointer">
+          <option value="" disabled selected>-- เลือกจุดแบ่งโหลด --</option>
+        </select>
+      </div>
+
+      {# Detail strip — hidden until index selected #}
+      <div id="indexDetailStrip"
+          class="hidden items-center gap-0 bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden text-xs divide-x divide-gray-100">
+        <div class="px-3 py-2 flex items-center gap-1.5">
+          <i class="bi bi-arrows-angle-contract text-gray-400"></i>
+          <span class="text-gray-400">ΔLoad</span>
+          <span id="detail-delta" class="font-black text-gray-700 ml-1">—</span>
+          <span class="text-gray-400">kW</span>
         </div>
+        <div class="px-3 py-2 flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-cyan-400 shrink-0"></span>
+          <span class="text-gray-400">G1</span>
+          <span id="detail-g1" class="font-black text-cyan-600 ml-1">—</span>
+          <span class="text-gray-400">kW</span>
+        </div>
+        <div class="px-3 py-2 flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-pink-400 shrink-0"></span>
+          <span class="text-gray-400">G2</span>
+          <span id="detail-g2" class="font-black text-pink-500 ml-1">—</span>
+          <span class="text-gray-400">kW</span>
+        </div>
+        <div class="px-3 py-2 text-gray-300 font-mono" id="detail-coords">—</div>
+        <div class="px-3 py-2" id="detail-status"></div>
+      </div>
     </div>
-    <div class="flex flex-wrap items-center gap-3">
-        <button id="reprocessBtn" class="inline-flex items-center px-5 py-2.5 bg-yellow-500 hover:bg-yellow-600 text-white text-sm font-bold rounded-xl shadow-lg shadow-yellow-500/20 transition-all active:scale-95">
-            <i class="bi bi-arrow-repeat mr-2"></i> RE-PROCESS
-        </button>
-        <a href="{{ url_for('download_pea_no_project_files', project_id=project) }}" class="inline-flex items-center px-5 py-2.5 bg-primary hover:bg-primary-dark text-white text-sm font-bold rounded-xl shadow-lg shadow-primary/20 transition-all active:scale-95">
-            <i class="bi bi-download mr-2"></i> ดาวน์โหลดผลลัพธ์
-        </a>
+      <button id="reprocessBtn"
+              class="inline-flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold rounded-xl shadow-md shadow-amber-500/20 transition-all active:scale-95">
+        <i class="bi bi-arrow-repeat"></i>
+        <span id="reprocessBtnText">RE-PROCESS</span>
+      </button>
+      <a href="{{ url_for('projects.download_pea_no_project_files', project_id=project) }}"
+         class="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-dark text-white text-sm font-bold rounded-xl shadow-md shadow-primary/20 transition-all active:scale-95">
+        <i class="bi bi-download"></i>ดาวน์โหลด
+      </a>
     </div>
+  </div>
+
+  {# Row 2: index selector + inline detail strip #}
+  <!-- <div class="flex flex-wrap items-center gap-2">
+    {# Selector #}
+    <div class="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-sm min-w-[240px]">
+      <i class="bi bi-pin-map text-primary text-sm shrink-0"></i>
+      <select id="splittingSelector"
+              class="flex-1 text-sm font-medium text-gray-700 bg-transparent outline-none cursor-pointer">
+        <option value="" disabled selected>-- เลือกจุดแบ่งโหลด --</option>
+      </select>
+    </div>
+
+    {# Detail strip — hidden until index selected #}
+    <div id="indexDetailStrip"
+         class="hidden items-center gap-0 bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden text-xs divide-x divide-gray-100">
+      <div class="px-3 py-2 flex items-center gap-1.5">
+        <i class="bi bi-arrows-angle-contract text-gray-400"></i>
+        <span class="text-gray-400">ΔLoad</span>
+        <span id="detail-delta" class="font-black text-gray-700 ml-1">—</span>
+        <span class="text-gray-400">kW</span>
+      </div>
+      <div class="px-3 py-2 flex items-center gap-1.5">
+        <span class="w-2 h-2 rounded-full bg-cyan-400 shrink-0"></span>
+        <span class="text-gray-400">G1</span>
+        <span id="detail-g1" class="font-black text-cyan-600 ml-1">—</span>
+        <span class="text-gray-400">kW</span>
+      </div>
+      <div class="px-3 py-2 flex items-center gap-1.5">
+        <span class="w-2 h-2 rounded-full bg-pink-400 shrink-0"></span>
+        <span class="text-gray-400">G2</span>
+        <span id="detail-g2" class="font-black text-pink-500 ml-1">—</span>
+        <span class="text-gray-400">kW</span>
+      </div>
+      <div class="px-3 py-2 text-gray-300 font-mono" id="detail-coords">—</div>
+      <div class="px-3 py-2" id="detail-status"></div>
+    </div>
+  </div> -->
 </div>
 
-<div class="grid grid-cols-1 xl:grid-cols-12 gap-6 mb-8">
-    <!-- Map Section -->
-    <div class="xl:col-span-9">
-        <div class="bg-white rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100 overflow-hidden relative group">
-            <div class="absolute top-4 left-4 z-10 px-3 py-1.5 bg-white/90 backdrop-blur shadow-sm rounded-lg border border-gray-100 animate-fade-in">
-                <div class="flex items-center space-x-2">
-                    <span class="flex h-2 w-2 rounded-full bg-green-500 animate-pulse"></span>
-                    <span class="text-[10px] font-bold text-gray-600 uppercase tracking-widest">Transformer Map View</span>
-                </div>
-            </div>
-            <div id="viewDiv"></div>
-        </div>
-    </div>
+{# ===== MAP (FULL WIDTH) ===== #}
+<div class="relative mb-6">
+  <div class="bg-white rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100 overflow-hidden">
+    {# Map status badge #}
+    <!-- <div class="absolute top-4 left-4 z-10 px-3 py-1.5 bg-white/90 backdrop-blur shadow-sm rounded-lg border border-gray-100">
+      <div class="flex items-center space-x-2">
+        <span class="flex h-2 w-2 rounded-full bg-green-500 animate-pulse"></span>
+        <span class="text-[10px] font-bold text-gray-600 uppercase tracking-widest">Live Map View</span>
+      </div>
+    </div> -->
 
-    <!-- Controls Section -->
-    <div class="xl:col-span-3 space-y-6">
-        <div class="bg-white rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100 p-6">
-            <h3 class="font-black text-gray-700 mb-4 flex items-center">
-                <i class="bi bi-pin-map text-primary mr-2"></i>
-                เลือกจุดแบ่งโหลด
-            </h3>
-            <div class="relative group">
-                <select id="splittingSelector" class="w-full pl-4 pr-10 py-3.5 rounded-2xl border border-gray-200 focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all outline-none appearance-none bg-gray-50 text-sm font-medium text-gray-700 cursor-pointer">
-                    <option selected disabled>-- เลือกจุดแบ่งโหลด --</option>
-                </select>
-                <div class="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400 group-hover:text-primary transition-colors">
-                    <i class="bi bi-chevron-down"></i>
-                </div>
-            </div>
-            
-            <div id="coordinateDisplay" class="mt-4 p-4 rounded-2xl bg-gray-50 border border-gray-100 text-xs text-gray-500 leading-relaxed font-medium">
-                <div class="flex items-center text-gray-400 mb-2">
-                    <i class="bi bi-info-circle mr-1.5"></i>
-                    <span>รายละเอียดจุดที่เลือก</span>
-                </div>
-                <div id="coordValues" class="space-y-1">
-                    พิกัดและข้อมูลโหลดจะแสดงที่นี่
-                </div>
-            </div>
+    {# Collapsible featureGroups overlay (top-right) #}
+    <!-- <div id="mapInfoPanel"
+         class="absolute top-4 right-4 z-10 bg-white/95 backdrop-blur shadow-lg rounded-2xl border border-gray-100 w-64 overflow-hidden flex flex-col"
+         style="max-height: calc(75vh - 80px);">
+      {# Header / toggle #}
+      <button id="toggleInfoPanel"
+              class="w-full flex items-center justify-between px-3 py-2.5 bg-gray-50 border-b border-gray-100 hover:bg-gray-100 transition-colors shrink-0">
+        <div class="flex items-center gap-2">
+          <i class="bi bi-geo text-primary text-sm"></i>
+          <span class="text-[11px] font-black text-gray-700 uppercase tracking-widest">ตำแหน่งจุดสำคัญ</span>
         </div>
-        
-        <div class="bg-gradient-to-br from-indigo-500 to-indigo-700 rounded-3xl p-6 text-white shadow-lg shadow-indigo-500/30 relative overflow-hidden group">
-            <div class="absolute -right-4 -bottom-4 text-white/10 text-8xl rotate-12 transition-transform group-hover:scale-110 group-hover:rotate-6">
-                <i class="bi bi-cpu"></i>
-            </div>
-            <p class="text-xs font-medium leading-relaxed italic relative z-10 opacity-90">
-                "การประมวลผลตามหมายเลขหม้อแปลงไฟฟ้า ช่วยให้สามารถระบุจุดที่เหมาะสมที่สุดบนโครงข่ายเดิมเพื่อปรับปรุงการจ่ายไฟได้แม่นยำ"
-            </p>
+        <i id="toggleIcon" class="bi bi-chevron-up text-gray-400 text-xs transition-transform duration-200"></i>
+      </button>
+      {# Body - scrollable #}
+      <div id="infoPanelBody" class="overflow-y-auto">
+        <div id="featureGroupsInfo" class="p-3 space-y-1 text-xs">
+          <div class="flex items-center gap-2 text-gray-300 py-1">
+            <i class="bi bi-hourglass-split animate-pulse"></i>
+            <span>กำลังโหลดข้อมูล...</span>
+          </div>
         </div>
-    </div>
+      </div>
+    </div> -->
+
+    <div id="viewDiv"></div>
+  </div>
 </div>
 
-<!-- Switcher & Title -->
-<div class="flex flex-col md:flex-row justify-between items-end mb-8 gap-4">
-    <div>
-        <h2 class="text-2xl font-black text-gray-800 tracking-tight">สรุปผลการวิเคราะห์</h2>
-        <p class="text-sm text-gray-400 font-medium">เปรียบเทียบข้อมูลก่อนและหลังการปรับปรุงระบบ (By Transformer)</p>
-    </div>
-    <div class="bg-gray-100 p-1.5 rounded-2xl border border-gray-200 flex transition-all">
-        <button id="showCardBtn" class="flex items-center space-x-2 px-5 py-2 rounded-xl text-sm font-bold transition-all bg-white text-primary shadow-sm border border-gray-100">
-            <i class="bi bi-grid-3x3-gap"></i>
-            <span>มุมมองการ์ด</span>
-        </button>
-        <button id="showTableBtn" class="flex items-center space-x-2 px-5 py-2 rounded-xl text-sm font-bold transition-all text-gray-500 hover:text-gray-700">
-            <i class="bi bi-table"></i>
-            <span>มุมมองตาราง</span>
-        </button>
-    </div>
+{# ===== RESULTS HEADER + VIEW TOGGLE ===== #}
+<div class="flex flex-col md:flex-row justify-between items-end mb-6 gap-4">
+  <div>
+    <h2 class="text-2xl font-black text-gray-800 tracking-tight">สรุปผลการวิเคราะห์</h2>
+    <p class="text-sm text-gray-400 font-medium">เปรียบเทียบข้อมูลก่อนและหลังการปรับปรุงระบบ (By Transformer)</p>
+  </div>
+  <div class="bg-gray-100 p-1.5 rounded-2xl border border-gray-200 flex">
+    <button id="showCardBtn"
+            class="flex items-center space-x-2 px-5 py-2 rounded-xl text-sm font-bold transition-all bg-white text-primary shadow-sm border border-gray-100">
+      <i class="bi bi-grid-3x3-gap"></i><span>มุมมองการ์ด</span>
+    </button>
+    <button id="showTableBtn"
+            class="flex items-center space-x-2 px-5 py-2 rounded-xl text-sm font-bold transition-all text-gray-500 hover:text-gray-700">
+      <i class="bi bi-table"></i><span>มุมมองตาราง</span>
+    </button>
+  </div>
 </div>
 
+{# ===== DASHBOARD SECTIONS ===== #}
 <div id="dashboardSection">
-    <!-- Card Dashboard View -->
-    <div id="cardView" class="animate-fade-in">
-        <div class="mb-10">
-            <div class="flex items-center space-x-3 mb-6">
-                <span class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold">01</span>
-                <h3 class="text-lg font-black text-gray-800 uppercase tracking-wide">ข้อมูลระบบจำหน่าย</h3>
+
+  {# Card View #}
+  <div id="cardView" class="result-section">
+
+    {# 01 ข้อมูลระบบจำหน่าย #}
+    <div class="mb-10">
+      <div class="flex items-center space-x-3 mb-6">
+        <span class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold text-sm">01</span>
+        <h3 class="text-lg font-black text-gray-800 uppercase tracking-wide">ข้อมูลระบบจำหน่าย</h3>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        {# Before card #}
+        <div class="bg-white rounded-[2.5rem] shadow-xl shadow-gray-200/50 border border-gray-100 overflow-hidden group">
+          <div class="bg-gray-500 py-5 px-7 text-white relative">
+            <h4 class="text-lg font-black tracking-tight">ก่อนปรับปรุง</h4>
+            <p class="text-xs opacity-70 mt-0.5">สภาพระบบเดิม (Initial State)</p>
+            <div class="absolute right-6 top-1/2 -translate-y-1/2 text-white/20 text-4xl">
+              <i class="bi bi-clock-history"></i>
             </div>
-            
-            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <!-- ก่อนปรับปรุง -->
-                <div class="bg-white rounded-[2.5rem] shadow-xl shadow-gray-200/50 border border-gray-100 overflow-hidden group">
-                    <div class="bg-gray-400 py-6 px-8 text-white relative">
-                        <h4 class="text-lg font-black tracking-tight">ก่อนปรับปรุง</h4>
-                        <div class="absolute right-8 top-1/2 -translate-y-1/2 text-white/20 text-4xl">
-                            <i class="bi bi-clock-history"></i>
-                        </div>
-                    </div>
-                    <div class="p-8">
-                        <div class="flex items-center mb-8 p-5 bg-gray-50 rounded-3xl border border-gray-100 group-hover:bg-gray-100 transition-colors">
-                            <div class="w-14 h-14 rounded-2xl bg-white shadow-sm flex items-center justify-center text-yellow-500 text-2xl mr-5">
-                                <i class="bi bi-lightning-charge-fill animate-pulse"></i>
-                            </div>
-                            <div>
-                                <p class="text-[10px] text-gray-400 uppercase font-black tracking-widest mb-1">TR PEA NO</p>
-                                <p class="text-2xl font-black text-gray-800">{{ result.tr_pea_no }}</p>
-                            </div>
-                        </div>
-                        
-                        <div class="space-y-5">
-                            <div class="flex justify-between items-center group/item">
-                                <span class="text-gray-500 font-medium text-sm">ขนาดหม้อแปลง</span>
-                                <span class="font-black text-gray-800 text-xl">{{ result.tr_kva }} <small class="text-xs font-medium text-gray-400 ml-1">kVA</small></span>
-                            </div>
-                            <div class="h-px bg-gray-50"></div>
-                            <div class="flex justify-between items-center group/item">
-                                <span class="text-gray-500 font-medium text-sm">Loss รวม</span>
-                                <span class="font-black text-gray-800 text-xl">{{ result.tr_loss }} <small class="text-xs font-medium text-gray-400 ml-1">kWh</small></span>
-                            </div>
-                            <div class="h-px bg-gray-50"></div>
-                            <div class="flex justify-between items-center group/item">
-                                <span class="text-gray-500 font-medium text-sm">ความยาวไกลสุด</span>
-                                <span class="font-black text-gray-800 text-xl">{{ result.tr_Line_lengh }} <small class="text-xs font-medium text-gray-400 ml-1">m</small></span>
-                            </div>
-                            <div class="h-px bg-gray-50"></div>
-                            <div class="flex justify-between items-center group/item">
-                                <span class="text-gray-500 font-medium text-sm">เปอร์เซ็นโหลด</span>
-                                <span class="font-black text-gray-800 text-xl">{{ result.tr_PLOADPEAK }} <small class="text-xs font-medium text-gray-400 ml-1">%</small></span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- เครื่อง 1 -->
-                <div class="bg-white rounded-[2.5rem] shadow-xl shadow-gray-200/50 border-2 border-cyan-50 overflow-hidden relative group">
-                    <div class="bg-cyan-500 py-6 px-8 text-white relative">
-                        <div class="flex items-center space-x-3">
-                            <span class="w-8 h-8 rounded-lg bg-white/20 backdrop-blur flex items-center justify-center text-xs font-black">01</span>
-                            <h4 class="text-lg font-black tracking-tight">หลังปรับปรุง (เครื่อง 1)</h4>
-                        </div>
-                        <div class="absolute right-8 top-1/2 -translate-y-1/2 text-white/20 text-4xl">
-                            <i class="bi bi-cpu"></i>
-                        </div>
-                    </div>
-                    <div class="p-8">
-                        <div class="mb-8">
-                            <div class="flex justify-between items-end mb-3">
-                                <span class="text-sm font-bold text-gray-700">โหลดหม้อแปลงปัจจุบัน</span>
-                                <span class="text-2xl font-black text-cyan-600 tracking-tighter">{{ result.g1_load }} <small class="text-xs font-bold -ml-1">kW</small></span>
-                            </div>
-                            {% set percent1 = (result.g1_load/(result.rating_g1*0.875)*100)|round(1) %}
-                            <div class="w-full bg-gray-100 rounded-2xl h-4 overflow-hidden border border-gray-50 p-1">
-                                <div class="h-full {% if percent1 >= 85 %}bg-red-500{% elif percent1 >= 60 %}bg-yellow-500{% else %}bg-cyan-500{% endif %} rounded-xl transition-all duration-1000 shadow-[0_0_8px_rgba(6,182,212,0.5)]" style="width: {{ percent1 }}%"></div>
-                            </div>
-                            <div class="flex justify-between mt-2 px-1">
-                                <span class="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Load Capacity</span>
-                                <span class="text-[10px] font-black text-cyan-600">{{ percent1 }}%</span>
-                            </div>
-                        </div>
-
-                        <div class="mb-10 p-6 bg-cyan-50/30 rounded-3xl border border-cyan-100/50">
-                            <div class="flex items-center justify-between mb-4">
-                                <span class="text-xs text-cyan-700 font-black uppercase tracking-widest">คาดการณ์อนาคต (4 ปี)</span>
-                                <span class="text-xl font-black text-primary">{{ result.future_g1_load }} <small class="text-[10px] font-bold">kW</small></span>
-                            </div>
-                            {% set percent2 = (result.future_g1_load/(result.rating_g1*0.875)*100)|round(1) %}
-                            <div class="w-full bg-white/50 rounded-xl h-2.5 overflow-hidden">
-                                <div class="h-full bg-primary rounded-full transition-all duration-1000 delay-300" style="width: {{ percent2 }}%"></div>
-                            </div>
-                        </div>
-
-                        <div class="space-y-4">
-                            <div class="flex justify-between items-center py-2 px-4 rounded-xl border border-gray-50 hover:bg-gray-50 transition-colors">
-                                <span class="text-gray-400 text-[11px] font-bold uppercase tracking-widest">หม้อแปลงแนะนำ</span>
-                                <span class="font-black text-gray-800">{{ result.rating_g1 }} <small class="text-[10px] text-gray-400">kVA</small></span>
-                            </div>
-                            <div class="flex justify-between items-center py-2 px-4 rounded-xl border border-gray-50 hover:bg-gray-50 transition-colors">
-                                <span class="text-gray-400 text-[11px] font-bold uppercase tracking-widest">Total Loss</span>
-                                <span class="font-black text-gray-800 text-lg">{{ result.total_system_loss_g1 }} <small class="text-[10px] text-gray-400">kW</small></span>
-                            </div>
-                            <div class="flex justify-between items-center py-2 px-4 rounded-xl border border-gray-50 hover:bg-gray-50 transition-colors">
-                                <span class="text-gray-400 text-[11px] font-bold uppercase tracking-widest">Distance</span>
-                                <span class="font-black text-gray-800 text-lg">{{ result.Max_Distance_Group1 }} <small class="text-[10px] text-gray-400">m</small></span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- เครื่อง 2 -->
-                <div class="bg-white rounded-[2.5rem] shadow-xl shadow-gray-200/50 border-2 border-pink-50 overflow-hidden group">
-                    <div class="bg-pink-400 py-6 px-8 text-white relative">
-                        <div class="flex items-center space-x-3">
-                            <span class="w-8 h-8 rounded-lg bg-white/20 backdrop-blur flex items-center justify-center text-xs font-black">02</span>
-                            <h4 class="text-lg font-black tracking-tight">หลังปรับปรุง (เครื่อง 2)</h4>
-                        </div>
-                        <div class="absolute right-8 top-1/2 -translate-y-1/2 text-white/20 text-4xl">
-                            <i class="bi bi-cpu-fill"></i>
-                        </div>
-                    </div>
-                    <div class="p-8">
-                        <div class="mb-8">
-                            <div class="flex justify-between items-end mb-3">
-                                <span class="text-sm font-bold text-gray-700">โหลดหม้อแปลงปัจจุบัน</span>
-                                <span class="text-2xl font-black text-pink-500 tracking-tighter">{{ result.g2_load }} <small class="text-xs font-bold -ml-1">kW</small></span>
-                            </div>
-                            {% set percent3 = (result.g2_load/(result.rating_g2*0.875)*100)|round(1) %}
-                            <div class="w-full bg-gray-100 rounded-2xl h-4 overflow-hidden border border-gray-50 p-1">
-                                <div class="h-full {% if percent3 >= 85 %}bg-red-500{% elif percent3 >= 60 %}bg-yellow-500{% else %}bg-pink-400{% endif %} rounded-xl transition-all duration-1000 shadow-[0_0_8px_rgba(244,143,177,0.5)]" style="width: {{ percent3 }}%"></div>
-                            </div>
-                            <div class="flex justify-between mt-2 px-1">
-                                <span class="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Load Capacity</span>
-                                <span class="text-[10px] font-black text-pink-500">{{ percent3 }}%</span>
-                            </div>
-                        </div>
-
-                        <div class="mb-10 p-6 bg-pink-50/30 rounded-3xl border border-pink-100/50">
-                            <div class="flex items-center justify-between mb-4">
-                                <span class="text-xs text-pink-700 font-black uppercase tracking-widest">คาดการณ์อนาคต (4 ปี)</span>
-                                <span class="text-xl font-black text-primary">{{ result.future_g2_load }} <small class="text-[10px] font-bold">kW</small></span>
-                            </div>
-                            {% set percent4 = (result.future_g2_load/(result.rating_g2*0.875)*100)|round(1) %}
-                            <div class="w-full bg-white/50 rounded-xl h-2.5 overflow-hidden">
-                                <div class="h-full bg-primary rounded-full transition-all duration-1000 delay-300" style="width: {{ percent4 }}%"></div>
-                            </div>
-                        </div>
-
-                        <div class="space-y-4">
-                            <div class="flex justify-between items-center py-2 px-4 rounded-xl border border-gray-50 hover:bg-gray-50 transition-colors">
-                                <span class="text-gray-400 text-[11px] font-bold uppercase tracking-widest">หม้อแปลงแนะนำ</span>
-                                <span class="font-black text-gray-800">{{ result.rating_g2 }} <small class="text-[10px] text-gray-400">kVA</small></span>
-                            </div>
-                            <div class="flex justify-between items-center py-2 px-4 rounded-xl border border-gray-50 hover:bg-gray-50 transition-colors">
-                                <span class="text-gray-400 text-[11px] font-bold uppercase tracking-widest">Total Loss</span>
-                                <span class="font-black text-gray-800 text-lg">{{ result.total_system_loss_g2 }} <small class="text-[10px] text-gray-400">kW</small></span>
-                            </div>
-                            <div class="flex justify-between items-center py-2 px-4 rounded-xl border border-gray-50 hover:bg-gray-50 transition-colors">
-                                <span class="text-gray-400 text-[11px] font-bold uppercase tracking-widest">Distance</span>
-                                <span class="font-black text-gray-800 text-lg">{{ result.Max_Distance_Group2 }} <small class="text-[10px] text-gray-400">m</small></span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+          </div>
+          <div class="p-7">
+            <div class="flex items-center mb-7 p-4 bg-gray-50 rounded-2xl border border-gray-100">
+              <div class="w-12 h-12 rounded-xl bg-white shadow-sm flex items-center justify-center text-yellow-500 text-xl mr-4">
+                <i class="bi bi-lightning-charge-fill animate-pulse"></i>
+              </div>
+              <div>
+                <p class="text-[10px] text-gray-400 uppercase font-black tracking-widest mb-0.5">TR PEA NO</p>
+                <p class="text-xl font-black text-gray-800" id="display-tr-pea-no">{{ result.tr_pea_no }}</p>
+              </div>
             </div>
+            <div class="space-y-4">
+              <div class="flex justify-between items-center">
+                <span class="text-gray-500 font-medium text-sm">ขนาดหม้อแปลง</span>
+                <span class="font-black text-gray-800 text-lg" id="display-tr-kva">{{ result.tr_kva }} <small class="text-xs font-medium text-gray-400">kVA</small></span>
+              </div>
+              <div class="h-px bg-gray-50"></div>
+              <div class="flex justify-between items-center">
+                <span class="text-gray-500 font-medium text-sm">Loss รวม</span>
+                <span class="font-black text-gray-800 text-lg" id="display-tr-loss">{{ result.tr_loss }} <small class="text-xs font-medium text-gray-400">kW</small></span>
+              </div>
+              <div class="h-px bg-gray-50"></div>
+              <div class="flex justify-between items-center">
+                <span class="text-gray-500 font-medium text-sm">ความยาวไกลสุด</span>
+                <span class="font-black text-gray-800 text-lg" id="display-tr-linelen">{{ result.tr_Line_lengh }} <small class="text-xs font-medium text-gray-400">m</small></span>
+              </div>
+              <div class="h-px bg-gray-50"></div>
+              <div class="flex justify-between items-center">
+                <span class="text-gray-500 font-medium text-sm">เปอร์เซ็นโหลด</span>
+                <span class="font-black text-lg" id="display-tr-pload">
+                  {% set pload = result.tr_PLOADPEAK|float %}
+                  <span class="{{ 'text-red-500' if pload >= 85 else ('text-amber-500' if pload >= 60 else 'text-gray-800') }}">{{ result.tr_PLOADPEAK }}</span>
+                  <small class="text-xs font-medium text-gray-400">%</small>
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div>
-            <div class="flex items-center space-x-3 mb-8 mt-16">
-                <span class="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold">02</span>
-                <h3 class="text-lg font-black text-gray-800 uppercase tracking-wide">การบาลานซ์โหลด (Phase Balancing)</h3>
+        {# Group 1 card #}
+        <div class="bg-white rounded-[2.5rem] shadow-xl shadow-gray-200/50 border-2 border-cyan-50 overflow-hidden relative group">
+          <div class="bg-cyan-500 py-5 px-7 text-white relative">
+            <div class="flex items-center space-x-3">
+              <span class="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center text-xs font-black">01</span>
+              <div>
+                <h4 class="text-lg font-black tracking-tight">หลังปรับปรุง (เครื่อง 1)</h4>
+                <p class="text-xs opacity-70">Optimized Group 1</p>
+              </div>
             </div>
-            
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                <!-- ก่อนบาลานซ์ -->
-                <div class="bg-white rounded-[3rem] shadow-xl shadow-gray-200/50 border border-gray-100 overflow-hidden relative">
-                    <div class="bg-gray-100 py-4 px-10 border-b border-gray-200/50">
-                        <div class="flex justify-between items-center">
-                            <span class="text-xs font-black text-gray-400 uppercase tracking-[0.2em]">Initial State</span>
-                            <span class="text-sm font-bold text-gray-600">ก่อนบาลานซ์</span>
-                        </div>
-                    </div>
-                    <div class="p-10 grid grid-cols-1 md:grid-cols-2 gap-12 relative">
-                        <div class="absolute left-1/2 top-1/2 -ms-px -translate-y-1/2 h-4/5 w-px bg-gradient-to-b from-transparent via-gray-100 to-transparent hidden md:block"></div>
-                        
-                        <div>
-                            <div class="flex items-center space-x-2 mb-6">
-                                <div class="w-2 h-6 bg-cyan-400 rounded-full"></div>
-                                <h4 class="font-black text-gray-700 tracking-tight">เครื่องที่ 1</h4>
-                            </div>
-                            {% set max_g1 = [result.group1_load_balance_before.A, result.group1_load_balance_before.B, result.group1_load_balance_before.C]|max %}
-                            {% for phase in ['A', 'B', 'C'] %}
-                                {% set value = result.group1_load_balance_before[phase] %}
-                                {% set percent = ((value / (result.rating_g1*0.875/3)*100))|round(1) if max_g1 else 0 %}
-                                <div class="mb-5">
-                                    <div class="flex justify-between text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 px-1">
-                                        <span>Phase {{ phase }}</span>
-                                        <span class="text-gray-700">{{ value }} <small>kW</small></span>
-                                    </div>
-                                    <div class="w-full bg-gray-50 h-2.5 rounded-full overflow-hidden p-0.5 border border-gray-100">
-                                        <div class="h-full {% if phase == 'A' %}bg-red-400{% elif phase == 'B' %}bg-yellow-400 shadow-[0_0_10px_rgba(253,224,71,0.4)]{% else %}bg-blue-400{% endif %} rounded-full transition-all duration-700 shadow-sm" style="width: {{ percent|round(1) }}%"></div>
-                                    </div>
-                                </div>
-                            {% endfor %}
-                            <div class="mt-8 pt-6 border-t border-gray-50">
-                                <p class="text-[10px] text-gray-400 uppercase font-black tracking-widest mb-1">Unbalance Rate</p>
-                                <p class="text-3xl font-black text-gray-800 tracking-tight">{{ result.Group_1_percent_unbalance_before }}<span class="text-lg opacity-50 ml-1">%</span></p>
-                            </div>
-                        </div>
-
-                        <div>
-                            <div class="flex items-center space-x-2 mb-6">
-                                <div class="w-2 h-6 bg-pink-400 rounded-full"></div>
-                                <h4 class="font-black text-gray-700 tracking-tight">เครื่องที่ 2</h4>
-                            </div>
-                            {% set max_g2 = [result.group2_load_balance_before.A, result.group2_load_balance_before.B, result.group2_load_balance_before.C]|max %}
-                            {% for phase in ['A', 'B', 'C'] %}
-                                {% set value = result.group2_load_balance_before[phase] %}
-                                {% set percent = ((value /(result.rating_g2*0.875/3)*100))|round(1) if max_g2 else 0 %}
-                                <div class="mb-5">
-                                    <div class="flex justify-between text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 px-1">
-                                        <span>Phase {{ phase }}</span>
-                                        <span class="text-gray-700">{{ value }} <small>kW</small></span>
-                                    </div>
-                                    <div class="w-full bg-gray-50 h-2.5 rounded-full overflow-hidden p-0.5 border border-gray-100">
-                                        <div class="h-full {% if phase == 'A' %}bg-red-400{% elif phase == 'B' %}bg-yellow-400 shadow-[0_0_10px_rgba(253,224,71,0.4)]{% else %}bg-blue-400{% endif %} rounded-full transition-all duration-700 shadow-sm" style="width: {{ percent|round(1) }}%"></div>
-                                    </div>
-                                </div>
-                            {% endfor %}
-                            <div class="mt-8 pt-6 border-t border-gray-50">
-                                <p class="text-[10px] text-gray-400 uppercase font-black tracking-widest mb-1">Unbalance Rate</p>
-                                <p class="text-3xl font-black text-gray-800 tracking-tight">{{ result.Group_2_percent_unbalance_before }}<span class="text-lg opacity-50 ml-1">%</span></p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- หลังบาลานซ์ -->
-                <div class="bg-white rounded-[3rem] shadow-2xl shadow-primary/10 border-2 border-primary/20 overflow-hidden relative">
-                    <div class="bg-primary/5 py-4 px-10 border-b border-primary/10">
-                        <div class="flex justify-between items-center">
-                            <span class="text-xs font-black text-primary uppercase tracking-[0.2em] flex items-center">
-                                <i class="bi bi-stars mr-2"></i> Optimized State
-                            </span>
-                            <span class="text-sm font-black text-primary">หลังบาลานซ์ (แนะนำ)</span>
-                        </div>
-                    </div>
-                    <div class="p-10 grid grid-cols-1 md:grid-cols-2 gap-12 relative">
-                        <div class="absolute left-1/2 top-1/2 -ms-px -translate-y-1/2 h-4/5 w-px bg-gradient-to-b from-transparent via-primary/10 to-transparent hidden md:block"></div>
-                        
-                        <div>
-                            <div class="flex items-center space-x-2 mb-6">
-                                <div class="w-2 h-6 bg-cyan-500 rounded-full animate-pulse shadow-[0_0_12px_rgba(6,182,212,0.6)]"></div>
-                                <h4 class="font-black text-gray-800 tracking-tight">เครื่องที่ 1</h4>
-                            </div>
-                            {% set max_g1_a = [result.group1_load_balance_after.A, result.group1_load_balance_after.B, result.group1_load_balance_after.C]|max %}
-                            {% for phase in ['A', 'B', 'C'] %}
-                                {% set value = result.group1_load_balance_after[phase] %}
-                                {% set percent = ((value / (result.rating_g2*0.875/3)*100))|round(1) if max_g1_a else 0 %}
-                                <div class="mb-5">
-                                    <div class="flex justify-between text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 px-1">
-                                        <span>Phase {{ phase }}</span>
-                                        <span class="text-gray-800 font-bold">{{ value }} <small>kW</small></span>
-                                    </div>
-                                    <div class="w-full bg-cyan-50 h-3 rounded-full overflow-hidden p-0.5 border border-cyan-100/50">
-                                        <div class="h-full {% if phase == 'A' %}bg-red-500{% elif phase == 'B' %}bg-yellow-500{% else %}bg-blue-500{% endif %} rounded-full transition-all duration-1000 shadow-sm" style="width: {{ percent|round(1) }}%"></div>
-                                    </div>
-                                </div>
-                            {% endfor %}
-                            <div class="mt-8 pt-6 border-t border-gray-100">
-                                <div class="flex items-center justify-between">
-                                    <div>
-                                        <p class="text-[10px] text-gray-400 uppercase font-black tracking-widest mb-1">Unbalance Rate</p>
-                                        {% set unb_after1 = result.Group_1_percent_unbalance_after|float %}
-                                        <p class="text-3xl font-black {% if unb_after1 <= 20 %}text-green-500{% else %}text-gray-800{% endif %} tracking-tight">
-                                            {{ unb_after1 }}<span class="text-lg opacity-50 ml-1">%</span>
-                                        </p>
-                                    </div>
-                                    {% if unb_after1 <= 20 %}
-                                    <div class="px-3 py-1 bg-green-500/10 text-green-500 text-[10px] font-black rounded-lg border border-green-500/20 uppercase tracking-wider">Balanced</div>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </div>
-
-                        <div>
-                            <div class="flex items-center space-x-2 mb-6">
-                                <div class="w-2 h-6 bg-pink-500 rounded-full animate-pulse shadow-[0_0_12px_rgba(236,72,153,0.6)]"></div>
-                                <h4 class="font-black text-gray-800 tracking-tight">เครื่องที่ 2</h4>
-                            </div>
-                            {% set max_g2_a = [result.group2_load_balance_after.A, result.group2_load_balance_after.B, result.group2_load_balance_after.C]|max %}
-                            {% for phase in ['A', 'B', 'C'] %}
-                                {% set value = result.group2_load_balance_after[phase] %}
-                                {% set percent = ((value / (result.rating_g2*0.875/3)*100))|round(1) if max_g2_a else 0 %}
-                                <div class="mb-5">
-                                    <div class="flex justify-between text-[11px] font-black text-gray-400 uppercase tracking-widest mb-2 px-1">
-                                        <span>Phase {{ phase }}</span>
-                                        <span class="text-gray-800 font-bold">{{ value }} <small>kW</small></span>
-                                    </div>
-                                    <div class="w-full bg-pink-50 h-3 rounded-full overflow-hidden p-0.5 border border-pink-100/50">
-                                        <div class="h-full {% if phase == 'A' %}bg-red-500{% elif phase == 'B' %}bg-yellow-500{% else %}bg-blue-500{% endif %} rounded-full transition-all duration-1000 shadow-sm" style="width: {{ percent|round(1) }}%"></div>
-                                    </div>
-                                </div>
-                            {% endfor %}
-                            <div class="mt-8 pt-6 border-t border-gray-100">
-                                <div class="flex items-center justify-between">
-                                    <div>
-                                        <p class="text-[10px] text-gray-400 uppercase font-black tracking-widest mb-1">Unbalance Rate</p>
-                                        {% set unb_after2 = result.Group_2_percent_unbalance_after|float %}
-                                        <p class="text-3xl font-black {% if unb_after2 <= 20 %}text-green-500{% else %}text-gray-800{% endif %} tracking-tight">
-                                            {{ unb_after2 }}<span class="text-lg opacity-50 ml-1">%</span>
-                                        </p>
-                                    </div>
-                                    {% if unb_after2 <= 20 %}
-                                    <div class="px-3 py-1 bg-green-500/10 text-green-500 text-[10px] font-black rounded-lg border border-green-500/20 uppercase tracking-wider">Balanced</div>
-                                    {% endif %}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+            <div class="absolute right-6 top-1/2 -translate-y-1/2 text-white/20 text-4xl"><i class="bi bi-cpu"></i></div>
+          </div>
+          <div class="p-7">
+            <div class="mb-6">
+              <div class="flex justify-between items-end mb-2">
+                <span class="text-sm font-bold text-gray-700">โหลดปัจจุบัน</span>
+                <span class="text-2xl font-black text-cyan-600" id="display-g1-load">{{ result.g1_load }} <small class="text-xs font-bold">kW</small></span>
+              </div>
+              {% set percent1 = (result.g1_load/(result.rating_g1*0.875)*100)|round(1) %}
+              <div class="w-full bg-gray-100 rounded-2xl h-3 overflow-hidden p-0.5">
+                <div class="h-full {% if percent1 >= 85 %}bg-red-500{% elif percent1 >= 60 %}bg-yellow-500{% else %}bg-cyan-500{% endif %} rounded-xl transition-all duration-1000 shadow-sm" id="bar-g1" style="width: {{ percent1 }}%"></div>
+              </div>
+              <div class="flex justify-between mt-1.5 px-1">
+                <span class="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Load Capacity</span>
+                <span class="text-[10px] font-black text-cyan-600" id="pct-g1">{{ percent1 }}%</span>
+              </div>
             </div>
+            <div class="mb-6 p-4 bg-cyan-50/30 rounded-2xl border border-cyan-100/50">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-xs text-cyan-700 font-black uppercase tracking-widest">คาดการณ์ (4 ปี)</span>
+                <span class="text-lg font-black text-primary" id="display-future-g1">{{ result.future_g1_load }} <small class="text-[10px] font-bold">kW</small></span>
+              </div>
+              {% set percent2 = (result.future_g1_load/(result.rating_g1*0.875)*100)|round(1) %}
+              <div class="w-full bg-white/50 rounded-xl h-2 overflow-hidden">
+                <div class="h-full bg-primary rounded-full transition-all duration-1000 delay-300" style="width: {{ percent2 }}%"></div>
+              </div>
+            </div>
+            <div class="space-y-3">
+              <div class="flex justify-between items-center py-2 px-3 rounded-xl border border-gray-50 hover:bg-gray-50 transition-colors">
+                <span class="text-gray-400 text-[11px] font-bold uppercase tracking-widest">หม้อแปลงแนะนำ</span>
+                <span class="font-black text-gray-800" id="display-rating-g1">{{ result.rating_g1 }} <small class="text-[10px] text-gray-400">kVA</small></span>
+              </div>
+              <div class="flex justify-between items-center py-2 px-3 rounded-xl border border-gray-50 hover:bg-gray-50 transition-colors">
+                <span class="text-gray-400 text-[11px] font-bold uppercase tracking-widest">Total Loss</span>
+                <span class="font-black text-gray-800" id="display-loss-g1">{{ result.total_system_loss_g1 }} <small class="text-[10px] text-gray-400">kW</small></span>
+              </div>
+              <div class="flex justify-between items-center py-2 px-3 rounded-xl border border-gray-50 hover:bg-gray-50 transition-colors">
+                <span class="text-gray-400 text-[11px] font-bold uppercase tracking-widest">Distance</span>
+                <span class="font-black text-gray-800" id="display-dist-g1">{{ result.Max_Distance_Group1 }} <small class="text-[10px] text-gray-400">m</small></span>
+              </div>
+            </div>
+          </div>
         </div>
+
+        {# Group 2 card #}
+        <div class="bg-white rounded-[2.5rem] shadow-xl shadow-gray-200/50 border-2 border-pink-50 overflow-hidden group">
+          <div class="bg-pink-400 py-5 px-7 text-white relative">
+            <div class="flex items-center space-x-3">
+              <span class="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center text-xs font-black">02</span>
+              <div>
+                <h4 class="text-lg font-black tracking-tight">หลังปรับปรุง (เครื่อง 2)</h4>
+                <p class="text-xs opacity-70">Optimized Group 2</p>
+              </div>
+            </div>
+            <div class="absolute right-6 top-1/2 -translate-y-1/2 text-white/20 text-4xl"><i class="bi bi-cpu-fill"></i></div>
+          </div>
+          <div class="p-7">
+            <div class="mb-6">
+              <div class="flex justify-between items-end mb-2">
+                <span class="text-sm font-bold text-gray-700">โหลดปัจจุบัน</span>
+                <span class="text-2xl font-black text-pink-500" id="display-g2-load">{{ result.g2_load }} <small class="text-xs font-bold">kW</small></span>
+              </div>
+              {% set percent3 = (result.g2_load/(result.rating_g2*0.875)*100)|round(1) %}
+              <div class="w-full bg-gray-100 rounded-2xl h-3 overflow-hidden p-0.5">
+                <div class="h-full {% if percent3 >= 85 %}bg-red-500{% elif percent3 >= 60 %}bg-yellow-500{% else %}bg-pink-400{% endif %} rounded-xl transition-all duration-1000 shadow-sm" id="bar-g2" style="width: {{ percent3 }}%"></div>
+              </div>
+              <div class="flex justify-between mt-1.5 px-1">
+                <span class="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Load Capacity</span>
+                <span class="text-[10px] font-black text-pink-500" id="pct-g2">{{ percent3 }}%</span>
+              </div>
+            </div>
+            <div class="mb-6 p-4 bg-pink-50/30 rounded-2xl border border-pink-100/50">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-xs text-pink-700 font-black uppercase tracking-widest">คาดการณ์ (4 ปี)</span>
+                <span class="text-lg font-black text-primary" id="display-future-g2">{{ result.future_g2_load }} <small class="text-[10px] font-bold">kW</small></span>
+              </div>
+              {% set percent4 = (result.future_g2_load/(result.rating_g2*0.875)*100)|round(1) %}
+              <div class="w-full bg-white/50 rounded-xl h-2 overflow-hidden">
+                <div class="h-full bg-primary rounded-full transition-all duration-1000 delay-300" style="width: {{ percent4 }}%"></div>
+              </div>
+            </div>
+            <div class="space-y-3">
+              <div class="flex justify-between items-center py-2 px-3 rounded-xl border border-gray-50 hover:bg-gray-50 transition-colors">
+                <span class="text-gray-400 text-[11px] font-bold uppercase tracking-widest">หม้อแปลงแนะนำ</span>
+                <span class="font-black text-gray-800" id="display-rating-g2">{{ result.rating_g2 }} <small class="text-[10px] text-gray-400">kVA</small></span>
+              </div>
+              <div class="flex justify-between items-center py-2 px-3 rounded-xl border border-gray-50 hover:bg-gray-50 transition-colors">
+                <span class="text-gray-400 text-[11px] font-bold uppercase tracking-widest">Total Loss</span>
+                <span class="font-black text-gray-800" id="display-loss-g2">{{ result.total_system_loss_g2 }} <small class="text-[10px] text-gray-400">kW</small></span>
+              </div>
+              <div class="flex justify-between items-center py-2 px-3 rounded-xl border border-gray-50 hover:bg-gray-50 transition-colors">
+                <span class="text-gray-400 text-[11px] font-bold uppercase tracking-widest">Distance</span>
+                <span class="font-black text-gray-800" id="display-dist-g2">{{ result.Max_Distance_Group2 }} <small class="text-[10px] text-gray-400">m</small></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <!-- Table Dashboard View (Hidden by default) -->
-    <div id="tableView" class="hidden animate-fade-in">
-        <div class="bg-white rounded-[2rem] shadow-xl shadow-gray-200/50 border border-gray-100 overflow-hidden mb-12">
-            <div class="px-8 py-6 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
-                <h3 class="font-black text-gray-700 uppercase tracking-widest text-sm">เทียบข้อมูลโหลด (Comparison Table)</h3>
-                <span class="text-[10px] font-bold text-gray-400">Unit: kW / kVA / m</span>
+    {# 02 Phase Balancing #}
+    <div class="mb-10">
+      <div class="flex items-center space-x-3 mb-6 mt-4">
+        <span class="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-sm">02</span>
+        <h3 class="text-lg font-black text-gray-800 uppercase tracking-wide">การบาลานซ์โหลด (Phase Balancing)</h3>
+      </div>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        {# Before balance #}
+        <div class="bg-white rounded-[2.5rem] shadow-xl shadow-gray-200/50 border border-gray-100 overflow-hidden">
+          <div class="bg-gray-100 py-4 px-8 border-b border-gray-200/50">
+            <div class="flex justify-between items-center">
+              <span class="text-xs font-black text-gray-400 uppercase tracking-widest">Initial State</span>
+              <span class="text-sm font-bold text-gray-600">ก่อนบาลานซ์</span>
             </div>
-            <div class="overflow-x-auto">
-                <table class="w-full text-center border-collapse">
-                    <thead>
-                        <tr class="bg-gray-50/80 text-gray-500 text-[10px] font-black uppercase">
-                            <th class="px-6 py-4 border-r border-gray-100 text-left">รายละเอียดคุณสมบัติ</th>
-                            <th class="px-6 py-4 border-r border-gray-100 bg-gray-100/50">ก่อนปรับปรุง (Initial)</th>
-                            <th class="px-6 py-4 border-r border-gray-100 bg-cyan-500/5 text-cyan-700">เครื่องที่ 1 (Optimized)</th>
-                            <th class="px-6 py-4 bg-pink-500/5 text-pink-700">เครื่องที่ 2 (Optimized)</th>
-                        </tr>
-                    </thead>
-                    <tbody class="text-sm font-medium text-gray-600">
-                        <tr class="border-t border-gray-50 hover:bg-gray-50 transition-colors">
-                            <td class="px-8 py-5 text-left font-bold text-gray-700 border-r border-gray-100">โหลดหม้อแปลง (Actual Load)</td>
-                            <td class="px-8 py-5 border-r border-gray-100 bg-gray-50/30 italic text-gray-400">{{ "%.2f"|format(result.g1_load + result.g2_load) }}</td>
-                            <td class="px-8 py-5 border-r border-gray-100 bg-cyan-50/30 text-cyan-600 font-black">{{ result.g1_load }}</td>
-                            <td class="px-8 py-5 bg-pink-50/30 text-pink-600 font-black">{{ result.g2_load }}</td>
-                        </tr>
-                        <tr class="border-t border-gray-50 hover:bg-gray-50 transition-colors">
-                            <td class="px-8 py-5 text-left font-bold text-gray-700 border-r border-gray-100">โหลดคาดการณ์ (4 ปีข้างหน้า)</td>
-                            <td class="px-8 py-5 border-r border-gray-100 bg-gray-50/30 text-gray-300">-</td>
-                            <td class="px-8 py-5 border-r border-gray-100 bg-cyan-50/30 text-cyan-600">{{ result.future_g1_load }}</td>
-                            <td class="px-8 py-5 bg-pink-50/30 text-pink-600">{{ result.future_g2_load }}</td>
-                        </tr>
-                        <tr class="border-t border-gray-50 hover:bg-gray-50 transition-colors">
-                            <td class="px-8 py-5 text-left font-bold text-gray-700 border-r border-gray-100">ขนาดหม้อแปลงที่แนะนำ</td>
-                            <td class="px-8 py-5 border-r border-gray-100 bg-gray-50/30">{{ result.tr_kva }}</td>
-                            <td class="px-8 py-5 border-r border-gray-100 bg-cyan-50/30 font-black">{{ result.rating_g1 }}</td>
-                            <td class="px-8 py-5 bg-pink-50/30 font-black">{{ result.rating_g2 }}</td>
-                        </tr>
-                        <tr class="border-t border-gray-50 hover:bg-gray-50 transition-colors">
-                            <td class="px-8 py-5 text-left font-bold text-gray-700 border-r border-gray-100">Loss รวมในระบบ</td>
-                            <td class="px-8 py-5 border-r border-gray-100 bg-gray-50/30">{{ "%.2f"|format(result.tr_loss/720) }}</td>
-                            <td class="px-8 py-5 border-r border-gray-100 bg-cyan-50/30 font-black">{{ result.total_system_loss_g1 }}</td>
-                            <td class="px-8 py-5 bg-pink-50/30 font-black">{{ result.total_system_loss_g2 }}</td>
-                        </tr>
-                        <tr class="border-t border-gray-50 hover:bg-gray-50 transition-colors">
-                            <td class="px-8 py-5 text-left font-bold text-gray-700 border-r border-gray-100">ระยะทางที่ไกลที่สุด</td>
-                            <td class="px-8 py-5 border-r border-gray-100 bg-gray-50/30">{{ result.tr_Line_lengh }}</td>
-                            <td class="px-8 py-5 border-r border-gray-100 bg-cyan-50/30">{{ result.Max_Distance_Group1 }}</td>
-                            <td class="px-8 py-5 bg-pink-50/30">{{ result.Max_Distance_Group2 }}</td>
-                        </tr>
-                    </tbody>
-                </table>
+          </div>
+          <div class="p-8 grid grid-cols-1 md:grid-cols-2 gap-10 relative">
+            <div class="absolute left-1/2 top-1/2 -ms-px -translate-y-1/2 h-4/5 w-px bg-gradient-to-b from-transparent via-gray-100 to-transparent hidden md:block"></div>
+            <div>
+              <div class="flex items-center space-x-2 mb-5">
+                <div class="w-2 h-6 bg-cyan-400 rounded-full"></div>
+                <h4 class="font-black text-gray-700">เครื่องที่ 1</h4>
+              </div>
+              {% set max_g1 = [result.group1_load_balance_before.A, result.group1_load_balance_before.B, result.group1_load_balance_before.C]|max %}
+              {% for phase in ['A', 'B', 'C'] %}
+                {% set value = result.group1_load_balance_before[phase] %}
+                {% set percent = ((value / (result.rating_g1*0.875/3)*100))|round(1) if max_g1 else 0 %}
+                <div class="mb-4">
+                  <div class="flex justify-between text-[11px] font-black text-gray-400 uppercase tracking-widest mb-1.5 px-1">
+                    <span>Phase {{ phase }}</span>
+                    <span class="text-gray-700">{{ value }} <small>kW</small></span>
+                  </div>
+                  <div class="w-full bg-gray-50 h-2.5 rounded-full overflow-hidden p-0.5 border border-gray-100">
+                    <div class="h-full {% if phase == 'A' %}bg-red-400{% elif phase == 'B' %}bg-yellow-400{% else %}bg-blue-400{% endif %} rounded-full transition-all duration-700" style="width: {{ percent }}%"></div>
+                  </div>
+                </div>
+              {% endfor %}
+              <div class="mt-6 pt-5 border-t border-gray-50">
+                <p class="text-[10px] text-gray-400 uppercase font-black tracking-widest mb-1">Unbalance Rate</p>
+                <p class="text-3xl font-black text-gray-800">{{ result.Group_1_percent_unbalance_before }}<span class="text-lg opacity-50 ml-1">%</span></p>
+              </div>
             </div>
+            <div>
+              <div class="flex items-center space-x-2 mb-5">
+                <div class="w-2 h-6 bg-pink-400 rounded-full"></div>
+                <h4 class="font-black text-gray-700">เครื่องที่ 2</h4>
+              </div>
+              {% set max_g2 = [result.group2_load_balance_before.A, result.group2_load_balance_before.B, result.group2_load_balance_before.C]|max %}
+              {% for phase in ['A', 'B', 'C'] %}
+                {% set value = result.group2_load_balance_before[phase] %}
+                {% set percent = ((value / (result.rating_g2*0.875/3)*100))|round(1) if max_g2 else 0 %}
+                <div class="mb-4">
+                  <div class="flex justify-between text-[11px] font-black text-gray-400 uppercase tracking-widest mb-1.5 px-1">
+                    <span>Phase {{ phase }}</span>
+                    <span class="text-gray-700">{{ value }} <small>kW</small></span>
+                  </div>
+                  <div class="w-full bg-gray-50 h-2.5 rounded-full overflow-hidden p-0.5 border border-gray-100">
+                    <div class="h-full {% if phase == 'A' %}bg-red-400{% elif phase == 'B' %}bg-yellow-400{% else %}bg-blue-400{% endif %} rounded-full transition-all duration-700" style="width: {{ percent }}%"></div>
+                  </div>
+                </div>
+              {% endfor %}
+              <div class="mt-6 pt-5 border-t border-gray-50">
+                <p class="text-[10px] text-gray-400 uppercase font-black tracking-widest mb-1">Unbalance Rate</p>
+                <p class="text-3xl font-black text-gray-800">{{ result.Group_2_percent_unbalance_before }}<span class="text-lg opacity-50 ml-1">%</span></p>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <div class="bg-white rounded-[2rem] shadow-xl shadow-gray-200/50 border border-gray-100 overflow-hidden">
-            <div class="px-8 py-6 border-b border-gray-100 bg-indigo-50/30 flex justify-between items-center">
-                <h3 class="font-black text-indigo-800 uppercase tracking-widest text-sm">สรุปเปอร์เซ็นต์ Unbalance</h3>
-                <i class="bi bi-bar-chart text-indigo-400"></i>
+        {# After balance #}
+        <div class="bg-white rounded-[2.5rem] shadow-2xl shadow-primary/10 border-2 border-primary/20 overflow-hidden">
+          <div class="bg-primary/5 py-4 px-8 border-b border-primary/10">
+            <div class="flex justify-between items-center">
+              <span class="text-xs font-black text-primary uppercase tracking-widest flex items-center">
+                <i class="bi bi-stars mr-2"></i>Optimized State
+              </span>
+              <span class="text-sm font-black text-primary">หลังบาลานซ์ (แนะนำ)</span>
             </div>
-            <div class="overflow-x-auto">
-                <table class="w-full text-center border-collapse">
-                    <thead>
-                        <tr class="bg-gray-50 text-[10px] font-black uppercase text-gray-400">
-                            <th class="px-6 py-4 border-r border-gray-100">เฟสสายไฟ</th>
-                            <th class="px-6 py-4 border-r border-gray-100 border-l border-gray-100 bg-gray-100/50" colspan="2">ก่อนบาลานซ์ (Initial)</th>
-                            <th class="px-6 py-4 bg-primary/5 text-primary" colspan="2">หลังบาลานซ์ (Optimized)</th>
-                        </tr>
-                        <tr class="bg-white text-[10px] font-black text-gray-400 uppercase">
-                            <th class="px-6 py-3 border-r border-gray-100 border-b border-gray-100"></th>
-                            <th class="px-6 py-3 border-r border-gray-100 border-b border-gray-100 bg-gray-50">เครื่องที่ 1</th>
-                            <th class="px-6 py-3 border-r border-gray-100 border-b border-gray-100 bg-gray-50">เครื่องที่ 2</th>
-                            <th class="px-6 py-3 border-r border-gray-100 border-b border-gray-100 bg-cyan-50/50 text-cyan-600">เครื่องที่ 1</th>
-                            <th class="px-6 py-3 border-b border-gray-100 bg-pink-50/50 text-pink-600">เครื่องที่ 2</th>
-                        </tr>
-                    </thead>
-                    <tbody class="text-sm font-bold text-gray-700">
-                        {% for phase in ['A', 'B', 'C'] %}
-                        <tr class="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                            <td class="px-8 py-4 border-r border-gray-100 bg-gray-50/30 text-gray-400">Phase {{ phase }}</td>
-                            <td class="px-8 py-4 border-r border-gray-100">{{ result.group1_load_balance_before[phase] }}</td>
-                            <td class="px-8 py-4 border-r border-gray-100">{{ result.group2_load_balance_before[phase] }}</td>
-                            <td class="px-8 py-4 border-r border-gray-100 bg-cyan-50/20 text-cyan-600">{{ result.group1_load_balance_after[phase] }}</td>
-                            <td class="px-8 py-4 bg-pink-50/20 text-pink-600">{{ result.group2_load_balance_after[phase] }}</td>
-                        </tr>
-                        {% endfor %}
-                        <tr class="bg-gray-900 text-white">
-                            <td class="px-8 py-5 text-xs font-black uppercase border-r border-white/10 tracking-[0.2em]">Percentage Unbalance</td>
-                            <td class="px-8 py-5 border-r border-white/10">{{ result.Group_1_percent_unbalance_before }}%</td>
-                            <td class="px-8 py-5 border-r border-white/10">{{ result.Group_2_percent_unbalance_before }}%</td>
-                            <td class="px-8 py-5 border-r border-white/10 bg-cyan-500 font-black">{{ result.Group_1_percent_unbalance_after }}%</td>
-                            <td class="px-8 py-5 bg-pink-500 font-black">{{ result.Group_2_percent_unbalance_after }}%</td>
-                        </tr>
-                    </tbody>
-                </table>
+          </div>
+          <div class="p-8 grid grid-cols-1 md:grid-cols-2 gap-10 relative">
+            <div class="absolute left-1/2 top-1/2 -ms-px -translate-y-1/2 h-4/5 w-px bg-gradient-to-b from-transparent via-primary/10 to-transparent hidden md:block"></div>
+            <div>
+              <div class="flex items-center space-x-2 mb-5">
+                <div class="w-2 h-6 bg-cyan-500 rounded-full animate-pulse"></div>
+                <h4 class="font-black text-gray-800">เครื่องที่ 1</h4>
+              </div>
+              {% set max_g1_a = [result.group1_load_balance_after.A, result.group1_load_balance_after.B, result.group1_load_balance_after.C]|max %}
+              {% for phase in ['A', 'B', 'C'] %}
+                {% set value = result.group1_load_balance_after[phase] %}
+                {% set percent = ((value / (result.rating_g1*0.875/3)*100))|round(1) if max_g1_a else 0 %}
+                <div class="mb-4">
+                  <div class="flex justify-between text-[11px] font-black text-gray-400 uppercase tracking-widest mb-1.5 px-1">
+                    <span>Phase {{ phase }}</span>
+                    <span class="text-gray-800 font-bold">{{ value }} <small>kW</small></span>
+                  </div>
+                  <div class="w-full bg-cyan-50 h-3 rounded-full overflow-hidden p-0.5 border border-cyan-100/50">
+                    <div class="h-full {% if phase == 'A' %}bg-red-500{% elif phase == 'B' %}bg-yellow-500{% else %}bg-blue-500{% endif %} rounded-full transition-all duration-1000" style="width: {{ percent }}%"></div>
+                  </div>
+                </div>
+              {% endfor %}
+              <div class="mt-6 pt-5 border-t border-gray-100">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <p class="text-[10px] text-gray-400 uppercase font-black tracking-widest mb-1">Unbalance Rate</p>
+                    {% set unb_after1 = result.Group_1_percent_unbalance_after|float %}
+                    <p class="text-3xl font-black {% if unb_after1 <= 20 %}text-green-500{% else %}text-gray-800{% endif %}">
+                      {{ unb_after1 }}<span class="text-lg opacity-50 ml-1">%</span>
+                    </p>
+                  </div>
+                  {% if unb_after1 <= 20 %}
+                  <div class="px-3 py-1 bg-green-500/10 text-green-500 text-[10px] font-black rounded-lg border border-green-500/20 uppercase tracking-wider">Balanced</div>
+                  {% endif %}
+                </div>
+              </div>
             </div>
+            <div>
+              <div class="flex items-center space-x-2 mb-5">
+                <div class="w-2 h-6 bg-pink-500 rounded-full animate-pulse"></div>
+                <h4 class="font-black text-gray-800">เครื่องที่ 2</h4>
+              </div>
+              {% set max_g2_a = [result.group2_load_balance_after.A, result.group2_load_balance_after.B, result.group2_load_balance_after.C]|max %}
+              {% for phase in ['A', 'B', 'C'] %}
+                {% set value = result.group2_load_balance_after[phase] %}
+                {% set percent = ((value / (result.rating_g2*0.875/3)*100))|round(1) if max_g2_a else 0 %}
+                <div class="mb-4">
+                  <div class="flex justify-between text-[11px] font-black text-gray-400 uppercase tracking-widest mb-1.5 px-1">
+                    <span>Phase {{ phase }}</span>
+                    <span class="text-gray-800 font-bold">{{ value }} <small>kW</small></span>
+                  </div>
+                  <div class="w-full bg-pink-50 h-3 rounded-full overflow-hidden p-0.5 border border-pink-100/50">
+                    <div class="h-full {% if phase == 'A' %}bg-red-500{% elif phase == 'B' %}bg-yellow-500{% else %}bg-blue-500{% endif %} rounded-full transition-all duration-1000" style="width: {{ percent }}%"></div>
+                  </div>
+                </div>
+              {% endfor %}
+              <div class="mt-6 pt-5 border-t border-gray-100">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <p class="text-[10px] text-gray-400 uppercase font-black tracking-widest mb-1">Unbalance Rate</p>
+                    {% set unb_after2 = result.Group_2_percent_unbalance_after|float %}
+                    <p class="text-3xl font-black {% if unb_after2 <= 20 %}text-green-500{% else %}text-gray-800{% endif %}">
+                      {{ unb_after2 }}<span class="text-lg opacity-50 ml-1">%</span>
+                    </p>
+                  </div>
+                  {% if unb_after2 <= 20 %}
+                  <div class="px-3 py-1 bg-green-500/10 text-green-500 text-[10px] font-black rounded-lg border border-green-500/20 uppercase tracking-wider">Balanced</div>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
+      </div>
     </div>
+  </div>
+
+  {# Table View #}
+  <div id="tableView" class="hidden result-section">
+    {# Comparison table #}
+    <div class="bg-white rounded-[2rem] shadow-xl shadow-gray-200/50 border border-gray-100 overflow-hidden mb-8">
+      <div class="px-8 py-5 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
+        <h3 class="font-black text-gray-700 uppercase tracking-widest text-sm">เทียบข้อมูลโหลด (Comparison Table)</h3>
+        <span class="text-[10px] font-bold text-gray-400">Unit: kW / kVA / m</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-center border-collapse">
+          <thead>
+            <tr class="bg-gray-50/80 text-gray-500 text-[10px] font-black uppercase">
+              <th class="px-6 py-4 border-r border-gray-100 text-left">รายละเอียดคุณสมบัติ</th>
+              <th class="px-6 py-4 border-r border-gray-100 bg-gray-100/50">ก่อนปรับปรุง (Initial)</th>
+              <th class="px-6 py-4 border-r border-gray-100 bg-cyan-500/5 text-cyan-700">เครื่องที่ 1 (Optimized)</th>
+              <th class="px-6 py-4 bg-pink-500/5 text-pink-700">เครื่องที่ 2 (Optimized)</th>
+            </tr>
+          </thead>
+          <tbody class="text-sm font-medium text-gray-600">
+            <tr class="border-t border-gray-50 hover:bg-gray-50 transition-colors">
+              <td class="px-8 py-4 text-left font-bold text-gray-700 border-r border-gray-100">โหลดหม้อแปลง (kW)</td>
+              <td class="px-8 py-4 border-r border-gray-100 bg-gray-50/30 italic text-gray-400">{{ "%.2f"|format(result.g1_load + result.g2_load) }}</td>
+              <td class="px-8 py-4 border-r border-gray-100 bg-cyan-50/30 text-cyan-600 font-black" id="tbl-g1-load">{{ result.g1_load }}</td>
+              <td class="px-8 py-4 bg-pink-50/30 text-pink-600 font-black" id="tbl-g2-load">{{ result.g2_load }}</td>
+            </tr>
+            <tr class="border-t border-gray-50 hover:bg-gray-50 transition-colors">
+              <td class="px-8 py-4 text-left font-bold text-gray-700 border-r border-gray-100">โหลดคาดการณ์ 4 ปี (kW)</td>
+              <td class="px-8 py-4 border-r border-gray-100 bg-gray-50/30 text-gray-300">—</td>
+              <td class="px-8 py-4 border-r border-gray-100 bg-cyan-50/30 text-cyan-600" id="tbl-fg1">{{ result.future_g1_load }}</td>
+              <td class="px-8 py-4 bg-pink-50/30 text-pink-600" id="tbl-fg2">{{ result.future_g2_load }}</td>
+            </tr>
+            <tr class="border-t border-gray-50 hover:bg-gray-50 transition-colors">
+              <td class="px-8 py-4 text-left font-bold text-gray-700 border-r border-gray-100">ขนาดหม้อแปลงแนะนำ (kVA)</td>
+              <td class="px-8 py-4 border-r border-gray-100 bg-gray-50/30" id="tbl-tr-kva">{{ result.tr_kva }}</td>
+              <td class="px-8 py-4 border-r border-gray-100 bg-cyan-50/30 font-black" id="tbl-rating-g1">{{ result.rating_g1 }}</td>
+              <td class="px-8 py-4 bg-pink-50/30 font-black" id="tbl-rating-g2">{{ result.rating_g2 }}</td>
+            </tr>
+            <tr class="border-t border-gray-50 hover:bg-gray-50 transition-colors">
+              <td class="px-8 py-4 text-left font-bold text-gray-700 border-r border-gray-100">Loss รวมในระบบ (kW)</td>
+              <td class="px-8 py-4 border-r border-gray-100 bg-gray-50/30" id="tbl-tr-loss">{{ result.tr_loss }}</td>
+              <td class="px-8 py-4 border-r border-gray-100 bg-cyan-50/30 font-black" id="tbl-loss-g1">{{ result.total_system_loss_g1 }}</td>
+              <td class="px-8 py-4 bg-pink-50/30 font-black" id="tbl-loss-g2">{{ result.total_system_loss_g2 }}</td>
+            </tr>
+            <tr class="border-t border-gray-50 hover:bg-gray-50 transition-colors">
+              <td class="px-8 py-4 text-left font-bold text-gray-700 border-r border-gray-100">ระยะทางไกลสุด (m)</td>
+              <td class="px-8 py-4 border-r border-gray-100 bg-gray-50/30" id="tbl-tr-linelen">{{ result.tr_Line_lengh }}</td>
+              <td class="px-8 py-4 border-r border-gray-100 bg-cyan-50/30" id="tbl-dist-g1">{{ result.Max_Distance_Group1 }}</td>
+              <td class="px-8 py-4 bg-pink-50/30" id="tbl-dist-g2">{{ result.Max_Distance_Group2 }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {# Unbalance table #}
+    <div class="bg-white rounded-[2rem] shadow-xl shadow-gray-200/50 border border-gray-100 overflow-hidden mb-8">
+      <div class="px-8 py-5 border-b border-gray-100 bg-indigo-50/30 flex justify-between items-center">
+        <h3 class="font-black text-indigo-800 uppercase tracking-widest text-sm">สรุปเปอร์เซ็นต์ Unbalance</h3>
+        <i class="bi bi-bar-chart text-indigo-400"></i>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-center border-collapse">
+          <thead>
+            <tr class="bg-gray-50 text-[10px] font-black uppercase text-gray-400">
+              <th class="px-6 py-4 border-r border-gray-100">เฟสสายไฟ</th>
+              <th class="px-6 py-4 border-r border-gray-100 border-l border-gray-100 bg-gray-100/50" colspan="2">ก่อนบาลานซ์ (Initial)</th>
+              <th class="px-6 py-4 bg-primary/5 text-primary" colspan="2">หลังบาลานซ์ (Optimized)</th>
+            </tr>
+            <tr class="bg-white text-[10px] font-black text-gray-400 uppercase">
+              <th class="px-6 py-3 border-r border-gray-100 border-b border-gray-100"></th>
+              <th class="px-6 py-3 border-r border-gray-100 border-b border-gray-100 bg-gray-50">เครื่องที่ 1</th>
+              <th class="px-6 py-3 border-r border-gray-100 border-b border-gray-100 bg-gray-50">เครื่องที่ 2</th>
+              <th class="px-6 py-3 border-r border-gray-100 border-b border-gray-100 bg-cyan-50/50 text-cyan-600">เครื่องที่ 1</th>
+              <th class="px-6 py-3 border-b border-gray-100 bg-pink-50/50 text-pink-600">เครื่องที่ 2</th>
+            </tr>
+          </thead>
+          <tbody class="text-sm font-bold text-gray-700">
+            {% for phase in ['A', 'B', 'C'] %}
+            <tr class="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+              <td class="px-8 py-4 border-r border-gray-100 bg-gray-50/30 text-gray-400">Phase {{ phase }}</td>
+              <td class="px-8 py-4 border-r border-gray-100">{{ result.group1_load_balance_before[phase] }}</td>
+              <td class="px-8 py-4 border-r border-gray-100">{{ result.group2_load_balance_before[phase] }}</td>
+              <td class="px-8 py-4 border-r border-gray-100 bg-cyan-50/20 text-cyan-600">{{ result.group1_load_balance_after[phase] }}</td>
+              <td class="px-8 py-4 bg-pink-50/20 text-pink-600">{{ result.group2_load_balance_after[phase] }}</td>
+            </tr>
+            {% endfor %}
+            <tr class="bg-gray-900 text-white">
+              <td class="px-8 py-5 text-xs font-black uppercase border-r border-white/10 tracking-widest">% Unbalance</td>
+              <td class="px-8 py-5 border-r border-white/10">{{ result.Group_1_percent_unbalance_before }}%</td>
+              <td class="px-8 py-5 border-r border-white/10">{{ result.Group_2_percent_unbalance_before }}%</td>
+              <td class="px-8 py-5 border-r border-white/10 bg-cyan-500 font-black">{{ result.Group_1_percent_unbalance_after }}%</td>
+              <td class="px-8 py-5 bg-pink-500 font-black">{{ result.Group_2_percent_unbalance_after }}%</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-    require([
-        "esri/Map",
-        "esri/views/MapView",
-        "esri/layers/GeoJSONLayer",
-        "esri/Graphic",
-        "esri/widgets/Legend"
-    ], function(Map, MapView, GeoJSONLayer, Graphic, Legend) {
+  // Cached indices from backend
+  const cachedIndices = new Set({{ cached_indices | tojson }});
+  const projectId = {{ project }};
 
-        const map = new Map({
-            basemap: "streets-navigation-vector"
-        });
+  // Exposed to panToFeature() called from info panel rows
+  let _mapView = null;
 
-        const view = new MapView({
-            container: "viewDiv",
-            map: map,
-            center: [102.5, 16.0],
-            zoom: 7,
-            ui: { components: ["zoom", "compass"] }
-        });
+  function panToFeature(lon, lat) {
+    if (_mapView) _mapView.goTo({ center: [lon, lat], zoom: 17 });
+  }
 
-        // LV Lines
-        const lvLineLayer = new GeoJSONLayer({
-            url: "/pea_no_projects/output/{{project}}/lv_lines.geojson",
-            title: "ระบบจำหน่าย 400/230 V",
-            renderer: {
-                type: "simple",
-                symbol: {
-                    type: "simple-line",
-                    color: "#5fd918",
-                    width: 2.5,
-                    style: "dash"
-                }
-            },
-            popupTemplate: {
-                title: "LV Line Profile",
-                content: "สถานะ: {type}"
-            }
-        });
+  require([
+    "esri/Map", "esri/views/MapView", "esri/layers/GeoJSONLayer",
+    "esri/Graphic", "esri/widgets/Legend"
+  ], function(Map, MapView, GeoJSONLayer, Graphic, Legend) {
 
-        // MV Lines
-        const mvLineLayer = new GeoJSONLayer({
-            url: "/pea_no_projects/output/{{project}}/mv_lines.geojson",
-            title: "ระบบจำหน่าย 22 kV",
-            renderer: {
-                type: "simple",
-                symbol: {
-                    type: "simple-line",
-                    color: "#800000",
-                    width: 2,
-                    style: "dash-dot"
-                }
-            }
-        });
-
-        // Meters
-        const meterLayer = new GeoJSONLayer({
-            url: "/pea_no_projects/output/{{project}}/meter_groups.geojson",
-            title: "กลุ่มลูกค้า (Meters)",
-            renderer: {
-                type: "unique-value",
-                field: "group",
-                uniqueValueInfos: [
-                    { value: 1, symbol: { type: "simple-marker", color: "#06b6d4", size: 8, outline: { color: "white", width: 1.5 } }, label: "เครื่องที่ 1" },
-                    { value: 2, symbol: { type: "simple-marker", color: "#ec4899", size: 8, outline: { color: "white", width: 1.5 } }, label: "เครื่องที่ 2" }
-                ]
-            },
-            labelingInfo: [{
-                labelExpressionInfo: { expression: "$feature.voltage_text" },
-                labelPlacement: "above-right",
-                symbol: {
-                    type: "text",
-                    color: "#374151",
-                    font: { size: 9, family: "Arial", weight: "bold" },
-                    haloColor: "white",
-                    haloSize: 1
-                },
-                minScale: 10000 // Only show labels when zoomed in
-            }],
-            popupTemplate: {
-                title: "ข้อมูลมิเตอร์",
-                content: "กลุ่ม: เครื่องที่ {group}<br>แรงดัน:<br>{voltage_text}"
-            }
-        });
-
-        const featureGroups = new GeoJSONLayer({
-            url: "/pea_no_projects/output/{{project}}/feature_groups.geojson",
-            title: "สถานีและจุดแบ่งโหลด",
-            renderer: {
-                type: "unique-value",
-                field: "group",
-                uniqueValueInfos: [
-                    { value: "initial", label: "จุดเริ่มต้น", symbol: { type: "simple-marker", style: "square", color: "#1f2937", size: 12, outline: { color: "white", width: 2 } } },
-                    { value: "splitting", label: "จุดแบ่งโหลดปัจจุบัน", symbol: { type: "simple-marker", style: "diamond", color: "#eab308", size: 14, outline: { color: "black", width: 1.5 } } },
-                    { value: "group1", label: "หม้อแปลงเครื่อง 1", symbol: { type: "simple-marker", style: "diamond", color: "#06b6d4", size: 16, outline: { color: "white", width: 2 } } },
-                    { value: "group2", label: "หม้อแปลงเครื่อง 2", symbol: { type: "simple-marker", style: "diamond", color: "#ec4899", size: 16, outline: { color: "white", width: 2 } } }
-                ]
-            },
-            labelingInfo: [{
-                labelExpressionInfo: { expression: "$feature.name" },
-                labelPlacement: "above-right",
-                symbol: { type: "text", color: "#111827", font: { size: 11, family: "Arial", weight: "bold" }, haloColor: "white", haloSize: 2 }
-            }]
-        });
-
-        featureGroups.when(() => {
-            const query = featureGroups.createQuery();
-            query.where = "group = 'initial'";
-            query.returnGeometry = true;
-            featureGroups.queryFeatures(query).then((result) => {
-                if (result.features.length > 0) {
-                    view.goTo({ target: result.features[0].geometry, zoom: 16 });
-                }
-            });
-        });
-
-        map.addMany([ lvLineLayer, mvLineLayer, meterLayer, featureGroups ]);
-        
-        const legend = new Legend({ view: view, style: "classic" });
-        view.ui.add(legend, "bottom-left");
-
-        // Edge Diffs Loading for Selector
-        fetch("/pea_no_projects/output/{{project}}/edge_diffs.json")
-            .then(res => res.json())
-            .then(data => {
-                const selector = document.getElementById("splittingSelector");
-                const coordDiv = document.getElementById("coordValues");
-                
-                data.forEach((item, index) => {
-                    const opt = document.createElement("option");
-                    opt.value = index;
-                    opt.textContent = `Node Index ${item.splitting_index} (Diff: ${Math.abs(item.Edge_Diff).toFixed(1)} kW)`;
-                    selector.appendChild(opt);
-                });
-
-                let markerGraphic = null;
-                let textGraphic = null;
-
-                selector.addEventListener("change", function() {
-                    const selected = data[parseInt(this.value)];
-                    const lat = (selected.N1_Lat + selected.N2_Lat)/2;
-                    const lon = (selected.N1_Lon + selected.N2_Lon)/2;
-
-                    coordDiv.innerHTML = `
-                        <div class="flex justify-between mb-1"><span>Δ Load:</span> <span class="text-gray-800 font-bold">${Math.abs(selected.Edge_Diff).toFixed(2)} kW</span></div>
-                        <div class="flex justify-between mb-1"><span>Load G1:</span> <span class="text-cyan-600 font-bold">${selected.Load_G1.toFixed(2)} kW</span></div>
-                        <div class="flex justify-between mb-1"><span>Load G2:</span> <span class="text-pink-500 font-bold">${selected.Load_G2.toFixed(2)} kW</span></div>
-                        <div class="text-[9px] text-gray-300 mt-2">LAT: ${lat.toFixed(6)}, LON: ${lon.toFixed(6)}</div>
-                    `;
-
-                    if (markerGraphic) view.graphics.removeMany([markerGraphic, textGraphic]);
-                    
-                    markerGraphic = new Graphic({
-                        geometry: { type: "point", longitude: lon, latitude: lat },
-                        symbol: { type: "simple-marker", style: "triangle", color: "#ef4444", size: "18px", angle: 180, outline: { color: "white", width: 2 } }
-                    });
-
-                    textGraphic = new Graphic({
-                        geometry: markerGraphic.geometry,
-                        symbol: { type: "text", text: "New Splitting Point", color: "#ef4444", font: { size: 11, weight: "bold" }, haloColor: "white", haloSize: 2, yoffset: 15 }
-                    });
-
-                    view.graphics.addMany([markerGraphic, textGraphic]);
-                    view.goTo({ center: [lon, lat], zoom: 17 });
-                });
-            });
-
-        // Reprocess Interaction
-        document.getElementById("reprocessBtn").addEventListener("click", () => {
-            const idx = document.getElementById("splittingSelector").value;
-            if (idx === "-- เลือกจุดแบ่งโหลด --") {
-                Swal.fire({ icon: 'warning', title: 'คำแนะนำ', text: 'กรุณาเลือกจุดแบ่งโหลดก่อนเริ่มกระบวนการ', customClass: { popup: 'rounded-[2rem]' } });
-                return;
-            }
-
-            Swal.fire({
-                title: 'ยืนยันการประมวลผล?',
-                text: 'ระบบจะเริ่มคำนวณโครงข่ายใหม่ตามจุดที่คุณกำหนด',
-                icon: 'question',
-                showCancelButton: true,
-                confirmButtonText: 'ยืนยัน',
-                cancelButtonText: 'ยกเลิก',
-                buttonsStyling: false,
-                customClass: {
-                    confirmButton: 'bg-primary text-white px-8 py-3 rounded-xl mx-2 font-bold shadow-lg shadow-primary/20',
-                    cancelButton: 'bg-gray-100 text-gray-600 px-8 py-3 rounded-xl mx-2 font-bold',
-                    popup: 'rounded-[2rem]'
-                }
-            }).then(result => {
-                if (result.isConfirmed) {
-                    Swal.fire({ title: 'กำลังประมวลผล', text: 'กรุณารอสักครู่...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-                    fetch(`/reprocessPeaNoProject/{{ project }}`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ sp_index: parseInt(idx) })
-                    })
-                    .then(res => res.json())
-                    .then(data => {
-                        if (data.message) Swal.fire({ icon: 'success', title: 'สำเร็จ', text: data.message }).then(() => location.reload());
-                        else Swal.fire({ icon: 'error', title: 'ผิดพลาด', text: data.error });
-                    });
-                }
-            });
-        });
-
-        // UI View Toggler
-        const showCardBtn = document.getElementById('showCardBtn');
-        const showTableBtn = document.getElementById('showTableBtn');
-        const cardView = document.getElementById('cardView');
-        const tableView = document.getElementById('tableView');
-
-        showCardBtn.addEventListener('click', () => {
-            cardView.classList.remove('hidden');
-            tableView.classList.add('hidden');
-            showCardBtn.className = 'flex items-center space-x-2 px-5 py-2 rounded-xl text-sm font-bold transition-all bg-white text-primary shadow-sm border border-gray-100';
-            showTableBtn.className = 'flex items-center space-x-2 px-5 py-2 rounded-xl text-sm font-bold transition-all text-gray-500 hover:text-gray-700';
-        });
-
-        showTableBtn.addEventListener('click', () => {
-            cardView.classList.add('hidden');
-            tableView.classList.remove('hidden');
-            showTableBtn.className = 'flex items-center space-x-2 px-5 py-2 rounded-xl text-sm font-bold transition-all bg-white text-primary shadow-sm border border-gray-100';
-            showCardBtn.className = 'flex items-center space-x-2 px-5 py-2 rounded-xl text-sm font-bold transition-all text-gray-500 hover:text-gray-700';
-        });
+    const map = new Map({ basemap: "streets-navigation-vector" });
+    const view = new MapView({
+      container: "viewDiv", map,
+      center: [102.5, 16.0], zoom: 7,
+      ui: { components: ["zoom", "compass"] }
     });
+    _mapView = view; // expose for panToFeature()
+
+    const lvLineLayer = new GeoJSONLayer({
+      url: `/pea_no_projects/output/${projectId}/lv_lines.geojson`,
+      title: "ระบบจำหน่าย 400/230 V",
+      renderer: { type: "simple", symbol: { type: "simple-line", color: "#5fd918", width: 2.5, style: "dash" } },
+      popupTemplate: { title: "LV Line", content: "สถานะ: {type}" }
+    });
+    const mvLineLayer = new GeoJSONLayer({
+      url: `/pea_no_projects/output/${projectId}/mv_lines.geojson`,
+      title: "ระบบจำหน่าย 22 kV",
+      renderer: { type: "simple", symbol: { type: "simple-line", color: "#800000", width: 2, style: "dash-dot" } }
+    });
+    const meterLayer = new GeoJSONLayer({
+      url: `/pea_no_projects/output/${projectId}/meter_groups.geojson`,
+      title: "กลุ่มลูกค้า (Meters)",
+      renderer: {
+        type: "unique-value", field: "group",
+        uniqueValueInfos: [
+          { value: 1, symbol: { type: "simple-marker", color: "#06b6d4", size: 8, outline: { color: "white", width: 1.5 } }, label: "เครื่องที่ 1" },
+          { value: 2, symbol: { type: "simple-marker", color: "#ec4899", size: 8, outline: { color: "white", width: 1.5 } }, label: "เครื่องที่ 2" }
+        ]
+      },
+      labelingInfo: [{
+        labelExpressionInfo: { expression: "$feature.voltage_text" },
+        labelPlacement: "above-right",
+        symbol: { type: "text", color: "#374151", font: { size: 9, family: "Arial", weight: "bold" }, haloColor: "white", haloSize: 1 },
+        minScale: 10000
+      }],
+      popupTemplate: { title: "ข้อมูลมิเตอร์", content: "กลุ่ม: เครื่องที่ {group}<br>แรงดัน:<br>{voltage_text}" }
+    });
+    const featureGroups = new GeoJSONLayer({
+      url: `/pea_no_projects/output/${projectId}/feature_groups.geojson`,
+      title: "จุดแบ่งโหลด",
+      renderer: {
+        type: "unique-value", field: "group",
+        uniqueValueInfos: [
+          { value: "initial", label: "จุดติดตั้งหม้อแปลงก่อนปรับปรุง", symbol: { type: "simple-marker", style: "square", color: "#1f2937", size: 12, outline: { color: "white", width: 2 } } },
+          { value: "splitting", label: "จุดแบ่งโหลด", symbol: { type: "simple-marker", style: "diamond", color: "#eab308", size: 14, outline: { color: "black", width: 1.5 } } },
+          { value: "group1", label: "หม้อแปลงเครื่อง 1", symbol: { type: "simple-marker", style: "diamond", color: "#06b6d4", size: 16, outline: { color: "white", width: 2 } } },
+          { value: "group2", label: "หม้อแปลงเครื่อง 2", symbol: { type: "simple-marker", style: "diamond", color: "#ec4899", size: 16, outline: { color: "white", width: 2 } } }
+        ]
+      },
+      labelingInfo: [{
+        labelExpressionInfo: { expression: "$feature.name" },
+        labelPlacement: "above-right",
+        symbol: { type: "text", color: "#111827", font: { size: 11, family: "Arial", weight: "bold" }, haloColor: "white", haloSize: 2 }
+      }]
+    });
+
+    // Feature group style config for panel display
+    const fgStyles = {
+      initial:   { color: "#1f2937", icon: "bi-geo-alt-fill",      label: "หม้อแปลงเดิม (Initial)" },
+      splitting: { color: "#d97706", icon: "bi-diamond-fill",       label: "จุดแบ่งโหลด (Splitting)" },
+      group1:    { color: "#06b6d4", icon: "bi-diamond-half",       label: "หม้อแปลงเครื่อง 1" },
+      group2:    { color: "#ec4899", icon: "bi-diamond",            label: "หม้อแปลงเครื่อง 2" }
+    };
+    const fgOrder = ["initial", "splitting", "group1", "group2"];
+
+    featureGroups.when(() => {
+      // Zoom to initial transformer
+      const qInit = featureGroups.createQuery();
+      qInit.where = "group = 'initial'"; qInit.returnGeometry = true;
+      featureGroups.queryFeatures(qInit).then(r => {
+        if (r.features.length > 0) view.goTo({ target: r.features[0].geometry, zoom: 16 });
+      });
+
+      // Query ALL features for the info panel
+      const qAll = featureGroups.createQuery();
+      qAll.returnGeometry = true;
+      qAll.outFields = ["group", "name"];
+      featureGroups.queryFeatures(qAll).then(result => {
+        const fgEl = document.getElementById("featureGroupsInfo");
+        if (!fgEl) return;
+        if (!result.features.length) { fgEl.innerHTML = '<p class="text-gray-300">ไม่มีข้อมูล</p>'; return; }
+
+        // Build a map group → feature for ordered display
+        const byGroup = {};
+        result.features.forEach(f => { byGroup[f.attributes.group] = f; });
+
+        let html = "";
+        fgOrder.forEach(groupKey => {
+          const f = byGroup[groupKey];
+          if (!f) return;
+          const cfg = fgStyles[groupKey] || { color: "#6b7280", icon: "bi-circle-fill", label: groupKey };
+          const geom = f.geometry;
+          const lat = geom ? geom.latitude.toFixed(5) : "—";
+          const lon = geom ? geom.longitude.toFixed(5) : "—";
+          const name = f.attributes.name || "";
+
+          html += `
+            <div class="flex items-start gap-2 py-1.5 border-b border-gray-50 last:border-0 cursor-pointer hover:bg-gray-50 rounded-lg px-1 transition-colors"
+                 onclick="panToFeature(${geom ? geom.longitude : 0}, ${geom ? geom.latitude : 0})">
+              <i class="bi ${cfg.icon} mt-0.5 shrink-0" style="color:${cfg.color}"></i>
+              <div class="min-w-0">
+                <p class="font-black text-gray-700 truncate">${cfg.label}</p>
+                ${name ? `<p class="text-gray-400 truncate">${name}</p>` : ""}
+                <p class="text-gray-300 text-[10px]">${lat}, ${lon}</p>
+              </div>
+            </div>`;
+        });
+        fgEl.innerHTML = html;
+      });
+    });
+
+    map.addMany([lvLineLayer, mvLineLayer, meterLayer, featureGroups]);
+    view.ui.add(new Legend({ view, style: "classic" }), "top-right");
+
+    // ===== INDEX SELECTOR + MAP MARKER =====
+    let markerGraphic = null, textGraphic = null;
+    let edgeDiffs = [];
+
+    fetch(`/pea_no_projects/output/${projectId}/edge_diffs.json`)
+      .then(r => r.json())
+      .then(data => {
+        edgeDiffs = data;
+        const selector = document.getElementById("splittingSelector");
+        data.forEach((item, index) => {
+          const opt = document.createElement("option");
+          opt.value = index;
+          const isCached = cachedIndices.has(index);
+          opt.textContent = (isCached ? "✓ " : "") + `Index ${item.splitting_index}  |  ΔLoad ${Math.abs(item.Edge_Diff).toFixed(1)} kW`;
+          if (isCached) opt.style.color = "#16a34a";
+          selector.appendChild(opt);
+        });
+      });
+
+    document.getElementById("splittingSelector").addEventListener("change", function() {
+      const idx = parseInt(this.value);
+      const selected = edgeDiffs[idx];
+      if (!selected) return;
+
+      const lat = (selected.N1_Lat + selected.N2_Lat) / 2;
+      const lon = (selected.N1_Lon + selected.N2_Lon) / 2;
+      const isCached = cachedIndices.has(idx);
+
+      // Map marker
+      if (markerGraphic) view.graphics.removeMany([markerGraphic, textGraphic]);
+      markerGraphic = new Graphic({
+        geometry: { type: "point", longitude: lon, latitude: lat },
+        symbol: { type: "simple-marker", style: "triangle", color: "#ef4444", size: "18px", angle: 180, outline: { color: "white", width: 2 } }
+      });
+      textGraphic = new Graphic({
+        geometry: markerGraphic.geometry,
+        symbol: { type: "text", text: "Candidate Splitting Point", color: "#ef4444", font: { size: 11, weight: "bold" }, haloColor: "white", haloSize: 2, yoffset: 15 }
+      });
+      view.graphics.addMany([markerGraphic, textGraphic]);
+      view.goTo({ center: [lon, lat], zoom: 17 });
+
+      // Update top-bar detail strip
+      const strip = document.getElementById("indexDetailStrip");
+      strip.classList.remove("hidden");
+      strip.classList.add("flex");
+      document.getElementById("detail-delta").textContent = Math.abs(selected.Edge_Diff).toFixed(2);
+      document.getElementById("detail-g1").textContent = selected.Load_G1.toFixed(2);
+      document.getElementById("detail-g2").textContent = selected.Load_G2.toFixed(2);
+      document.getElementById("detail-coords").textContent = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+      document.getElementById("detail-status").innerHTML = isCached
+        ? `<span class="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-black bg-green-50 text-green-600 border border-green-100"><i class="bi bi-check-circle-fill"></i> มีผลลัพธ์แล้ว</span>`
+        : `<span class="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-black bg-gray-50 text-gray-400 border border-gray-100"><i class="bi bi-hourglass"></i> ยังไม่ประมวลผล</span>`;
+
+      // Reprocess button state
+      document.getElementById("reprocessBtnText").textContent = isCached ? "โหลดผลลัพธ์" : "RE-PROCESS";
+      document.getElementById("reprocessBtn").className = isCached
+        ? "inline-flex items-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-600 text-white text-sm font-bold rounded-xl shadow-md shadow-green-500/20 transition-all active:scale-95"
+        : "inline-flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold rounded-xl shadow-md shadow-amber-500/20 transition-all active:scale-95";
+    });
+
+    // ===== REPROCESS / LOAD CACHED =====
+    document.getElementById("reprocessBtn").addEventListener("click", () => {
+      const selectorEl = document.getElementById("splittingSelector");
+      const idx = selectorEl.value;
+      if (idx === "" || idx === null) {
+        Swal.fire({ icon: 'warning', title: 'คำแนะนำ', text: 'กรุณาเลือกจุดแบ่งโหลดก่อน', customClass: { popup: 'rounded-[2rem]' } });
+        return;
+      }
+      const numIdx = parseInt(idx);
+      const isCached = cachedIndices.has(numIdx);
+
+      if (isCached) {
+        // Load cached result
+        showLoading('กำลังโหลดผลลัพธ์ที่บันทึกไว้...');
+        fetch(`/peaNoProjectResults/${projectId}/${numIdx}`)
+          .then(r => r.json())
+          .then(data => {
+            if (data.error) { Swal.fire('ผิดพลาด', data.error, 'error'); return; }
+            updateResultDisplay(data);
+            Swal.fire({ icon: 'success', title: 'โหลดเสร็จสิ้น', text: `แสดงผลลัพธ์สำหรับ Index ${numIdx}`, timer: 1500, showConfirmButton: false });
+          })
+          .catch(() => Swal.fire('ผิดพลาด', 'ไม่สามารถโหลดข้อมูลได้', 'error'));
+      } else {
+        // Reprocess
+        Swal.fire({
+          title: 'ยืนยันการประมวลผล?',
+          text: `ประมวลผลระบบใหม่โดยใช้ Splitting Index ${numIdx}`,
+          icon: 'question', showCancelButton: true,
+          confirmButtonText: 'ยืนยัน', cancelButtonText: 'ยกเลิก',
+          buttonsStyling: false,
+          customClass: {
+            confirmButton: 'bg-primary text-white px-8 py-3 rounded-xl mx-2 font-bold shadow-lg shadow-primary/20',
+            cancelButton: 'bg-gray-100 text-gray-600 px-8 py-3 rounded-xl mx-2 font-bold',
+            popup: 'rounded-[2rem]'
+          }
+        }).then(result => {
+          if (result.isConfirmed) {
+            Swal.fire({ title: 'กำลังประมวลผล', text: 'กรุณารอสักครู่...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+            fetch(`/reprocessPeaNoProject/${projectId}`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ sp_index: numIdx })
+            })
+            .then(r => r.json())
+            .then(data => {
+              if (data.success) {
+                cachedIndices.add(numIdx);
+                // Update option label
+                const opt = selectorEl.options[selectorEl.selectedIndex];
+                if (opt) { opt.textContent = "✓ " + opt.textContent.replace(/^✓ /, ""); opt.style.color = "#16a34a"; }
+                Swal.fire({ icon: 'success', title: 'สำเร็จ', text: data.message }).then(() => location.reload());
+              } else {
+                Swal.fire({ icon: 'error', title: 'ผิดพลาด', text: data.error });
+              }
+            });
+          }
+        });
+      }
+    });
+  }); // end require
+
+  // ===== COLLAPSIBLE INFO PANEL =====
+  const toggleBtn = document.getElementById("toggleInfoPanel");
+  const panelBody = document.getElementById("infoPanelBody");
+  const toggleIcon = document.getElementById("toggleIcon");
+  if (toggleBtn && panelBody && toggleIcon) {
+    let panelCollapsed = false;
+    toggleBtn.addEventListener("click", () => {
+      panelCollapsed = !panelCollapsed;
+      panelBody.style.display = panelCollapsed ? "none" : "";
+      toggleIcon.style.transform = panelCollapsed ? "rotate(180deg)" : "rotate(0deg)";
+    });
+  }
+
+
+  // ===== VIEW TOGGLER (card / table) =====
+  const showCardBtn = document.getElementById("showCardBtn");
+  const showTableBtn = document.getElementById("showTableBtn");
+  const cardView = document.getElementById("cardView");
+  const tableView = document.getElementById("tableView");
+  const activeClass = "flex items-center space-x-2 px-5 py-2 rounded-xl text-sm font-bold transition-all bg-white text-primary shadow-sm border border-gray-100";
+  const inactiveClass = "flex items-center space-x-2 px-5 py-2 rounded-xl text-sm font-bold transition-all text-gray-500 hover:text-gray-700";
+
+  showCardBtn.addEventListener("click", () => {
+    cardView.classList.remove("hidden"); tableView.classList.add("hidden");
+    showCardBtn.className = activeClass; showTableBtn.className = inactiveClass;
+  });
+  showTableBtn.addEventListener("click", () => {
+    cardView.classList.add("hidden"); tableView.classList.remove("hidden");
+    showTableBtn.className = activeClass; showCardBtn.className = inactiveClass;
+  });
+
+  // ===== UPDATE DISPLAY FROM CACHED RESULT =====
+  function updateResultDisplay(r) {
+    // Before card
+    document.getElementById("display-tr-pea-no").textContent = r.tr_pea_no || "—";
+    document.getElementById("display-tr-kva").innerHTML = `${r.tr_kva} <small class="text-xs font-medium text-gray-400">kVA</small>`;
+    document.getElementById("display-tr-loss").innerHTML = `${r.tr_loss} <small class="text-xs font-medium text-gray-400">kW</small>`;
+    document.getElementById("display-tr-linelen").innerHTML = `${r.tr_Line_lengh} <small class="text-xs font-medium text-gray-400">m</small>`;
+    document.getElementById("display-tr-pload").innerHTML = `<span class="${r.tr_PLOADPEAK >= 85 ? 'text-red-500' : r.tr_PLOADPEAK >= 60 ? 'text-amber-500' : 'text-gray-800'}">${r.tr_PLOADPEAK}</span><small class="text-xs font-medium text-gray-400"> %</small>`;
+
+    // G1 card
+    document.getElementById("display-g1-load").innerHTML = `${r.g1_load} <small class="text-xs font-bold">kW</small>`;
+    document.getElementById("display-future-g1").innerHTML = `${r.future_g1_load} <small class="text-[10px] font-bold">kW</small>`;
+    document.getElementById("display-rating-g1").innerHTML = `${r.rating_g1} <small class="text-[10px] text-gray-400">kVA</small>`;
+    document.getElementById("display-loss-g1").innerHTML = `${r.total_system_loss_g1} <small class="text-[10px] text-gray-400">kW</small>`;
+    document.getElementById("display-dist-g1").innerHTML = `${r.Max_Distance_Group1} <small class="text-[10px] text-gray-400">m</small>`;
+
+    // G2 card
+    document.getElementById("display-g2-load").innerHTML = `${r.g2_load} <small class="text-xs font-bold">kW</small>`;
+    document.getElementById("display-future-g2").innerHTML = `${r.future_g2_load} <small class="text-[10px] font-bold">kW</small>`;
+    document.getElementById("display-rating-g2").innerHTML = `${r.rating_g2} <small class="text-[10px] text-gray-400">kVA</small>`;
+    document.getElementById("display-loss-g2").innerHTML = `${r.total_system_loss_g2} <small class="text-[10px] text-gray-400">kW</small>`;
+    document.getElementById("display-dist-g2").innerHTML = `${r.Max_Distance_Group2} <small class="text-[10px] text-gray-400">m</small>`;
+
+    // Table
+    document.getElementById("tbl-g1-load").textContent = r.g1_load;
+    document.getElementById("tbl-g2-load").textContent = r.g2_load;
+    document.getElementById("tbl-fg1").textContent = r.future_g1_load;
+    document.getElementById("tbl-fg2").textContent = r.future_g2_load;
+    document.getElementById("tbl-tr-kva").textContent = r.tr_kva;
+    document.getElementById("tbl-rating-g1").textContent = r.rating_g1;
+    document.getElementById("tbl-rating-g2").textContent = r.rating_g2;
+    document.getElementById("tbl-tr-loss").textContent = r.tr_loss;
+    document.getElementById("tbl-loss-g1").textContent = r.total_system_loss_g1;
+    document.getElementById("tbl-loss-g2").textContent = r.total_system_loss_g2;
+    document.getElementById("tbl-tr-linelen").textContent = r.tr_Line_lengh;
+    document.getElementById("tbl-dist-g1").textContent = r.Max_Distance_Group1;
+    document.getElementById("tbl-dist-g2").textContent = r.Max_Distance_Group2;
+  }
 </script>
 {% endblock %}

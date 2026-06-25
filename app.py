@@ -4,7 +4,7 @@ import os, shutil
 import mysql.connector
 from processNew_no_gui import run_process_from_project_folder
 from InputJsonApi import run_once_with_facilityid, run_pipeline_for_facilityid
-from processNew_no_gui_peanumber import main_pipeline
+from optimized_transformer_group_280469 import main_pipeline
 import logging
 from collections import defaultdict
 import json
@@ -50,8 +50,22 @@ REGION_MAPPING = {
 
 def is_admin():
     user = session.get("user", {})
-    # For now, we'll allow all for testing
-    return True
+    employee_id = user.get("hr_employee_id")
+    if not employee_id:
+        return False
+    try:
+        conn = get_db()
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT role, region FROM admins WHERE hr_employee_id = %s", (employee_id,))
+        admin = cur.fetchone()
+        cur.close(); conn.close()
+        if admin:
+            session["admin_role"] = admin["role"]
+            session["admin_region"] = admin["region"]
+            return True
+        return False
+    except Exception:
+        return False
 
 def get_user_region():
     user = session.get("user", {})
@@ -271,6 +285,7 @@ def upload():
     return jsonify({'message': 'อัปโหลดสำเร็จ'}), 200
 
 @app.route('/update', methods=['POST'])
+@login_required
 def update():
     project_id = request.form.get('project_id')
     project_name = request.form.get('project_name', '').strip()
@@ -304,12 +319,19 @@ def update():
         cursor.close(); conn.close()
 
 @app.route('/delete/<int:project_id>', methods=['POST'])
+@login_required
 def delete(project_id):
+    user = session.get("user", {})
+    employee_id = user.get("hr_employee_id")
     folder = secure_filename(str(project_id))
     upload_folder_path = os.path.join(app.config['UPLOAD_FOLDER'], folder)
     output_folder_path = os.path.join(app.config['OUTPUT_FOLDER'], folder)
     conn = get_db()
     cur = conn.cursor()
+    cur.execute("SELECT id FROM projects WHERE id=%s AND owner_id=%s", (project_id, employee_id))
+    if not cur.fetchone():
+        cur.close(); conn.close()
+        return jsonify({'error': 'คุณไม่มีสิทธิ์ลบโปรเจคนี้'}), 403
     cur.execute("DELETE FROM project_files WHERE project_id=%s", (project_id,))
     cur.execute("DELETE FROM projects WHERE id=%s", (project_id,))
     conn.commit()
@@ -330,7 +352,16 @@ def map_view(project_id):
     return render_template("testmap.html", project=project_id, result=result_data, user=user)
 
 @app.route('/run/<int:project_id>', methods=['POST'])
+@login_required
 def run_project(project_id):
+    user = session.get("user", {})
+    employee_id = user.get("hr_employee_id")
+    conn = get_db(); cur = conn.cursor()
+    cur.execute("SELECT id FROM projects WHERE id=%s AND owner_id=%s", (project_id, employee_id))
+    if not cur.fetchone():
+        cur.close(); conn.close()
+        return jsonify({'error': 'คุณไม่มีสิทธิ์เรียกใช้งานโปรเจคนี้'}), 403
+    cur.close(); conn.close()
     try:
         folder_path = app.config['UPLOAD_FOLDER']
         result = run_process_from_project_folder(project_id, folder_path)
@@ -342,7 +373,16 @@ def run_project(project_id):
         return jsonify({'error': str(e)}), 500
 
 @app.route('/reprocess/<int:project_id>', methods=['POST'])
+@login_required
 def reprocess_with_index(project_id):
+    user = session.get("user", {})
+    employee_id = user.get("hr_employee_id")
+    conn = get_db(); cur = conn.cursor()
+    cur.execute("SELECT id FROM projects WHERE id=%s AND owner_id=%s", (project_id, employee_id))
+    if not cur.fetchone():
+        cur.close(); conn.close()
+        return jsonify({'error': 'คุณไม่มีสิทธิ์เรียกใช้งานโปรเจคนี้'}), 403
+    cur.close(); conn.close()
     try:
         sp_index = request.json.get("sp_index", 0)
         folder_path = app.config['UPLOAD_FOLDER']
@@ -355,6 +395,7 @@ def reprocess_with_index(project_id):
         return jsonify({'error': str(e)}), 500
 
 @app.route('/download/<int:project_id>')
+@login_required
 def download_project_files(project_id):
     folder_path = f'output/{project_id}/downloads'
     if not os.path.exists(folder_path):
@@ -379,6 +420,8 @@ def create_pea_no_project():
     region = request.form.get("region", "").strip()
     if not facility_id:
         return jsonify({"error": "facility_id ต้องระบุ"}), 400
+    if region.upper() not in set(REGION_MAPPING.values()):
+        return jsonify({"error": "ภูมิภาคไม่ถูกต้อง"}), 400
     conn = get_db()
     cur = conn.cursor()
     try:
@@ -417,6 +460,7 @@ def pea_no_project_map_view(project_id):
     return render_template("peaNoProjectmap.html", project=project_id, result=result_data, user=session.get("user", {}))
 
 @app.route('/downloadPeaNoProject/<int:project_id>')
+@login_required
 def download_pea_no_project_files(project_id):
     folder_path = f'pea_no_projects/output/{project_id}/downloads'
     if not os.path.exists(folder_path): return "ไม่พบโฟลเดอร์ดาวน์โหลด", 404
@@ -429,6 +473,7 @@ def download_pea_no_project_files(project_id):
     return send_file(zip_buffer, mimetype='application/zip', as_attachment=True, download_name=f'project_{project_id}_results.zip')
 
 @app.route('/reprocessPeaNoProject/<int:project_id>', methods=['POST'])
+@login_required
 def pea_no_project_reprocess_with_index(project_id):
     conn = get_db()
     cur = conn.cursor(dictionary=True)
@@ -445,11 +490,18 @@ def pea_no_project_reprocess_with_index(project_id):
         cur.close(); conn.close()
 
 @app.route('/pea_no_project_delete/<int:project_id>', methods=['POST'])
+@login_required
 def peaNoProjectDelete(project_id):
+    user = session.get("user", {})
+    employee_id = user.get("hr_employee_id")
     folder = secure_filename(str(project_id))
     input_folder_path = os.path.join("pea_no_projects", "input", folder)
     output_folder_path = os.path.join("pea_no_projects", "output", folder)
     conn = get_db(); cur = conn.cursor()
+    cur.execute("SELECT id FROM pea_no_projects WHERE id=%s AND owner_id=%s", (project_id, employee_id))
+    if not cur.fetchone():
+        cur.close(); conn.close()
+        return jsonify({'error': 'คุณไม่มีสิทธิ์ลบโปรเจคนี้'}), 403
     cur.execute("DELETE FROM pea_no_projects WHERE id=%s", (project_id,))
     conn.commit(); cur.close(); conn.close()
     try:
@@ -460,6 +512,7 @@ def peaNoProjectDelete(project_id):
     return jsonify({'message': 'ลบสำเร็จ'}), 200
 
 @app.route('/pea_no_projects/output/<int:project_id>/<path:filename>')
+@login_required
 def serve_project_output(project_id, filename):
     base_dir = os.path.join(os.getcwd(), "pea_no_projects", "output", str(project_id))
     return send_from_directory(base_dir, filename)
@@ -505,7 +558,7 @@ def transformer_stats():
     except Exception as e:
         import traceback
         logging.error(f"Error in transformer_stats: {e}\n{traceback.format_exc()}")
-        return f"Internal Server Error: {str(e)}", 500
+        return "เกิดข้อผิดพลาดในระบบ กรุณาติดต่อผู้ดูแล", 500
 
 @app.route('/admin/upload_stats', methods=['GET', 'POST'])
 @login_required
