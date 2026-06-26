@@ -1843,8 +1843,17 @@ def log_pipeline_result(facility_id: str, result: dict):
     return msg  # เผื่อเอาไป print หรือแสดงใน GUI ได้ต่อ
 
 
-def run_pipeline_for_facilityid(facility_id: str, project_id: str):
-    logging.info(f"[Balance] Start with FACILITYID={facility_id}")
+def run_pipeline_for_facilityid(facility_id: str, project_id: str, region: str = None):
+    global TR_LAYER_17, BALANCE_BASE, PEA_QUERY_BASE, GEOM_BUFFER_URL, GEOM_PROJECT_URL
+    if region:
+        gis_prefix = 'ne2' if region.upper() == 'Z' else region.lower()
+        cfg = GISConfig(gis_prefix)
+        TR_LAYER_17      = cfg.TR_LAYER_17
+        BALANCE_BASE     = cfg.BALANCE_BASE
+        PEA_QUERY_BASE   = cfg.PEA_QUERY_BASE
+        GEOM_BUFFER_URL  = cfg.GEOM_BUFFER_URL
+        GEOM_PROJECT_URL = cfg.GEOM_PROJECT_URL
+    logging.info(f"[Balance] Start with FACILITYID={facility_id}, region={region}, GIS={PEA_QUERY_BASE}")
 
     # 1) BalanceLoad + Join → เซฟ TRwitmeter{fac}.json (มีแต่จุด/ฟีเจอร์ตาม Balance)
     result = run_once_with_facilityid(        
