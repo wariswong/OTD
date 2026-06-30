@@ -1,0 +1,353 @@
+{% extends "base.html" %}
+
+{% block title %}ผลวิเคราะห์ {{ fac_a }} ↔ {{ fac_b }} | OPSI{% endblock %}
+
+{% block container_class %}max-w-none px-2 md:px-6{% endblock %}
+
+{% block head %}
+{% if has_html %}
+<link rel="stylesheet" href="https://js.arcgis.com/4.29/esri/themes/light/main.css">
+<script src="https://js.arcgis.com/4.29/"></script>
+<style>
+  #viewDiv { height: calc(100vh - 190px); min-height: 520px; width: 100%; border-radius: 1.25rem; }
+  .esri-ui .esri-component { border-radius: 10px !important; }
+  .esri-legend { border-radius: 14px !important; margin: 10px !important; border: 1px solid rgba(0,0,0,0.06) !important; }
+</style>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+
+{# ===== Toolbar ===== #}
+<div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+  <div class="flex items-center gap-3">
+    <a href="{{ url_for('shareload.shareload_list') }}"
+       class="flex items-center justify-center w-9 h-9 rounded-xl bg-white shadow-sm border border-gray-100 text-gray-500 hover:text-primary transition-all shrink-0">
+      <i class="bi bi-arrow-left text-sm"></i>
+    </a>
+    <div>
+      <nav class="flex mb-0.5">
+        <ol class="inline-flex items-center space-x-1 text-[10px] text-gray-400">
+          <li><a href="{{ url_for('shareload.shareload_list') }}" class="hover:text-primary">Share Load</a></li>
+          <li><div class="flex items-center"><i class="bi bi-chevron-right mx-1"></i><span>ผลลัพธ์</span></div></li>
+        </ol>
+      </nav>
+      <h1 class="text-lg font-black text-gray-800 leading-tight flex items-center gap-2">
+        <span class="font-mono text-primary">{{ fac_a }}</span>
+        <i class="bi bi-arrow-left-right text-gray-400 text-sm"></i>
+        <span class="font-mono text-primary">{{ fac_b }}</span>
+      </h1>
+    </div>
+  </div>
+
+  <div class="flex items-center gap-2">
+    {# Legend pills #}
+    {% if has_html %}
+    <div class="hidden md:flex items-center gap-2 mr-2">
+      <span class="flex items-center gap-1.5 text-[11px] font-semibold text-gray-500">
+        <span class="w-6 h-2 rounded-full bg-blue-500 inline-block"></span>TR_A
+      </span>
+      <span class="flex items-center gap-1.5 text-[11px] font-semibold text-gray-500">
+        <span class="w-6 h-2 rounded-full bg-orange-400 inline-block"></span>TR_B
+      </span>
+      <span class="flex items-center gap-1.5 text-[11px] font-semibold text-gray-500">
+        <span class="w-6 h-2 rounded-full bg-red-500 inline-block"></span>Switch OPEN
+      </span>
+      <span class="flex items-center gap-1.5 text-[11px] font-semibold text-gray-500">
+        <span class="w-6 h-2 rounded-full bg-green-500 inline-block"></span>Tie
+      </span>
+    </div>
+    <a href="{{ url_for('shareload.shareload_view_html', pair_key=pair_key) }}" target="_blank"
+       class="inline-flex items-center gap-2 px-3 py-2 border border-gray-200 text-gray-500 rounded-xl text-xs font-semibold hover:border-primary hover:text-primary transition-colors bg-white">
+      <i class="bi bi-box-arrow-up-right"></i> Plotly
+    </a>
+    {% endif %}
+    {% if has_xlsx %}
+    <a href="{{ url_for('shareload.shareload_download', pair_key=pair_key) }}"
+       class="inline-flex items-center gap-2 px-4 py-2 border border-gray-200 text-gray-600 rounded-xl text-sm font-semibold hover:border-primary hover:text-primary transition-colors bg-white">
+      <i class="bi bi-file-earmark-excel-fill text-green-600"></i>
+      ดาวน์โหลด Excel
+    </a>
+    {% endif %}
+  </div>
+</div>
+
+{# ===== Map or spinner ===== #}
+{% if has_html %}
+
+<div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+  {# Loading overlay #}
+  <div id="mapLoader"
+       class="absolute inset-0 z-20 flex flex-col items-center justify-center bg-white/90 rounded-2xl"
+       style="min-height:520px; position:relative;">
+    <div class="animate-spin rounded-full h-10 w-10 border-4 border-primary border-t-transparent mb-3"></div>
+    <p class="text-sm font-semibold text-gray-600">กำลังโหลดข้อมูลแผนที่...</p>
+  </div>
+  <div id="viewDiv" class="hidden"></div>
+</div>
+
+{% else %}
+
+<div class="bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center justify-center py-24">
+  <div id="waitSpinner" class="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent mb-4"></div>
+  <p class="text-gray-600 font-semibold">กำลังประมวลผล...</p>
+  <p class="text-gray-400 text-sm mt-1">หน้านี้จะรีเฟรชอัตโนมัติเมื่อผลลัพธ์พร้อม</p>
+</div>
+<script>
+(function poll() {
+  setTimeout(async function() {
+    try {
+      const res = await fetch('/shareload/status/{{ pair_key }}');
+      const data = await res.json();
+      if (data.ready) { location.reload(); }
+      else if (data.running) { poll(); }
+      else {
+        document.getElementById('waitSpinner').classList.add('hidden');
+        document.querySelector('p.text-gray-600').textContent = 'ไม่พบผลลัพธ์ กรุณาตรวจสอบ log หรือรันใหม่';
+      }
+    } catch(_) { poll(); }
+  }, 8000);
+})();
+</script>
+
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+{% if has_html %}
+<script>
+const PAIR_KEY = {{ pair_key | tojson }};
+
+require([
+  "esri/Map",
+  "esri/views/MapView",
+  "esri/layers/GraphicsLayer",
+  "esri/Graphic",
+  "esri/widgets/Legend",
+  "esri/widgets/Expand"
+], function(Map, MapView, GraphicsLayer, Graphic, Legend, Expand) {
+
+  // ---- Layers ----
+  const linesALayer  = new GraphicsLayer({ title: "TR_A Network (โหลดเกิน)" });
+  const linesBLayer  = new GraphicsLayer({ title: "TR_B Network (รับโหลด)" });
+  const switchLayer  = new GraphicsLayer({ title: "Candidate Switches" });
+  const tieLayer     = new GraphicsLayer({ title: "Tie Line" });
+  const switchOptLayer = new GraphicsLayer({ title: "Switch OPEN (optimal)" });
+  const nodeLayer    = new GraphicsLayer({ title: "Nodes (voltage)" });
+  const meterLayer   = new GraphicsLayer({ title: "Meters" });
+  const trLayer      = new GraphicsLayer({ title: "Transformers" });
+
+  const map = new Map({
+    basemap: "streets-navigation-vector",
+    layers: [linesALayer, linesBLayer, switchLayer, tieLayer,
+             switchOptLayer, nodeLayer, meterLayer, trLayer]
+  });
+
+  const view = new MapView({
+    container: "viewDiv",
+    map: map,
+    center: [101.0, 15.0],
+    zoom: 7,
+    ui: { components: ["zoom", "compass"] }
+  });
+
+  // Legend
+  const legend = new Legend({ view });
+  view.ui.add(new Expand({ view, content: legend, expanded: true, expandIconClass: "esri-icon-legend" }), "top-right");
+
+  // ---- Symbol helpers ----
+  function lineSymbol(color, width, style) {
+    return { type: "simple-line", color: color, width: width || 2, style: style || "solid" };
+  }
+  function markerSymbol(style, color, size, outlineColor) {
+    return {
+      type: "simple-marker", style: style || "circle",
+      color: color, size: size || 10,
+      outline: { color: outlineColor || "white", width: 1.5 }
+    };
+  }
+  function textSymbol(text, color, size, yoffset) {
+    return {
+      type: "text", text: text || "", color: color || "#111",
+      font: { size: size || 9, weight: "bold" },
+      haloColor: "white", haloSize: 1.5,
+      yoffset: yoffset || 8
+    };
+  }
+
+  // Voltage → color (blue=high, red=low)
+  function voltageColor(v) {
+    if (v === null || v === undefined) return [120, 120, 120, 200];
+    if (v >= 0.98) return [22, 163, 74, 220];
+    if (v >= 0.95) return [234, 179, 8, 220];
+    if (v >= 0.90) return [249, 115, 22, 220];
+    return [239, 68, 68, 220];
+  }
+
+  // Build polyline graphic
+  function makePolyline(paths, sym, attrs) {
+    return new Graphic({
+      geometry: { type: "polyline", paths: paths },
+      symbol: sym,
+      attributes: attrs || {},
+      popupTemplate: attrs ? {
+        title: attrs.title || "",
+        content: attrs.content || ""
+      } : null
+    });
+  }
+
+  // Build point graphic
+  function makePoint(lon, lat, sym, attrs) {
+    return new Graphic({
+      geometry: { type: "point", longitude: lon, latitude: lat },
+      symbol: sym,
+      attributes: attrs || {},
+      popupTemplate: attrs ? { title: attrs.title || "", content: attrs.content || "" } : null
+    });
+  }
+
+  const PLOTLY_URL = {{ url_for('shareload.shareload_view_html', pair_key=pair_key) | tojson }};
+
+  // ---- Load data ----
+  fetch('/shareload/data/' + encodeURIComponent(PAIR_KEY))
+    .then(r => {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
+    .then(d => {
+      // === TR_A lines (blue) ===
+      d.lines_a.forEach(path => {
+        linesALayer.add(makePolyline([path], lineSymbol([59, 130, 246], 2.5), {
+          title: 'TR_A Line', content: 'เครือข่าย TR_A: ' + d.fac_a
+        }));
+      });
+
+      // === TR_B lines (orange) ===
+      d.lines_b.forEach(path => {
+        linesBLayer.add(makePolyline([path], lineSymbol([251, 146, 60], 2.5), {
+          title: 'TR_B Line', content: 'เครือข่าย TR_B: ' + d.fac_b
+        }));
+      });
+
+      // === Candidate switch edges (gray dashed) ===
+      d.switches_all.forEach((pts, i) => {
+        switchLayer.add(makePolyline([pts], lineSymbol([156, 163, 175], 1.5, "dash"), {
+          title: 'Candidate Switch #' + (i + 1),
+          content: 'จุด Switch ที่เป็นไปได้'
+        }));
+      });
+
+      // === Tie line (green dashed) ===
+      if (d.tie) {
+        tieLayer.add(makePolyline([d.tie.pts], lineSymbol([34, 197, 94], 3, "dash"), {
+          title: d.tie.label, content: 'Tie Line — เส้นเชื่อมโยงที่เลือก'
+        }));
+        // Midpoint label
+        const mid = d.tie.pts[Math.floor(d.tie.pts.length / 2)];
+        if (mid) {
+          tieLayer.add(makePoint(mid[0], mid[1], textSymbol("TIE", "#166534", 9, 10)));
+        }
+      }
+
+      // === Optimal switch OPEN (red thick) ===
+      if (d.switch_opt) {
+        switchOptLayer.add(makePolyline([d.switch_opt.pts], lineSymbol([239, 68, 68], 4), {
+          title: 'Switch OPEN (Optimal)',
+          content: 'จุด Switch ที่ optimal — เปิดวงจรเพื่อถ่ายโหลด'
+        }));
+        // Mid marker
+        const mid = d.switch_opt.pts[Math.floor(d.switch_opt.pts.length / 2)];
+        if (mid) {
+          switchOptLayer.add(makePoint(mid[0], mid[1],
+            markerSymbol("x", [239, 68, 68], 14, [239, 68, 68]),
+            { title: 'Switch OPEN', content: 'จุด Switch optimal' }
+          ));
+        }
+      }
+
+      // === Voltage nodes (small colored dots) ===
+      d.nodes_voltage.forEach(n => {
+        nodeLayer.add(makePoint(n.lon, n.lat,
+          { type: "simple-marker", style: "circle", color: voltageColor(n.v), size: 6, outline: { color: "white", width: 0.8 } },
+          { title: 'Node', content: (n.label || '').replace(/\n/g, '<br>') }
+        ));
+      });
+
+      // === Meters TR_A (blue small diamonds) ===
+      d.meters_a.forEach(m => {
+        meterLayer.add(makePoint(m.lon, m.lat,
+          markerSymbol("diamond", [59, 130, 246, 180], 7, "white"),
+          { title: 'Meter TR_A', content: 'มิเตอร์ในเครือข่าย ' + d.fac_a }
+        ));
+      });
+
+      // === Meters TR_B (orange small diamonds) ===
+      d.meters_b.forEach(m => {
+        meterLayer.add(makePoint(m.lon, m.lat,
+          markerSymbol("diamond", [251, 146, 60, 180], 7, "white"),
+          { title: 'Meter TR_B', content: 'มิเตอร์ในเครือข่าย ' + d.fac_b }
+        ));
+      });
+
+      // === Transformer A (large blue star) ===
+      if (d.tr_a) {
+        trLayer.add(makePoint(d.tr_a.lon, d.tr_a.lat,
+          markerSymbol("square", [59, 130, 246], 16, "white"),
+          { title: 'TR_A: ' + d.fac_a, content: 'หม้อแปลงโหลดเกิน<br>FACILITYID: ' + d.fac_a }
+        ));
+        trLayer.add(makePoint(d.tr_a.lon, d.tr_a.lat,
+          textSymbol("A: " + d.fac_a, "#1d4ed8", 10, 16)
+        ));
+      }
+
+      // === Transformer B (large orange square) ===
+      if (d.tr_b) {
+        trLayer.add(makePoint(d.tr_b.lon, d.tr_b.lat,
+          markerSymbol("square", [251, 146, 60], 16, "white"),
+          { title: 'TR_B: ' + d.fac_b, content: 'หม้อแปลงรับโหลด<br>FACILITYID: ' + d.fac_b }
+        ));
+        trLayer.add(makePoint(d.tr_b.lon, d.tr_b.lat,
+          textSymbol("B: " + d.fac_b, "#c2410c", 10, 16)
+        ));
+      }
+
+      // === Zoom to fit ===
+      const allPts = [];
+      if (d.tr_a) allPts.push([d.tr_a.lon, d.tr_a.lat]);
+      if (d.tr_b) allPts.push([d.tr_b.lon, d.tr_b.lat]);
+      d.lines_a.forEach(p => p.forEach(pt => allPts.push(pt)));
+      d.lines_b.forEach(p => p.forEach(pt => allPts.push(pt)));
+
+      if (allPts.length > 0) {
+        const lons = allPts.map(p => p[0]);
+        const lats = allPts.map(p => p[1]);
+        const pad = 0.01; // ~1km buffer in degrees
+        const extent = {
+          type: "extent",
+          xmin: Math.min(...lons) - pad, xmax: Math.max(...lons) + pad,
+          ymin: Math.min(...lats) - pad, ymax: Math.max(...lats) + pad,
+          spatialReference: { wkid: 4326 }
+        };
+        view.goTo(extent).catch(() => {});
+      }
+
+      // Show map, hide loader
+      document.getElementById('mapLoader').remove();
+      document.getElementById('viewDiv').classList.remove('hidden');
+    })
+    .catch(err => {
+      document.getElementById('mapLoader').innerHTML =
+        '<div class="text-center py-8"><i class="bi bi-exclamation-triangle text-4xl text-amber-400 mb-3 block"></i>' +
+        '<p class="font-semibold text-gray-600">โหลดข้อมูลแผนที่ไม่สำเร็จ</p>' +
+        '<p class="text-sm text-gray-400 mt-1">' + String(err) + '</p>' +
+        '<a href="' + PLOTLY_URL + '" target="_blank" ' +
+        'class="inline-flex items-center gap-2 mt-4 px-4 py-2 bg-primary text-white rounded-xl text-sm font-semibold">' +
+        '<i class="bi bi-box-arrow-up-right"></i> เปิด Plotly แทน</a></div>';
+    });
+
+}); // end require
+</script>
+{% endif %}
+{% endblock %}

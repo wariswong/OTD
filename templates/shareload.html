@@ -1,0 +1,256 @@
+{% extends "base.html" %}
+
+{% block title %}Share Load Analysis | OPSI{% endblock %}
+
+{% block content %}
+<div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-3">
+    <div>
+        <h1 class="text-3xl font-bold text-gray-800">วิเคราะห์การถ่ายเทโหลด</h1>
+        <p class="text-gray-500 mt-1">ค้นหาจุด Switch/Tie ที่ optimal สำหรับถ่ายเทโหลดระหว่างหม้อแปลง 2 เครื่อง</p>
+    </div>
+</div>
+
+{# ===== Input Form ===== #}
+<div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
+    <h2 class="text-lg font-bold text-gray-700 mb-4 flex items-center gap-2">
+        <i class="bi bi-lightning-charge-fill text-primary"></i>
+        รันการวิเคราะห์คู่ใหม่
+    </h2>
+    <form id="runForm" class="flex flex-wrap gap-4 items-end">
+        <div class="flex-1 min-w-[160px] max-w-xs">
+            <label class="block text-sm font-semibold text-gray-600 mb-1.5">
+                TR_A — หม้อแปลงโหลดเกิน
+            </label>
+            <input type="text" id="facA" name="fac_a" required
+                   placeholder="เช่น 00-058500"
+                   pattern="\d{2}-\d{6}"
+                   class="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm font-mono tracking-wider">
+        </div>
+        <div class="flex-1 min-w-[160px] max-w-xs">
+            <label class="block text-sm font-semibold text-gray-600 mb-1.5">
+                TR_B — หม้อแปลงรับโหลด
+            </label>
+            <input type="text" id="facB" name="fac_b" required
+                   placeholder="เช่น 37-013843"
+                   pattern="\d{2}-\d{6}"
+                   class="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm font-mono tracking-wider">
+        </div>
+        <button type="submit" id="runBtn"
+                class="px-6 py-2.5 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary-dark transition-colors flex items-center gap-2">
+            <i class="bi bi-play-fill"></i>
+            <span id="runBtnText">รันการวิเคราะห์</span>
+        </button>
+    </form>
+    <p class="text-xs text-gray-400 mt-3">
+        <i class="bi bi-info-circle mr-1"></i>
+        รูปแบบ FACILITYID: XX-XXXXXX (เช่น 00-058500) · ใช้เวลาประมาณ 3–10 นาที
+    </p>
+</div>
+
+{# ===== Job Status Toast ===== #}
+<div id="jobToast" class="hidden fixed bottom-6 right-6 z-50 bg-white rounded-2xl shadow-xl border border-gray-100 px-5 py-4 flex items-center gap-3 min-w-[280px]">
+    <div id="jobSpinner" class="animate-spin rounded-full h-5 w-5 border-2 border-primary border-t-transparent shrink-0"></div>
+    <div>
+        <p class="text-sm font-semibold text-gray-800" id="jobToastTitle">กำลังประมวลผล...</p>
+        <p class="text-xs text-gray-500 mt-0.5" id="jobToastSub"></p>
+    </div>
+    <a id="jobToastLink" href="#" class="hidden ml-auto px-3 py-1.5 bg-primary text-white rounded-lg text-xs font-semibold">ดูผล</a>
+</div>
+
+{# ===== Results Table ===== #}
+<div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+    <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+        <h2 class="text-lg font-bold text-gray-700 flex items-center gap-2">
+            <i class="bi bi-table text-primary"></i>
+            ประวัติการรัน
+        </h2>
+        <span class="bg-primary/10 text-primary px-3 py-1 rounded-lg text-sm font-semibold border border-primary/20">
+            {{ pairs | length }} คู่
+        </span>
+    </div>
+
+    {# Search #}
+    <div class="px-6 py-3 border-b border-gray-50">
+        <div class="relative max-w-xs">
+            <input type="text" id="tableSearch" placeholder="ค้นหา FACILITYID..."
+                   class="w-full pl-9 pr-4 py-2 rounded-xl border border-gray-200 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
+            <i class="bi bi-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+        </div>
+    </div>
+
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm" id="pairsTable">
+            <thead class="bg-gray-50 text-xs text-gray-500 uppercase tracking-wider">
+                <tr>
+                    <th class="px-4 py-3 text-left font-semibold">TR_A (โหลดเกิน)</th>
+                    <th class="px-4 py-3 text-left font-semibold">TR_B (รับโหลด)</th>
+                    <th class="px-4 py-3 text-left font-semibold">วันที่รัน</th>
+                    <th class="px-4 py-3 text-center font-semibold">สถานะ</th>
+                    <th class="px-4 py-3 text-center font-semibold">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-50">
+                {% for p in pairs %}
+                <tr class="hover:bg-gray-50/60 transition-colors pair-row"
+                    data-key="{{ p.key }}" data-fac="{{ p.fac_a }} {{ p.fac_b }}">
+                    <td class="px-4 py-3">
+                        <span class="font-mono font-semibold text-gray-800">{{ p.fac_a }}</span>
+                    </td>
+                    <td class="px-4 py-3">
+                        <span class="font-mono font-semibold text-gray-800">{{ p.fac_b }}</span>
+                    </td>
+                    <td class="px-4 py-3 text-gray-500">{{ p.mtime }}</td>
+                    <td class="px-4 py-3 text-center">
+                        {% if p.has_html %}
+                        <span class="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-green-50 text-green-700 text-xs font-semibold">
+                            <i class="bi bi-check-circle-fill"></i> พร้อม
+                        </span>
+                        {% elif p.key in running %}
+                        <span class="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-yellow-50 text-yellow-700 text-xs font-semibold">
+                            <span class="animate-pulse">●</span> กำลังรัน
+                        </span>
+                        {% else %}
+                        <span class="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-gray-100 text-gray-500 text-xs font-semibold">
+                            <i class="bi bi-hourglass"></i> ไม่มีไฟล์
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-3">
+                        <div class="flex items-center justify-center gap-2">
+                            {% if p.has_html %}
+                            <a href="{{ url_for('shareload.shareload_result', pair_key=p.key) }}"
+                               class="inline-flex items-center gap-1 px-3 py-1.5 bg-primary text-white rounded-lg text-xs font-semibold hover:bg-primary-dark transition-colors">
+                                <i class="bi bi-map-fill"></i> ดูแผนที่
+                            </a>
+                            {% endif %}
+                            {% if p.has_xlsx %}
+                            <a href="{{ url_for('shareload.shareload_download', pair_key=p.key) }}"
+                               class="inline-flex items-center gap-1 px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg text-xs font-semibold hover:border-primary hover:text-primary transition-colors">
+                                <i class="bi bi-file-earmark-excel"></i> Excel
+                            </a>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" class="px-6 py-16 text-center text-gray-400">
+                        <i class="bi bi-inbox text-4xl block mb-3 opacity-30"></i>
+                        ยังไม่มีประวัติการรัน
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const FEASIBLE_PAIRS = new Set({{ pairs | selectattr('has_html') | map(attribute='key') | list | tojson | safe }});
+
+// ---- Table search ----
+document.getElementById('tableSearch').addEventListener('input', function() {
+    const q = this.value.toLowerCase();
+    document.querySelectorAll('.pair-row').forEach(row => {
+        const text = row.dataset.fac.toLowerCase();
+        row.style.display = text.includes(q) ? '' : 'none';
+    });
+});
+
+// ---- Run form ----
+const form = document.getElementById('runForm');
+const toast = document.getElementById('jobToast');
+const toastTitle = document.getElementById('jobToastTitle');
+const toastSub = document.getElementById('jobToastSub');
+const toastLink = document.getElementById('jobToastLink');
+const runBtn = document.getElementById('runBtn');
+const runBtnText = document.getElementById('runBtnText');
+let pollInterval = null;
+
+function showToast(title, sub, link = null) {
+    toastTitle.textContent = title;
+    toastSub.textContent = sub;
+    if (link) {
+        toastLink.href = link;
+        toastLink.classList.remove('hidden');
+    } else {
+        toastLink.classList.add('hidden');
+    }
+    toast.classList.remove('hidden');
+}
+
+function hideToast() {
+    toast.classList.add('hidden');
+}
+
+function pollStatus(pairKey) {
+    if (pollInterval) clearInterval(pollInterval);
+    pollInterval = setInterval(async () => {
+        try {
+            const res = await fetch(`/shareload/status/${encodeURIComponent(pairKey)}`);
+            const data = await res.json();
+            if (data.ready) {
+                clearInterval(pollInterval);
+                const resultUrl = `/shareload/result/${encodeURIComponent(pairKey)}`;
+                document.getElementById('jobSpinner').classList.add('hidden');
+                showToast('ประมวลผลเสร็จสิ้น', pairKey, resultUrl);
+                runBtn.disabled = false;
+                runBtnText.textContent = 'รันการวิเคราะห์';
+            } else if (!data.running) {
+                clearInterval(pollInterval);
+                showToast('เกิดข้อผิดพลาด', 'ไม่พบผลลัพธ์ กรุณาตรวจสอบ log');
+                runBtn.disabled = false;
+                runBtnText.textContent = 'รันการวิเคราะห์';
+            }
+        } catch (_) {}
+    }, 8000);
+}
+
+form.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const fac_a = document.getElementById('facA').value.trim();
+    const fac_b = document.getElementById('facB').value.trim();
+    const pairKey = `${fac_a}_${fac_b}`;
+
+    // If result already exists, navigate directly
+    if (FEASIBLE_PAIRS.has(pairKey)) {
+        window.location.href = `/shareload/result/${encodeURIComponent(pairKey)}`;
+        return;
+    }
+
+    runBtn.disabled = true;
+    runBtnText.textContent = 'กำลังส่งคำขอ...';
+
+    try {
+        const fd = new FormData(form);
+        const res = await fetch('/shareload/run', { method: 'POST', body: fd });
+        const data = await res.json();
+
+        if (!res.ok) {
+            Swal.fire({ icon: 'error', title: 'เกิดข้อผิดพลาด', text: data.error, confirmButtonColor: '#7e468f' });
+            runBtn.disabled = false;
+            runBtnText.textContent = 'รันการวิเคราะห์';
+            return;
+        }
+
+        if (data.status === 'exists') {
+            window.location.href = `/shareload/result/${encodeURIComponent(data.key)}`;
+            return;
+        }
+
+        // Running
+        runBtnText.textContent = 'กำลังประมวลผล...';
+        document.getElementById('jobSpinner').classList.remove('hidden');
+        showToast('กำลังประมวลผล...', `${fac_a} ↔ ${fac_b}`);
+        pollStatus(data.key);
+
+    } catch (err) {
+        Swal.fire({ icon: 'error', title: 'เชื่อมต่อล้มเหลว', text: String(err), confirmButtonColor: '#7e468f' });
+        runBtn.disabled = false;
+        runBtnText.textContent = 'รันการวิเคราะห์';
+    }
+});
+</script>
+{% endblock %}

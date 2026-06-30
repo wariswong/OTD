@@ -94,6 +94,12 @@
                         <i class="bi bi-bar-chart-line-fill"></i>
                         <span>Transformer Statistics</span>
                     </a>
+                    <a class="flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium tracking-wide transition-all duration-200
+                              {% if request.endpoint and request.endpoint.startswith('shareload.') %}bg-white text-primary shadow-sm{% else %}text-white/90 hover:bg-white/15 hover:text-white{% endif %}"
+                       href="{{ url_for('shareload.shareload_list') }}">
+                        <i class="bi bi-arrow-left-right"></i>
+                        <span>Share Load</span>
+                    </a>
 
                     <!-- Divider -->
                     <div class="w-px h-6 bg-white/25 mx-2"></div>
@@ -160,6 +166,12 @@
                    href="{{ url_for('stats.transformer_stats') }}">
                     <i class="bi bi-bar-chart-line-fill"></i>
                     <span>Transformer Statistics</span>
+                </a>
+                <a class="flex items-center space-x-2 px-3 py-2.5 rounded-lg text-sm font-medium
+                          {% if request.endpoint and request.endpoint.startswith('shareload.') %}bg-white text-primary{% else %}text-white/90 hover:bg-white/10{% endif %}"
+                   href="{{ url_for('shareload.shareload_list') }}">
+                    <i class="bi bi-arrow-left-right"></i>
+                    <span>Share Load</span>
                 </a>
                 {% if is_admin() %}
                 <a class="flex items-center space-x-2 px-3 py-2.5 rounded-lg text-sm font-medium text-yellow-200 hover:bg-white/10"
