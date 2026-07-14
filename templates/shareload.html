@@ -92,7 +92,8 @@
             <tbody class="divide-y divide-gray-50">
                 {% for p in pairs %}
                 <tr class="hover:bg-gray-50/60 transition-colors pair-row"
-                    data-key="{{ p.key }}" data-fac="{{ p.fac_a }} {{ p.fac_b }}">
+                    data-key="{{ p.key }}" data-fac-a="{{ p.fac_a }}" data-fac-b="{{ p.fac_b }}"
+                    data-fac="{{ p.fac_a }} {{ p.fac_b }}">
                     <td class="px-4 py-3">
                         <span class="font-mono font-semibold text-gray-800">{{ p.fac_a }}</span>
                     </td>
@@ -128,6 +129,18 @@
                                class="inline-flex items-center gap-1 px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg text-xs font-semibold hover:border-primary hover:text-primary transition-colors">
                                 <i class="bi bi-file-earmark-excel"></i> Excel
                             </a>
+                            {% endif %}
+                            {% if p.has_html and p.key not in running %}
+                            <button type="button"
+                                    class="rerun-btn inline-flex items-center gap-1 px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg text-xs font-semibold hover:border-amber-400 hover:text-amber-600 transition-colors">
+                                <i class="bi bi-arrow-repeat"></i> รันใหม่
+                            </button>
+                            {% endif %}
+                            {% if p.key not in running %}
+                            <button type="button"
+                                    class="delete-btn inline-flex items-center gap-1 px-3 py-1.5 border border-gray-200 text-gray-500 rounded-lg text-xs font-semibold hover:border-red-400 hover:text-red-600 transition-colors">
+                                <i class="bi bi-trash3"></i> ลบ
+                            </button>
                             {% endif %}
                         </div>
                     </td>
@@ -208,14 +221,11 @@ function pollStatus(pairKey) {
     }, 8000);
 }
 
-form.addEventListener('submit', async function(e) {
-    e.preventDefault();
-    const fac_a = document.getElementById('facA').value.trim();
-    const fac_b = document.getElementById('facB').value.trim();
+async function runAnalysis(fac_a, fac_b, force) {
     const pairKey = `${fac_a}_${fac_b}`;
 
-    // If result already exists, navigate directly
-    if (FEASIBLE_PAIRS.has(pairKey)) {
+    // If result already exists and this isn't a forced rerun, navigate directly
+    if (!force && FEASIBLE_PAIRS.has(pairKey)) {
         window.location.href = `/shareload/result/${encodeURIComponent(pairKey)}`;
         return;
     }
@@ -224,7 +234,10 @@ form.addEventListener('submit', async function(e) {
     runBtnText.textContent = 'กำลังส่งคำขอ...';
 
     try {
-        const fd = new FormData(form);
+        const fd = new FormData();
+        fd.set('fac_a', fac_a);
+        fd.set('fac_b', fac_b);
+        if (force) fd.set('force', '1');
         const res = await fetch('/shareload/run', { method: 'POST', body: fd });
         const data = await res.json();
 
@@ -251,6 +264,60 @@ form.addEventListener('submit', async function(e) {
         runBtn.disabled = false;
         runBtnText.textContent = 'รันการวิเคราะห์';
     }
+}
+
+form.addEventListener('submit', function(e) {
+    e.preventDefault();
+    const fac_a = document.getElementById('facA').value.trim();
+    const fac_b = document.getElementById('facB').value.trim();
+    runAnalysis(fac_a, fac_b, false);
+});
+
+// ---- Rerun (force reprocess an existing pair) ----
+document.querySelectorAll('.rerun-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+        const row = this.closest('.pair-row');
+        const facA = row.dataset.facA, facB = row.dataset.facB;
+        Swal.fire({
+            title: 'รันการวิเคราะห์ใหม่?',
+            text: `${facA} ↔ ${facB} — ผลลัพธ์เดิมจะถูกแทนที่ด้วยผลลัพธ์ใหม่`,
+            icon: 'question', showCancelButton: true,
+            confirmButtonText: 'รันใหม่', cancelButtonText: 'ยกเลิก',
+            confirmButtonColor: '#7e468f',
+        }).then(result => {
+            if (result.isConfirmed) runAnalysis(facA, facB, true);
+        });
+    });
+});
+
+// ---- Delete cached result ----
+document.querySelectorAll('.delete-btn').forEach(btn => {
+    btn.addEventListener('click', async function() {
+        const row = this.closest('.pair-row');
+        const key = row.dataset.key;
+        const facA = row.dataset.facA, facB = row.dataset.facB;
+        const result = await Swal.fire({
+            title: 'ลบผลลัพธ์นี้?',
+            text: `${facA} ↔ ${facB} — ไฟล์แผนที่, Excel และตารางทั้งหมดจะถูกลบถาวร`,
+            icon: 'warning', showCancelButton: true,
+            confirmButtonText: 'ลบ', cancelButtonText: 'ยกเลิก',
+            confirmButtonColor: '#dc2626',
+        });
+        if (!result.isConfirmed) return;
+
+        try {
+            const res = await fetch(`/shareload/delete/${encodeURIComponent(key)}`, { method: 'POST' });
+            const data = await res.json();
+            if (!res.ok) {
+                Swal.fire({ icon: 'error', title: 'ลบไม่สำเร็จ', text: data.error, confirmButtonColor: '#7e468f' });
+                return;
+            }
+            FEASIBLE_PAIRS.delete(key);
+            row.remove();
+        } catch (err) {
+            Swal.fire({ icon: 'error', title: 'เชื่อมต่อล้มเหลว', text: String(err), confirmButtonColor: '#7e468f' });
+        }
+    });
 });
 </script>
 {% endblock %}

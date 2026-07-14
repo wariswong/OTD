@@ -69,13 +69,21 @@
       ดาวน์โหลด Excel
     </a>
     {% endif %}
+    <button type="button" id="rerunPairBtn"
+            class="inline-flex items-center gap-2 px-4 py-2 border border-gray-200 text-gray-600 rounded-xl text-sm font-semibold hover:border-amber-400 hover:text-amber-600 transition-colors bg-white">
+      <i class="bi bi-arrow-repeat"></i> รันใหม่
+    </button>
+    <button type="button" id="deletePairBtn"
+            class="inline-flex items-center gap-2 px-4 py-2 border border-gray-200 text-gray-500 rounded-xl text-sm font-semibold hover:border-red-400 hover:text-red-600 transition-colors bg-white">
+      <i class="bi bi-trash3"></i> ลบ
+    </button>
   </div>
 </div>
 
 {# ===== Map or spinner ===== #}
 {% if has_html %}
 
-<div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+<div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-6">
   {# Loading overlay #}
   <div id="mapLoader"
        class="absolute inset-0 z-20 flex flex-col items-center justify-center bg-white/90 rounded-2xl"
@@ -84,6 +92,14 @@
     <p class="text-sm font-semibold text-gray-600">กำลังโหลดข้อมูลแผนที่...</p>
   </div>
   <div id="viewDiv" class="hidden"></div>
+</div>
+
+{# ===== Results table (per-scenario switch/tie/loading comparison) ===== #}
+<div id="resultsTableSection" class="mb-6">
+  <div id="tableLoading" class="bg-white rounded-2xl shadow-sm border border-gray-100 flex items-center justify-center py-10 gap-3">
+    <div class="animate-spin rounded-full h-5 w-5 border-2 border-primary border-t-transparent"></div>
+    <p class="text-sm font-semibold text-gray-500">กำลังโหลดตารางผลลัพธ์...</p>
+  </div>
 </div>
 
 {% else %}
@@ -115,10 +131,63 @@
 {% endblock %}
 
 {% block scripts %}
-{% if has_html %}
 <script>
 const PAIR_KEY = {{ pair_key | tojson }};
+const FAC_A = {{ fac_a | tojson }};
+const FAC_B = {{ fac_b | tojson }};
 
+document.getElementById('rerunPairBtn').addEventListener('click', function() {
+  Swal.fire({
+    title: 'รันการวิเคราะห์ใหม่?',
+    text: FAC_A + ' ↔ ' + FAC_B + ' — ผลลัพธ์เดิมจะถูกแทนที่ด้วยผลลัพธ์ใหม่',
+    icon: 'question', showCancelButton: true,
+    confirmButtonText: 'รันใหม่', cancelButtonText: 'ยกเลิก',
+    confirmButtonColor: '#7e468f',
+  }).then(result => {
+    if (!result.isConfirmed) return;
+    const fd = new FormData();
+    fd.set('fac_a', FAC_A); fd.set('fac_b', FAC_B); fd.set('force', '1');
+    Swal.fire({ title: 'กำลังส่งคำขอ...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    fetch('/shareload/run', { method: 'POST', body: fd })
+      .then(r => r.json())
+      .then(() => Swal.fire({
+        icon: 'success', title: 'เริ่มรันใหม่แล้ว',
+        text: 'ระบบจะประมวลผลในเบื้องหลัง ไปที่หน้ารายการเพื่อติดตามสถานะ',
+        confirmButtonColor: '#7e468f',
+      }))
+      .then(() => { window.location.href = '/shareload'; })
+      .catch(err => {
+        Swal.fire({ icon: 'error', title: 'เกิดข้อผิดพลาด', text: String(err), confirmButtonColor: '#7e468f' });
+      });
+  });
+});
+
+document.getElementById('deletePairBtn').addEventListener('click', function() {
+  Swal.fire({
+    title: 'ลบผลลัพธ์นี้?',
+    text: FAC_A + ' ↔ ' + FAC_B + ' — ไฟล์แผนที่, Excel และตารางทั้งหมดจะถูกลบถาวร',
+    icon: 'warning', showCancelButton: true,
+    confirmButtonText: 'ลบ', cancelButtonText: 'ยกเลิก',
+    confirmButtonColor: '#dc2626',
+  }).then(result => {
+    if (!result.isConfirmed) return;
+    fetch('/shareload/delete/' + encodeURIComponent(PAIR_KEY), { method: 'POST' })
+      .then(r => r.json().then(data => ({ ok: r.ok, data })))
+      .then(({ ok, data }) => {
+        if (!ok) {
+          Swal.fire({ icon: 'error', title: 'ลบไม่สำเร็จ', text: data.error, confirmButtonColor: '#7e468f' });
+          return;
+        }
+        window.location.href = '/shareload';
+      })
+      .catch(err => {
+        Swal.fire({ icon: 'error', title: 'เชื่อมต่อล้มเหลว', text: String(err), confirmButtonColor: '#7e468f' });
+      });
+  });
+});
+</script>
+{% if has_html %}
+<script>
 require([
   "esri/Map",
   "esri/views/MapView",
@@ -314,11 +383,23 @@ require([
       }
 
       // === Zoom to fit ===
+      // Prefer transformer + line-network points, but fall back to any other
+      // extracted geometry (meters, voltage nodes, switches, tie) so the map
+      // still zooms to the data even if one trace failed to parse.
       const allPts = [];
       if (d.tr_a) allPts.push([d.tr_a.lon, d.tr_a.lat]);
       if (d.tr_b) allPts.push([d.tr_b.lon, d.tr_b.lat]);
       d.lines_a.forEach(p => p.forEach(pt => allPts.push(pt)));
       d.lines_b.forEach(p => p.forEach(pt => allPts.push(pt)));
+
+      if (allPts.length === 0) {
+        d.meters_a.forEach(m => allPts.push([m.lon, m.lat]));
+        d.meters_b.forEach(m => allPts.push([m.lon, m.lat]));
+        d.nodes_voltage.forEach(n => allPts.push([n.lon, n.lat]));
+        d.switches_all.forEach(p => p.forEach(pt => allPts.push(pt)));
+        if (d.tie) d.tie.pts.forEach(pt => allPts.push(pt));
+        if (d.switch_opt) d.switch_opt.pts.forEach(pt => allPts.push(pt));
+      }
 
       if (allPts.length > 0) {
         const lons = allPts.map(p => p[0]);
@@ -348,6 +429,98 @@ require([
     });
 
 }); // end require
+
+// ---- Results table (per-scenario switch/tie/loading comparison) ----
+function scenarioStatusBadge(r) {
+  if (r.error) {
+    return { text: r.error, cls: 'bg-red-50 text-red-600 border-red-100' };
+  }
+  if (!r.feasible) {
+    const reasons = [];
+    if (r.a_loading_after != null && r.a_loading_after >= 80) reasons.push('TR_A ' + r.a_loading_after.toFixed(1) + '%');
+    if (r.b_loading_after != null && r.b_loading_after >= 80) reasons.push('TR_B ' + r.b_loading_after.toFixed(1) + '%');
+    if (r.min_v != null && r.min_v < 200) reasons.push('Vmin ' + r.min_v.toFixed(0) + 'V');
+    return { text: reasons.join(' | ') || 'ไม่ผ่านเกณฑ์', cls: 'bg-red-50 text-red-600 border-red-100' };
+  }
+  if (r.optimal) return { text: 'เหมาะสมที่สุด', cls: 'bg-green-100 text-green-700 border-green-200 font-bold' };
+  return { text: 'ผ่านเกณฑ์', cls: 'bg-emerald-50 text-emerald-600 border-emerald-100' };
+}
+
+fetch('/shareload/table/' + encodeURIComponent(PAIR_KEY))
+  .then(r => r.json())
+  .then(data => {
+    const section = document.getElementById('resultsTableSection');
+    if (!data || !data.scenarios || !data.scenarios.length) {
+      section.innerHTML =
+        '<div class="bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center justify-center py-10 gap-2 text-center">' +
+        '<i class="bi bi-table text-3xl text-gray-300"></i>' +
+        '<p class="text-sm font-semibold text-gray-500">ผลลัพธ์นี้ยังไม่มีตารางสรุป (สร้างก่อนมีฟีเจอร์นี้)</p>' +
+        '<p class="text-xs text-gray-400">ลองรันการวิเคราะห์คู่นี้ใหม่อีกครั้งเพื่อสร้างตารางสรุป หรือดูตารางจาก Plotly แทน</p>' +
+        '<a href="' + PLOTLY_URL + '" target="_blank" class="inline-flex items-center gap-2 mt-2 px-4 py-2 bg-primary text-white rounded-xl text-sm font-semibold">' +
+        '<i class="bi bi-box-arrow-up-right"></i> เปิด Plotly</a></div>';
+      return;
+    }
+
+    const scenarios = data.scenarios;
+    const opt = scenarios.find(r => r.optimal);
+    let html = '';
+
+    if (opt) {
+      html += '<div class="bg-white rounded-2xl shadow-sm border-2 border-primary/20 p-6 mb-4">' +
+        '<div class="flex items-center gap-2 mb-4"><i class="bi bi-stars text-primary"></i>' +
+        '<h3 class="font-bold text-gray-800">สถานการณ์ที่แนะนำ (Optimal)</h3></div>' +
+        '<div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">' +
+        '<div><p class="text-gray-400 text-xs uppercase font-semibold mb-1">Switch เปิด</p><p class="font-mono font-bold text-gray-800">' + opt.switch_u + ' → ' + opt.switch_v + '</p></div>' +
+        '<div><p class="text-gray-400 text-xs uppercase font-semibold mb-1">Tie เชื่อม</p><p class="font-mono font-bold text-gray-800">' + opt.tie_node_a + ' ↔ ' + opt.tie_node_b + '</p></div>' +
+        '<div><p class="text-gray-400 text-xs uppercase font-semibold mb-1">ระยะ Tie</p><p class="font-bold text-gray-800">' + opt.tie_distance_m.toFixed(1) + ' m</p></div>' +
+        '<div><p class="text-gray-400 text-xs uppercase font-semibold mb-1">โหลดที่ถ่ายเท</p><p class="font-bold text-gray-800">' + opt.subtree_kw.toFixed(1) + ' kW</p></div>' +
+        '<div><p class="text-gray-400 text-xs uppercase font-semibold mb-1">TR_A โหลด</p><p class="font-bold text-blue-600">' + opt.a_loading_before.toFixed(1) + '% → ' + (opt.a_loading_after != null ? opt.a_loading_after.toFixed(1) : '—') + '%</p></div>' +
+        '<div><p class="text-gray-400 text-xs uppercase font-semibold mb-1">TR_B โหลด</p><p class="font-bold text-orange-500">' + opt.b_loading_before.toFixed(1) + '% → ' + (opt.b_loading_after != null ? opt.b_loading_after.toFixed(1) : '—') + '%</p></div>' +
+        '<div><p class="text-gray-400 text-xs uppercase font-semibold mb-1">Vmin</p><p class="font-bold text-gray-800">' + (opt.min_v != null ? opt.min_v.toFixed(0) : '—') + ' V</p></div>' +
+        '<div><p class="text-gray-400 text-xs uppercase font-semibold mb-1">สาย Conductor</p><p class="font-bold text-gray-800">AW ' + (opt.tie_conductor_size ?? '—') + ' mm²</p></div>' +
+        '</div></div>';
+    }
+
+    let rows = '';
+    scenarios.forEach(r => {
+      const badge = scenarioStatusBadge(r);
+      const rowCls = r.optimal ? 'bg-green-50/50' : '';
+      rows +=
+        '<tr class="border-t border-gray-50 hover:bg-gray-50 transition-colors ' + rowCls + '">' +
+        '<td class="px-4 py-3 text-center text-gray-400 font-semibold">' + r.rank + '</td>' +
+        '<td class="px-4 py-3 text-center font-mono">' + r.switch_u + ' → ' + r.switch_v + '</td>' +
+        '<td class="px-4 py-3 text-center font-mono">' + r.tie_node_a + ' ↔ ' + r.tie_node_b + '</td>' +
+        '<td class="px-4 py-3 text-center">' + r.tie_distance_m.toFixed(1) + '</td>' +
+        '<td class="px-4 py-3 text-center">' + r.subtree_kw.toFixed(1) + '</td>' +
+        '<td class="px-4 py-3 text-center text-blue-600">' + r.a_loading_before.toFixed(1) + '%</td>' +
+        '<td class="px-4 py-3 text-center text-blue-600 font-semibold">' + (r.a_loading_after != null ? r.a_loading_after.toFixed(1) + '%' : '—') + '</td>' +
+        '<td class="px-4 py-3 text-center text-orange-500">' + r.b_loading_before.toFixed(1) + '%</td>' +
+        '<td class="px-4 py-3 text-center text-orange-500 font-semibold">' + (r.b_loading_after != null ? r.b_loading_after.toFixed(1) + '%' : '—') + '</td>' +
+        '<td class="px-4 py-3 text-center">' + (r.min_v != null ? r.min_v.toFixed(0) + ' V' : '—') + '</td>' +
+        '<td class="px-4 py-3 text-center"><span class="inline-flex items-center px-2 py-1 rounded-lg text-xs border ' + badge.cls + '">' + badge.text + '</span></td>' +
+        '</tr>';
+    });
+
+    html +=
+      '<div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">' +
+      '<div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">' +
+      '<h3 class="font-bold text-gray-800 flex items-center gap-2"><i class="bi bi-table text-primary"></i>ตารางเปรียบเทียบทุกสถานการณ์ (' + scenarios.length + ')</h3>' +
+      '</div><div class="overflow-x-auto"><table class="w-full text-sm">' +
+      '<thead class="bg-gray-50 text-xs text-gray-500 uppercase tracking-wider"><tr>' +
+      '<th class="px-4 py-3">#</th><th class="px-4 py-3">Switch (u→v)</th><th class="px-4 py-3">Tie (A↔B)</th>' +
+      '<th class="px-4 py-3">ระยะ (m)</th><th class="px-4 py-3">kW ถ่ายเท</th>' +
+      '<th class="px-4 py-3">TR_A ก่อน</th><th class="px-4 py-3">TR_A หลัง</th>' +
+      '<th class="px-4 py-3">TR_B ก่อน</th><th class="px-4 py-3">TR_B หลัง</th>' +
+      '<th class="px-4 py-3">Vmin</th><th class="px-4 py-3">สรุปผล</th>' +
+      '</tr></thead><tbody class="divide-y divide-gray-50">' + rows + '</tbody></table></div></div>';
+
+    section.innerHTML = html;
+  })
+  .catch(() => {
+    document.getElementById('resultsTableSection').innerHTML =
+      '<div class="bg-white rounded-2xl shadow-sm border border-gray-100 flex items-center justify-center py-10">' +
+      '<p class="text-sm font-semibold text-gray-400">โหลดตารางผลลัพธ์ไม่สำเร็จ</p></div>';
+  });
 </script>
 {% endif %}
 {% endblock %}

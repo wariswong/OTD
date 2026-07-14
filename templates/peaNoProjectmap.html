@@ -17,6 +17,10 @@
     @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
     .animate-fade-in { animation: fadeIn 0.35s ease both; }
     .result-section { animation: fadeIn 0.4s ease both; }
+    @media (prefers-reduced-motion: reduce) {
+      .animate-fade-in, .result-section, .animate-pulse, .animate-spin { animation: none !important; }
+      * { transition-duration: 0.01ms !important; }
+    }
   </style>
 {% endblock %}
 
@@ -24,12 +28,12 @@
 
 {# ===== TOP TOOLBAR ===== #}
 <div class="mb-4 space-y-2">
-  {# Row 1: title + action buttons #}
-  <div class="flex items-center justify-between gap-3">
+  <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
     <div class="flex items-center gap-3">
       <a href="/projectspeanumber"
-         class="flex items-center justify-center w-9 h-9 rounded-xl bg-white shadow-sm border border-gray-100 text-gray-500 hover:text-primary transition-all shrink-0">
-        <i class="bi bi-arrow-left text-sm"></i>
+         aria-label="กลับไปยังรายการโปรเจค"
+         class="flex items-center justify-center w-11 h-11 rounded-xl bg-white shadow-sm border border-gray-100 text-gray-500 hover:text-primary focus-visible:ring-2 focus-visible:ring-primary/40 focus:outline-none transition-all shrink-0">
+        <i class="bi bi-arrow-left text-sm" aria-hidden="true"></i>
       </a>
       <div>
         <nav class="flex mb-0.5">
@@ -46,128 +50,70 @@
         </h1>
       </div>
     </div>
-    
-    <div class="flex items-center gap-2">
-      <div class="flex flex-wrap items-center gap-2">
+
+    <div class="flex flex-wrap items-center gap-2">
       {# Selector #}
-      <div class="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-sm min-w-[240px]">
-        <i class="bi bi-pin-map text-primary text-sm shrink-0"></i>
+      <div class="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-sm min-w-[220px] flex-1 sm:flex-none">
+        <i class="bi bi-pin-map text-primary text-sm shrink-0" aria-hidden="true"></i>
         <select id="splittingSelector"
-                class="flex-1 text-sm font-medium text-gray-700 bg-transparent outline-none cursor-pointer">
+                aria-label="เลือกจุดแบ่งโหลด"
+                class="flex-1 text-sm font-medium text-gray-700 bg-transparent outline-none cursor-pointer focus-visible:ring-2 focus-visible:ring-primary/40 rounded-lg">
           <option value="" disabled selected>-- เลือกจุดแบ่งโหลด --</option>
         </select>
       </div>
 
+      {# Currently selected index badge #}
+      <div class="flex items-center gap-1.5 bg-gray-900 text-white rounded-xl px-3 py-2 shadow-sm shrink-0">
+        <i class="bi bi-broadcast text-[11px] text-cyan-400" aria-hidden="true"></i>
+        <span class="text-[10px] font-bold uppercase tracking-wide text-gray-300">กำลังเลือก</span>
+        <span id="currentIndexBadge" class="text-sm font-black">Index {{ result.sp_index | default(0) }}</span>
+      </div>
+
       {# Detail strip — hidden until index selected #}
       <div id="indexDetailStrip"
-          class="hidden items-center gap-0 bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden text-xs divide-x divide-gray-100">
-        <div class="px-3 py-2 flex items-center gap-1.5">
-          <i class="bi bi-arrows-angle-contract text-gray-400"></i>
+          class="hidden items-center gap-0 bg-white border border-gray-200 rounded-xl shadow-sm overflow-x-auto max-w-full text-xs divide-x divide-gray-100">
+        <div class="px-3 py-2 flex items-center gap-1.5 shrink-0">
+          <i class="bi bi-arrows-angle-contract text-gray-400" aria-hidden="true"></i>
           <span class="text-gray-400">ΔLoad</span>
           <span id="detail-delta" class="font-black text-gray-700 ml-1">—</span>
           <span class="text-gray-400">kW</span>
         </div>
-        <div class="px-3 py-2 flex items-center gap-1.5">
+        <div class="px-3 py-2 flex items-center gap-1.5 shrink-0">
           <span class="w-2 h-2 rounded-full bg-cyan-400 shrink-0"></span>
           <span class="text-gray-400">G1</span>
           <span id="detail-g1" class="font-black text-cyan-600 ml-1">—</span>
           <span class="text-gray-400">kW</span>
         </div>
-        <div class="px-3 py-2 flex items-center gap-1.5">
+        <div class="px-3 py-2 flex items-center gap-1.5 shrink-0">
           <span class="w-2 h-2 rounded-full bg-pink-400 shrink-0"></span>
           <span class="text-gray-400">G2</span>
           <span id="detail-g2" class="font-black text-pink-500 ml-1">—</span>
           <span class="text-gray-400">kW</span>
         </div>
-        <div class="px-3 py-2 text-gray-300 font-mono" id="detail-coords">—</div>
-        <div class="px-3 py-2" id="detail-status"></div>
+        <div class="px-3 py-2 text-gray-300 font-mono shrink-0" id="detail-coords">—</div>
+        <div class="px-3 py-2 shrink-0" id="detail-status"></div>
       </div>
-    </div>
+
       <button id="reprocessBtn"
-              class="inline-flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold rounded-xl shadow-md shadow-amber-500/20 transition-all active:scale-95">
-        <i class="bi bi-arrow-repeat"></i>
+              class="inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] bg-amber-500 hover:bg-amber-600 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-bold rounded-xl shadow-md shadow-amber-500/20 transition-all active:scale-95 focus-visible:ring-2 focus-visible:ring-amber-300 focus:outline-none">
+        <i class="bi bi-arrow-repeat" aria-hidden="true"></i>
         <span id="reprocessBtnText">RE-PROCESS</span>
       </button>
       <a href="{{ url_for('projects.download_pea_no_project_files', project_id=project) }}"
-         class="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-dark text-white text-sm font-bold rounded-xl shadow-md shadow-primary/20 transition-all active:scale-95">
-        <i class="bi bi-download"></i>ดาวน์โหลด
+         class="inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] bg-primary hover:bg-primary-dark text-white text-sm font-bold rounded-xl shadow-md shadow-primary/20 transition-all active:scale-95 focus-visible:ring-2 focus-visible:ring-primary/40 focus:outline-none">
+        <i class="bi bi-download" aria-hidden="true"></i>ดาวน์โหลด
       </a>
     </div>
   </div>
-
-  {# Row 2: index selector + inline detail strip #}
-  <!-- <div class="flex flex-wrap items-center gap-2">
-    {# Selector #}
-    <div class="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-sm min-w-[240px]">
-      <i class="bi bi-pin-map text-primary text-sm shrink-0"></i>
-      <select id="splittingSelector"
-              class="flex-1 text-sm font-medium text-gray-700 bg-transparent outline-none cursor-pointer">
-        <option value="" disabled selected>-- เลือกจุดแบ่งโหลด --</option>
-      </select>
-    </div>
-
-    {# Detail strip — hidden until index selected #}
-    <div id="indexDetailStrip"
-         class="hidden items-center gap-0 bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden text-xs divide-x divide-gray-100">
-      <div class="px-3 py-2 flex items-center gap-1.5">
-        <i class="bi bi-arrows-angle-contract text-gray-400"></i>
-        <span class="text-gray-400">ΔLoad</span>
-        <span id="detail-delta" class="font-black text-gray-700 ml-1">—</span>
-        <span class="text-gray-400">kW</span>
-      </div>
-      <div class="px-3 py-2 flex items-center gap-1.5">
-        <span class="w-2 h-2 rounded-full bg-cyan-400 shrink-0"></span>
-        <span class="text-gray-400">G1</span>
-        <span id="detail-g1" class="font-black text-cyan-600 ml-1">—</span>
-        <span class="text-gray-400">kW</span>
-      </div>
-      <div class="px-3 py-2 flex items-center gap-1.5">
-        <span class="w-2 h-2 rounded-full bg-pink-400 shrink-0"></span>
-        <span class="text-gray-400">G2</span>
-        <span id="detail-g2" class="font-black text-pink-500 ml-1">—</span>
-        <span class="text-gray-400">kW</span>
-      </div>
-      <div class="px-3 py-2 text-gray-300 font-mono" id="detail-coords">—</div>
-      <div class="px-3 py-2" id="detail-status"></div>
-    </div>
-  </div> -->
 </div>
 
 {# ===== MAP (FULL WIDTH) ===== #}
 <div class="relative mb-6">
-  <div class="bg-white rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100 overflow-hidden">
-    {# Map status badge #}
-    <!-- <div class="absolute top-4 left-4 z-10 px-3 py-1.5 bg-white/90 backdrop-blur shadow-sm rounded-lg border border-gray-100">
-      <div class="flex items-center space-x-2">
-        <span class="flex h-2 w-2 rounded-full bg-green-500 animate-pulse"></span>
-        <span class="text-[10px] font-bold text-gray-600 uppercase tracking-widest">Live Map View</span>
-      </div>
-    </div> -->
-
-    {# Collapsible featureGroups overlay (top-right) #}
-    <!-- <div id="mapInfoPanel"
-         class="absolute top-4 right-4 z-10 bg-white/95 backdrop-blur shadow-lg rounded-2xl border border-gray-100 w-64 overflow-hidden flex flex-col"
-         style="max-height: calc(75vh - 80px);">
-      {# Header / toggle #}
-      <button id="toggleInfoPanel"
-              class="w-full flex items-center justify-between px-3 py-2.5 bg-gray-50 border-b border-gray-100 hover:bg-gray-100 transition-colors shrink-0">
-        <div class="flex items-center gap-2">
-          <i class="bi bi-geo text-primary text-sm"></i>
-          <span class="text-[11px] font-black text-gray-700 uppercase tracking-widest">ตำแหน่งจุดสำคัญ</span>
-        </div>
-        <i id="toggleIcon" class="bi bi-chevron-up text-gray-400 text-xs transition-transform duration-200"></i>
-      </button>
-      {# Body - scrollable #}
-      <div id="infoPanelBody" class="overflow-y-auto">
-        <div id="featureGroupsInfo" class="p-3 space-y-1 text-xs">
-          <div class="flex items-center gap-2 text-gray-300 py-1">
-            <i class="bi bi-hourglass-split animate-pulse"></i>
-            <span>กำลังโหลดข้อมูล...</span>
-          </div>
-        </div>
-      </div>
-    </div> -->
-
+  <div class="bg-white rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100 overflow-hidden relative">
+    <div id="mapLoading" class="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-gray-50" style="height: 75vh; min-height: 500px;">
+      <div class="w-10 h-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin" role="status" aria-label="กำลังโหลดแผนที่"></div>
+      <p class="text-sm font-bold text-gray-400">กำลังโหลดแผนที่...</p>
+    </div>
     <div id="viewDiv"></div>
   </div>
 </div>
@@ -178,14 +124,14 @@
     <h2 class="text-2xl font-black text-gray-800 tracking-tight">สรุปผลการวิเคราะห์</h2>
     <p class="text-sm text-gray-400 font-medium">เปรียบเทียบข้อมูลก่อนและหลังการปรับปรุงระบบ (By Transformer)</p>
   </div>
-  <div class="bg-gray-100 p-1.5 rounded-2xl border border-gray-200 flex">
-    <button id="showCardBtn"
-            class="flex items-center space-x-2 px-5 py-2 rounded-xl text-sm font-bold transition-all bg-white text-primary shadow-sm border border-gray-100">
-      <i class="bi bi-grid-3x3-gap"></i><span>มุมมองการ์ด</span>
+  <div class="bg-gray-100 p-1.5 rounded-2xl border border-gray-200 flex" role="group" aria-label="สลับมุมมองผลลัพธ์">
+    <button id="showCardBtn" type="button" aria-pressed="true"
+            class="flex items-center justify-center space-x-2 px-5 py-2.5 min-h-[44px] rounded-xl text-sm font-bold transition-all bg-white text-primary shadow-sm border border-gray-100 focus-visible:ring-2 focus-visible:ring-primary/40 focus:outline-none">
+      <i class="bi bi-grid-3x3-gap" aria-hidden="true"></i><span>มุมมองการ์ด</span>
     </button>
-    <button id="showTableBtn"
-            class="flex items-center space-x-2 px-5 py-2 rounded-xl text-sm font-bold transition-all text-gray-500 hover:text-gray-700">
-      <i class="bi bi-table"></i><span>มุมมองตาราง</span>
+    <button id="showTableBtn" type="button" aria-pressed="false"
+            class="flex items-center justify-center space-x-2 px-5 py-2.5 min-h-[44px] rounded-xl text-sm font-bold transition-all text-gray-500 hover:text-gray-700 focus-visible:ring-2 focus-visible:ring-primary/40 focus:outline-none">
+      <i class="bi bi-table" aria-hidden="true"></i><span>มุมมองตาราง</span>
     </button>
   </div>
 </div>
@@ -623,6 +569,9 @@
   // Cached indices from backend
   const cachedIndices = new Set({{ cached_indices | tojson }});
   const projectId = {{ project }};
+  // Index behind whatever's currently in results.json / the root geojson files
+  // (i.e. the last index that was actually reprocessed for this project).
+  const lastUsedIndex = {{ result.sp_index | default(0) }};
 
   // Exposed to panToFeature() called from info panel rows
   let _mapView = null;
@@ -643,6 +592,10 @@
       ui: { components: ["zoom", "compass"] }
     });
     _mapView = view; // expose for panToFeature()
+    view.when(() => {
+      const loadingEl = document.getElementById("mapLoading");
+      if (loadingEl) loadingEl.remove();
+    });
 
     const lvLineLayer = new GeoJSONLayer({
       url: `/pea_no_projects/output/${projectId}/lv_lines.geojson`,
@@ -655,7 +608,7 @@
       title: "ระบบจำหน่าย 22 kV",
       renderer: { type: "simple", symbol: { type: "simple-line", color: "#800000", width: 2, style: "dash-dot" } }
     });
-    const meterLayer = new GeoJSONLayer({
+    let meterLayer = new GeoJSONLayer({
       url: `/pea_no_projects/output/${projectId}/meter_groups.geojson`,
       title: "กลุ่มลูกค้า (Meters)",
       renderer: {
@@ -673,7 +626,7 @@
       }],
       popupTemplate: { title: "ข้อมูลมิเตอร์", content: "กลุ่ม: เครื่องที่ {group}<br>แรงดัน:<br>{voltage_text}" }
     });
-    const featureGroups = new GeoJSONLayer({
+    let featureGroups = new GeoJSONLayer({
       url: `/pea_no_projects/output/${projectId}/feature_groups.geojson`,
       title: "จุดแบ่งโหลด",
       renderer: {
@@ -701,51 +654,88 @@
     };
     const fgOrder = ["initial", "splitting", "group1", "group2"];
 
-    featureGroups.when(() => {
-      // Zoom to initial transformer
-      const qInit = featureGroups.createQuery();
-      qInit.where = "group = 'initial'"; qInit.returnGeometry = true;
-      featureGroups.queryFeatures(qInit).then(r => {
-        if (r.features.length > 0) view.goTo({ target: r.features[0].geometry, zoom: 16 });
-      });
+    // Wires up "zoom to initial TX" + the feature-groups info panel for a
+    // GeoJSONLayer of splitting-point/transformer markers. Reused both on
+    // first page load and whenever a cached result swaps this layer out.
+    function wireFeatureGroupsPanel(fgLayer, opts) {
+      opts = opts || {};
+      return fgLayer.when(() => {
+        if (opts.zoomToInitial !== false) {
+          const qInit = fgLayer.createQuery();
+          qInit.where = "group = 'initial'"; qInit.returnGeometry = true;
+          fgLayer.queryFeatures(qInit).then(r => {
+            if (r.features.length > 0) view.goTo({ target: r.features[0].geometry, zoom: 16 });
+          });
+        }
 
-      // Query ALL features for the info panel
-      const qAll = featureGroups.createQuery();
-      qAll.returnGeometry = true;
-      qAll.outFields = ["group", "name"];
-      featureGroups.queryFeatures(qAll).then(result => {
-        const fgEl = document.getElementById("featureGroupsInfo");
-        if (!fgEl) return;
-        if (!result.features.length) { fgEl.innerHTML = '<p class="text-gray-300">ไม่มีข้อมูล</p>'; return; }
+        // Query ALL features for the info panel
+        const qAll = fgLayer.createQuery();
+        qAll.returnGeometry = true;
+        qAll.outFields = ["group", "name"];
+        return fgLayer.queryFeatures(qAll).then(result => {
+          const fgEl = document.getElementById("featureGroupsInfo");
+          if (!fgEl) return;
+          if (!result.features.length) { fgEl.innerHTML = '<p class="text-gray-300">ไม่มีข้อมูล</p>'; return; }
 
-        // Build a map group → feature for ordered display
-        const byGroup = {};
-        result.features.forEach(f => { byGroup[f.attributes.group] = f; });
+          // Build a map group → feature for ordered display
+          const byGroup = {};
+          result.features.forEach(f => { byGroup[f.attributes.group] = f; });
 
-        let html = "";
-        fgOrder.forEach(groupKey => {
-          const f = byGroup[groupKey];
-          if (!f) return;
-          const cfg = fgStyles[groupKey] || { color: "#6b7280", icon: "bi-circle-fill", label: groupKey };
-          const geom = f.geometry;
-          const lat = geom ? geom.latitude.toFixed(5) : "—";
-          const lon = geom ? geom.longitude.toFixed(5) : "—";
-          const name = f.attributes.name || "";
+          let html = "";
+          fgOrder.forEach(groupKey => {
+            const f = byGroup[groupKey];
+            if (!f) return;
+            const cfg = fgStyles[groupKey] || { color: "#6b7280", icon: "bi-circle-fill", label: groupKey };
+            const geom = f.geometry;
+            const lat = geom ? geom.latitude.toFixed(5) : "—";
+            const lon = geom ? geom.longitude.toFixed(5) : "—";
+            const name = f.attributes.name || "";
 
-          html += `
-            <div class="flex items-start gap-2 py-1.5 border-b border-gray-50 last:border-0 cursor-pointer hover:bg-gray-50 rounded-lg px-1 transition-colors"
-                 onclick="panToFeature(${geom ? geom.longitude : 0}, ${geom ? geom.latitude : 0})">
-              <i class="bi ${cfg.icon} mt-0.5 shrink-0" style="color:${cfg.color}"></i>
-              <div class="min-w-0">
-                <p class="font-black text-gray-700 truncate">${cfg.label}</p>
-                ${name ? `<p class="text-gray-400 truncate">${name}</p>` : ""}
-                <p class="text-gray-300 text-[10px]">${lat}, ${lon}</p>
-              </div>
-            </div>`;
+            html += `
+              <div class="flex items-start gap-2 py-1.5 border-b border-gray-50 last:border-0 cursor-pointer hover:bg-gray-50 rounded-lg px-1 transition-colors"
+                   onclick="panToFeature(${geom ? geom.longitude : 0}, ${geom ? geom.latitude : 0})">
+                <i class="bi ${cfg.icon} mt-0.5 shrink-0" style="color:${cfg.color}"></i>
+                <div class="min-w-0">
+                  <p class="font-black text-gray-700 truncate">${cfg.label}</p>
+                  ${name ? `<p class="text-gray-400 truncate">${name}</p>` : ""}
+                  <p class="text-gray-300 text-[10px]">${lat}, ${lon}</p>
+                </div>
+              </div>`;
+          });
+          fgEl.innerHTML = html;
         });
-        fgEl.innerHTML = html;
       });
-    });
+    }
+
+    wireFeatureGroupsPanel(featureGroups);
+
+    // Swaps meterLayer + featureGroups for the geojson snapshot cached under a
+    // specific splitting-point index, so picking a cached result actually
+    // redraws the map instead of only patching the dashboard numbers.
+    function loadIndexGeoLayers(numIdx) {
+      const meterUrl = `/pea_no_projects/output/${projectId}/results_cache/${numIdx}/meter_groups.geojson`;
+      const fgUrl = `/pea_no_projects/output/${projectId}/results_cache/${numIdx}/feature_groups.geojson`;
+
+      const newMeterLayer = new GeoJSONLayer({
+        url: meterUrl, title: meterLayer.title,
+        renderer: meterLayer.renderer, labelingInfo: meterLayer.labelingInfo,
+        popupTemplate: meterLayer.popupTemplate
+      });
+      const newFeatureGroups = new GeoJSONLayer({
+        url: fgUrl, title: featureGroups.title,
+        renderer: featureGroups.renderer, labelingInfo: featureGroups.labelingInfo
+      });
+
+      // Load both before touching the map, so a 404 (e.g. a result cached
+      // before this per-index geojson existed) leaves the current view intact.
+      return Promise.all([newMeterLayer.load(), newFeatureGroups.load()]).then(() => {
+        map.removeMany([meterLayer, featureGroups]);
+        map.addMany([newMeterLayer, newFeatureGroups]);
+        meterLayer = newMeterLayer;
+        featureGroups = newFeatureGroups;
+        return wireFeatureGroupsPanel(featureGroups, { zoomToInitial: false });
+      });
+    }
 
     map.addMany([lvLineLayer, mvLineLayer, meterLayer, featureGroups]);
     view.ui.add(new Legend({ view, style: "classic" }), "top-right");
@@ -753,6 +743,11 @@
     // ===== INDEX SELECTOR + MAP MARKER =====
     let markerGraphic = null, textGraphic = null;
     let edgeDiffs = [];
+    // Index whose data is actually rendered on the map right now (meterLayer /
+    // featureGroups). The featureGroups layer already draws a permanent
+    // "splitting point" marker for this index, so the dropdown's preview
+    // marker should stay hidden while browsing that same index.
+    let activeMapIndex = lastUsedIndex;
 
     fetch(`/pea_no_projects/output/${projectId}/edge_diffs.json`)
       .then(r => r.json())
@@ -767,6 +762,15 @@
           if (isCached) opt.style.color = "#16a34a";
           selector.appendChild(opt);
         });
+
+        // Default to whichever index was last reprocessed (falls back to 0
+        // if out of range, e.g. candidates changed) so the selector/badge/
+        // detail strip open on the result actually shown on the map.
+        if (data.length > 0) {
+          const defaultIdx = (lastUsedIndex >= 0 && lastUsedIndex < data.length) ? lastUsedIndex : 0;
+          selector.value = String(defaultIdx);
+          selector.dispatchEvent(new Event("change"));
+        }
       });
 
     document.getElementById("splittingSelector").addEventListener("change", function() {
@@ -778,17 +782,24 @@
       const lon = (selected.N1_Lon + selected.N2_Lon) / 2;
       const isCached = cachedIndices.has(idx);
 
-      // Map marker
-      if (markerGraphic) view.graphics.removeMany([markerGraphic, textGraphic]);
-      markerGraphic = new Graphic({
-        geometry: { type: "point", longitude: lon, latitude: lat },
-        symbol: { type: "simple-marker", style: "triangle", color: "#ef4444", size: "18px", angle: 180, outline: { color: "white", width: 2 } }
-      });
-      textGraphic = new Graphic({
-        geometry: markerGraphic.geometry,
-        symbol: { type: "text", text: "Candidate Splitting Point", color: "#ef4444", font: { size: 11, weight: "bold" }, haloColor: "white", haloSize: 2, yoffset: 15 }
-      });
-      view.graphics.addMany([markerGraphic, textGraphic]);
+      // Currently-selected index badge
+      document.getElementById("currentIndexBadge").textContent = `Index ${selected.splitting_index}`;
+
+      // Map marker — skip drawing the preview pin when browsing the index
+      // that's already rendered on the map (its "splitting point" diamond
+      // marker from featureGroups covers the same spot already).
+      if (markerGraphic) { view.graphics.removeMany([markerGraphic, textGraphic]); markerGraphic = null; textGraphic = null; }
+      if (idx !== activeMapIndex) {
+        markerGraphic = new Graphic({
+          geometry: { type: "point", longitude: lon, latitude: lat },
+          symbol: { type: "simple-marker", style: "triangle", color: "#ef4444", size: "18px", angle: 180, outline: { color: "white", width: 2 } }
+        });
+        textGraphic = new Graphic({
+          geometry: markerGraphic.geometry,
+          symbol: { type: "text", text: "Candidate Splitting Point", color: "#ef4444", font: { size: 11, weight: "bold" }, haloColor: "white", haloSize: 2, yoffset: 15 }
+        });
+        view.graphics.addMany([markerGraphic, textGraphic]);
+      }
       view.goTo({ center: [lon, lat], zoom: 17 });
 
       // Update top-bar detail strip
@@ -806,11 +817,63 @@
       // Reprocess button state
       document.getElementById("reprocessBtnText").textContent = isCached ? "โหลดผลลัพธ์" : "RE-PROCESS";
       document.getElementById("reprocessBtn").className = isCached
-        ? "inline-flex items-center gap-2 px-4 py-2 bg-green-500 hover:bg-green-600 text-white text-sm font-bold rounded-xl shadow-md shadow-green-500/20 transition-all active:scale-95"
-        : "inline-flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold rounded-xl shadow-md shadow-amber-500/20 transition-all active:scale-95";
+        ? "inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] bg-green-500 hover:bg-green-600 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-bold rounded-xl shadow-md shadow-green-500/20 transition-all active:scale-95 focus-visible:ring-2 focus-visible:ring-green-300 focus:outline-none"
+        : "inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] bg-amber-500 hover:bg-amber-600 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-bold rounded-xl shadow-md shadow-amber-500/20 transition-all active:scale-95 focus-visible:ring-2 focus-visible:ring-amber-300 focus:outline-none";
     });
 
     // ===== REPROCESS / LOAD CACHED =====
+    // Shared reprocess flow — used both for a brand-new index and as the
+    // retry path when a "cached" index turns out to have no usable map data
+    // (e.g. it was cached before per-index geojson existed, or its files got
+    // cleaned up). `skipConfirm` lets the retry-from-error flow show its own
+    // confirm dialog instead of stacking two.
+    function doReprocess(numIdx, selectorEl, skipConfirm) {
+      const reprocessBtn = document.getElementById("reprocessBtn");
+      const run = () => {
+        reprocessBtn.disabled = true;
+        Swal.fire({ title: 'กำลังประมวลผล', text: 'กรุณารอสักครู่...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        fetch(`/reprocessPeaNoProject/${projectId}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sp_index: numIdx })
+        })
+        .then(r => r.json())
+        .then(data => {
+          if (data.success) {
+            cachedIndices.add(numIdx);
+            // Update option label
+            const opt = selectorEl.options[selectorEl.selectedIndex];
+            if (opt) { opt.textContent = "✓ " + opt.textContent.replace(/^✓ /, ""); opt.style.color = "#16a34a"; }
+            Swal.fire({ icon: 'success', title: 'สำเร็จ', text: data.message }).then(() => location.reload());
+          } else {
+            reprocessBtn.disabled = false;
+            Swal.fire({ icon: 'error', title: 'ผิดพลาด', text: data.error });
+          }
+        })
+        .catch(() => {
+          reprocessBtn.disabled = false;
+          Swal.fire({ icon: 'error', title: 'ผิดพลาด', text: 'ไม่สามารถประมวลผลได้' });
+        });
+      };
+
+      if (skipConfirm) { run(); return; }
+
+      Swal.fire({
+        title: 'ยืนยันการประมวลผล?',
+        text: `ประมวลผลระบบใหม่โดยใช้ Splitting Index ${numIdx}`,
+        icon: 'question', showCancelButton: true,
+        confirmButtonText: 'ยืนยัน', cancelButtonText: 'ยกเลิก',
+        buttonsStyling: false,
+        customClass: {
+          confirmButton: 'bg-primary text-white px-8 py-3 rounded-xl mx-2 font-bold shadow-lg shadow-primary/20',
+          cancelButton: 'bg-gray-100 text-gray-600 px-8 py-3 rounded-xl mx-2 font-bold',
+          popup: 'rounded-[2rem]'
+        }
+      }).then(result => {
+        if (result.isConfirmed) run();
+      });
+    }
+
     document.getElementById("reprocessBtn").addEventListener("click", () => {
       const selectorEl = document.getElementById("splittingSelector");
       const idx = selectorEl.value;
@@ -823,83 +886,70 @@
 
       if (isCached) {
         // Load cached result
+        const reprocessBtn = document.getElementById("reprocessBtn");
+        reprocessBtn.disabled = true;
         showLoading('กำลังโหลดผลลัพธ์ที่บันทึกไว้...');
         fetch(`/peaNoProjectResults/${projectId}/${numIdx}`)
           .then(r => r.json())
           .then(data => {
-            if (data.error) { Swal.fire('ผิดพลาด', data.error, 'error'); return; }
+            if (data.error) { Swal.fire('ผิดพลาด', data.error, 'error'); return null; }
             updateResultDisplay(data);
+            return loadIndexGeoLayers(numIdx);
+          })
+          .then(loaded => {
+            reprocessBtn.disabled = false;
+            if (loaded === null) return;
+            activeMapIndex = numIdx;
+            // Re-fire the change handler so the (now-redundant) preview
+            // marker for this index is cleared now that it's the active one.
+            document.getElementById("splittingSelector").dispatchEvent(new Event("change"));
             Swal.fire({ icon: 'success', title: 'โหลดเสร็จสิ้น', text: `แสดงผลลัพธ์สำหรับ Index ${numIdx}`, timer: 1500, showConfirmButton: false });
           })
-          .catch(() => Swal.fire('ผิดพลาด', 'ไม่สามารถโหลดข้อมูลได้', 'error'));
-      } else {
-        // Reprocess
-        Swal.fire({
-          title: 'ยืนยันการประมวลผล?',
-          text: `ประมวลผลระบบใหม่โดยใช้ Splitting Index ${numIdx}`,
-          icon: 'question', showCancelButton: true,
-          confirmButtonText: 'ยืนยัน', cancelButtonText: 'ยกเลิก',
-          buttonsStyling: false,
-          customClass: {
-            confirmButton: 'bg-primary text-white px-8 py-3 rounded-xl mx-2 font-bold shadow-lg shadow-primary/20',
-            cancelButton: 'bg-gray-100 text-gray-600 px-8 py-3 rounded-xl mx-2 font-bold',
-            popup: 'rounded-[2rem]'
-          }
-        }).then(result => {
-          if (result.isConfirmed) {
-            Swal.fire({ title: 'กำลังประมวลผล', text: 'กรุณารอสักครู่...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-            fetch(`/reprocessPeaNoProject/${projectId}`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ sp_index: numIdx })
-            })
-            .then(r => r.json())
-            .then(data => {
-              if (data.success) {
-                cachedIndices.add(numIdx);
-                // Update option label
-                const opt = selectorEl.options[selectorEl.selectedIndex];
-                if (opt) { opt.textContent = "✓ " + opt.textContent.replace(/^✓ /, ""); opt.style.color = "#16a34a"; }
-                Swal.fire({ icon: 'success', title: 'สำเร็จ', text: data.message }).then(() => location.reload());
-              } else {
-                Swal.fire({ icon: 'error', title: 'ผิดพลาด', text: data.error });
+          .catch(() => {
+            reprocessBtn.disabled = false;
+            // Map data missing for this "cached" index (e.g. overwritten by a
+            // later reprocess run before per-index geojson caching existed).
+            // Offer to reprocess it again instead of dead-ending — the button
+            // itself won't say RE-PROCESS once an index is marked cached.
+            Swal.fire({
+              icon: 'warning',
+              title: 'ไม่พบข้อมูลแผนที่สำหรับผลลัพธ์นี้',
+              text: `Index ${numIdx} อาจเป็นผลลัพธ์เก่าที่ถูกทับ ต้องการประมวลผลใหม่หรือไม่?`,
+              showCancelButton: true,
+              confirmButtonText: 'ประมวลผลใหม่', cancelButtonText: 'ยกเลิก',
+              buttonsStyling: false,
+              customClass: {
+                confirmButton: 'bg-primary text-white px-8 py-3 rounded-xl mx-2 font-bold shadow-lg shadow-primary/20',
+                cancelButton: 'bg-gray-100 text-gray-600 px-8 py-3 rounded-xl mx-2 font-bold',
+                popup: 'rounded-[2rem]'
               }
+            }).then(result => {
+              if (result.isConfirmed) doReprocess(numIdx, selectorEl, true);
             });
-          }
-        });
+          });
+      } else {
+        doReprocess(numIdx, selectorEl, false);
       }
     });
   }); // end require
-
-  // ===== COLLAPSIBLE INFO PANEL =====
-  const toggleBtn = document.getElementById("toggleInfoPanel");
-  const panelBody = document.getElementById("infoPanelBody");
-  const toggleIcon = document.getElementById("toggleIcon");
-  if (toggleBtn && panelBody && toggleIcon) {
-    let panelCollapsed = false;
-    toggleBtn.addEventListener("click", () => {
-      panelCollapsed = !panelCollapsed;
-      panelBody.style.display = panelCollapsed ? "none" : "";
-      toggleIcon.style.transform = panelCollapsed ? "rotate(180deg)" : "rotate(0deg)";
-    });
-  }
-
 
   // ===== VIEW TOGGLER (card / table) =====
   const showCardBtn = document.getElementById("showCardBtn");
   const showTableBtn = document.getElementById("showTableBtn");
   const cardView = document.getElementById("cardView");
   const tableView = document.getElementById("tableView");
-  const activeClass = "flex items-center space-x-2 px-5 py-2 rounded-xl text-sm font-bold transition-all bg-white text-primary shadow-sm border border-gray-100";
-  const inactiveClass = "flex items-center space-x-2 px-5 py-2 rounded-xl text-sm font-bold transition-all text-gray-500 hover:text-gray-700";
+  const activeClass = "flex items-center justify-center space-x-2 px-5 py-2.5 min-h-[44px] rounded-xl text-sm font-bold transition-all bg-white text-primary shadow-sm border border-gray-100 focus-visible:ring-2 focus-visible:ring-primary/40 focus:outline-none";
+  const inactiveClass = "flex items-center justify-center space-x-2 px-5 py-2.5 min-h-[44px] rounded-xl text-sm font-bold transition-all text-gray-500 hover:text-gray-700 focus-visible:ring-2 focus-visible:ring-primary/40 focus:outline-none";
 
   showCardBtn.addEventListener("click", () => {
     cardView.classList.remove("hidden"); tableView.classList.add("hidden");
     showCardBtn.className = activeClass; showTableBtn.className = inactiveClass;
+    showCardBtn.setAttribute("aria-pressed", "true"); showTableBtn.setAttribute("aria-pressed", "false");
   });
   showTableBtn.addEventListener("click", () => {
     cardView.classList.add("hidden"); tableView.classList.remove("hidden");
     showTableBtn.className = activeClass; showCardBtn.className = inactiveClass;
+    showTableBtn.setAttribute("aria-pressed", "true"); showCardBtn.setAttribute("aria-pressed", "false");
   });
 
   // ===== UPDATE DISPLAY FROM CACHED RESULT =====

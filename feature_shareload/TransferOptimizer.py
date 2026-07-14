@@ -29,6 +29,14 @@ if hasattr(sys.stdout, "reconfigure"):
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
+# This file is invoked from feature_shareload/ (via run_web.py), but
+# InputJsonApi.py — the FACILITYID -> network JSON fetcher — lives at the
+# project root, one level up. Put the root on sys.path so `import
+# InputJsonApi` resolves regardless of the caller's cwd.
+_PROJECT_ROOT = str(Path(__file__).resolve().parent.parent)
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
+
 import numpy as np
 from scipy.spatial import cKDTree
 import networkx as nx
@@ -750,27 +758,34 @@ class TransferOptimizer:
     # ------------------------------------------------------------------
 
     def _ensure_json(self, fac: str) -> Path:
+        # Legacy on-disk cache locations (self.json_dir, e.g. D:\testpy\jsonfile) —
+        # kept as a fast path in case files were ever pre-placed there.
         candidates = [
             Path(self.json_dir) / f"NetworkLV{fac}_with_MV.json",
             Path(self.json_dir) / f"NetworkLV_{fac}_with_MV.json",
             Path(self.json_dir) / f"NetworkLV{fac}.json",
             Path(self.json_dir) / f"NetworkLV_{fac}.json",
         ]
-        import INPUT_FACILITY as inf
-        if self.force_refresh:
-            print(f"  [JSON] ดึงข้อมูลจาก API FACILITYID: {fac}...")
-            inf.run_once_with_facilityid(fac)
-        else:
+        if not self.force_refresh:
             for p in candidates:
                 if p.exists():
                     print(f"  [JSON] พบ cache: {p.name}")
                     return p
-            print(f"  [JSON] ไม่พบ JSON สำหรับ {fac} — รัน INPUT_FACILITY (Stage 1)...")
-            inf.run_once_with_facilityid(fac)
+
+        import InputJsonApi as inf
+        print(f"  [JSON] ดึงข้อมูลจาก API FACILITYID: {fac}...")
+        # InputJsonApi writes to pea_no_projects/input/<project_id>/... (relative
+        # to cwd) and returns that exact path — use it directly instead of
+        # guessing a location, since it doesn't write into self.json_dir.
+        result = inf.run_once_with_facilityid(fac, project_id=f"shareload_{fac}")
+        out_path = result.get("out_path")
+        if out_path and Path(out_path).exists():
+            return Path(out_path)
+
         for p in candidates:
             if p.exists():
                 return p
-        raise FileNotFoundError(f"ไม่พบ JSON สำหรับ {fac} แม้หลังรัน Stage 1")
+        raise FileNotFoundError(f"ไม่พบ JSON สำหรับ {fac} แม้หลังดึงข้อมูลจาก API")
 
     def _run_baseline_sim(self, json_path: Path, rated_kva: float, label: str,
                           snap_tol: float = 2.0) -> Tuple[float, float]:

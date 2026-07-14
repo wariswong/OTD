@@ -1,6 +1,9 @@
 import os
 import re
+import sys
 import math
+import json
+import shutil
 import subprocess
 import threading
 import logging
@@ -198,6 +201,31 @@ def _extract_all_switches(html: str) -> list:
     return switches
 
 
+def _extract_all_meters(html: str, prefix: str) -> list:
+    """Merge points across all meter traces starting with `prefix`.
+
+    The map draws meters as up to two separate traces per network — e.g.
+    "TR_A Meters" (colored by simulated voltage) and "TR_A Meters (no sim)"
+    (gray, when no optimal/feasible scenario exists to simulate voltages) —
+    so an exact-name match would silently drop meters in the no-sim case.
+    """
+    pat = re.compile(
+        r'"name":"(' + re.escape(prefix) + r'[^"]*)".*?"x":\[([^\]]*)\].*?"y":\[([^\]]*)\]',
+        re.DOTALL
+    )
+    pts = []
+    for m in pat.finditer(html):
+        xs = _parse_num_array(m.group(2))
+        ys = _parse_num_array(m.group(3))
+        for x, y in zip(xs, ys):
+            if x is None:
+                continue
+            p = _ll(x, y)
+            if p:
+                pts.append({'lon': p[0], 'lat': p[1]})
+    return pts
+
+
 def parse_plotly_to_map_data(html_path: Path, fac_a: str, fac_b: str) -> dict:
     html = html_path.read_text(encoding='utf-8')
 
@@ -248,17 +276,8 @@ def parse_plotly_to_map_data(html_path: Path, fac_a: str, fac_b: str) -> dict:
     result['switches_all'] = _extract_all_switches(html)
     result['nodes_voltage'] = _extract_voltage_nodes(html)
 
-    for fac, key in [(fac_a, 'meters_a'), (fac_b, 'meters_b')]:
-        net = 'TR_A' if fac == fac_a else 'TR_B'
-        mt = _extract_trace(html, f'{net} Meters')
-        if mt:
-            pts = []
-            for x, y in zip(mt['x'], mt['y']):
-                if x is not None:
-                    p = _ll(x, y)
-                    if p:
-                        pts.append({'lon': p[0], 'lat': p[1]})
-            result[key] = pts
+    result['meters_a'] = _extract_all_meters(html, 'TR_A Meters')
+    result['meters_b'] = _extract_all_meters(html, 'TR_B Meters')
 
     return result
 
@@ -309,6 +328,7 @@ def shareload_list():
 def shareload_run():
     fac_a = request.form.get('fac_a', '').strip()
     fac_b = request.form.get('fac_b', '').strip()
+    force = request.form.get('force') == '1'
 
     if not FAC_RE.match(fac_a) or not FAC_RE.match(fac_b):
         return jsonify({'error': 'รูปแบบ FACILITYID ไม่ถูกต้อง (XX-XXXXXX)'}), 400
@@ -319,7 +339,7 @@ def shareload_run():
     out_dir = FEASIBLE_DIR / pair_key
     html_path = out_dir / f'transfer_{pair_key}.html'
 
-    if html_path.exists():
+    if html_path.exists() and not force:
         return jsonify({'status': 'exists', 'key': pair_key}), 200
 
     with _running_lock:
@@ -332,7 +352,7 @@ def shareload_run():
             out_dir.mkdir(parents=True, exist_ok=True)
             script = SHARELOAD_DIR / 'run_web.py'
             proc = subprocess.run(
-                ['python', str(script), fac_a, fac_b, str(out_dir)],
+                [sys.executable, str(script), fac_a, fac_b, str(out_dir)],
                 cwd=str(SHARELOAD_DIR),
                 capture_output=True, text=True, timeout=600,
             )
@@ -348,6 +368,21 @@ def shareload_run():
 
     threading.Thread(target=_worker, daemon=True).start()
     return jsonify({'status': 'running', 'key': pair_key}), 202
+
+
+@shareload_bp.route('/shareload/delete/<pair_key>', methods=['POST'])
+@login_required
+def shareload_delete(pair_key):
+    """Delete a cached run's output folder so it can be regenerated from scratch."""
+    if not PAIR_RE.match(pair_key):
+        abort(400)
+    with _running_lock:
+        if pair_key in _running_jobs:
+            return jsonify({'error': 'กำลังประมวลผลอยู่ ไม่สามารถลบได้ในขณะนี้'}), 409
+    folder = FEASIBLE_DIR / pair_key
+    if folder.exists():
+        shutil.rmtree(folder, ignore_errors=True)
+    return jsonify({'status': 'deleted', 'key': pair_key})
 
 
 @shareload_bp.route('/shareload/status/<pair_key>')
@@ -374,8 +409,27 @@ def shareload_result(pair_key):
         pair_key=pair_key, fac_a=fac_a, fac_b=fac_b,
         has_html=(folder / f'transfer_{pair_key}.html').exists(),
         has_xlsx=(folder / f'transfer_{pair_key}.xlsx').exists(),
+        has_table=(folder / f'transfer_{pair_key}_results.json').exists(),
         user=user,
     )
+
+
+@shareload_bp.route('/shareload/table/<pair_key>')
+@login_required
+def shareload_table(pair_key):
+    """Return the per-scenario results table (switch/tie/loading/status) as JSON."""
+    if not PAIR_RE.match(pair_key):
+        abort(400)
+    json_path = FEASIBLE_DIR / pair_key / f'transfer_{pair_key}_results.json'
+    if not json_path.exists():
+        return jsonify({'scenarios': None}), 200
+    try:
+        with open(json_path, encoding='utf-8') as fh:
+            data = json.load(fh)
+        return jsonify(data)
+    except Exception as e:
+        logging.exception(f"[shareload/table] read error for {pair_key}")
+        return jsonify({'error': str(e)}), 500
 
 
 @shareload_bp.route('/shareload/data/<pair_key>')

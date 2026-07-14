@@ -16,7 +16,7 @@ from ..services.project_service import ProjectService
 # Existing logic imports
 from processNew_no_gui import run_process_from_project_folder
 from InputJsonApi import run_pipeline_for_facilityid
-from optimized_transformer_group_280469 import main_pipeline
+from optimized_transformer_group_300669 import main_pipeline
 
 projects_bp = Blueprint('projects', __name__)
 

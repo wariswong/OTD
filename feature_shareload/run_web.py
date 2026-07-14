@@ -26,6 +26,45 @@ if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 
+def _clean_results_for_json(results, fac_a, fac_b, rated_a, rated_b):
+    """Project each scenario dict down to JSON-safe, table-ready fields.
+
+    The raw scenario dicts carry a `subtree_nodes` set (not JSON-serializable)
+    and numpy floats from OpenDSS queries, so this rebuilds a plain-Python
+    projection instead of dumping the dicts directly.
+    """
+    scenarios = []
+    for i, r in enumerate(results, start=1):
+        su, sv = r.get("switch_edge", (None, None))
+        a_after = r.get("a_loading_after")
+        b_after = r.get("b_loading_after")
+        min_v = r.get("min_v")
+        scenarios.append({
+            "rank": i,
+            "switch_u": su,
+            "switch_v": sv,
+            "tie_node_a": r.get("tie_node_a"),
+            "tie_node_b": r.get("tie_node_b"),
+            "tie_distance_m": round(float(r.get("tie_distance_m", 0.0)), 1),
+            "tie_conductor_size": r.get("tie_conductor_size"),
+            "subtree_kw": round(float(r.get("subtree_kw", 0.0)), 1),
+            "a_loading_before": round(float(r.get("a_loading_before", 0.0)), 1),
+            "a_loading_after": round(float(a_after), 1) if a_after is not None else None,
+            "b_loading_before": round(float(r.get("b_loading_before", 0.0)), 1),
+            "b_loading_after": round(float(b_after), 1) if b_after is not None else None,
+            "min_v": round(float(min_v), 0) if min_v is not None else None,
+            "feasible": bool(r.get("feasible")),
+            "optimal": bool(r.get("optimal")),
+            "error": r.get("error"),
+        })
+    return {
+        "fac_a": fac_a, "fac_b": fac_b,
+        "a_rated_kva": round(float(rated_a), 0),
+        "b_rated_kva": round(float(rated_b), 0),
+        "scenarios": scenarios,
+    }
+
+
 def main():
     if len(sys.argv) < 4:
         print("ERROR: Usage: python run_web.py <FAC_A> <FAC_B> <OUT_DIR>", flush=True)
@@ -60,6 +99,13 @@ def main():
 
     logging.info(f"Got {len(results)} results, saving Excel...")
     save_excel_report(results, optimizer.net_a, optimizer.net_b, stem + ".xlsx")
+
+    logging.info("Saving results table JSON...")
+    table_data = _clean_results_for_json(
+        results, fac_a, fac_b, optimizer.net_a.rated_kva, optimizer.net_b.rated_kva
+    )
+    with open(stem + "_results.json", "w", encoding="utf-8") as fh:
+        json.dump(table_data, fh, ensure_ascii=False)
 
     volt_a, volt_b, phase_a, phase_b = {}, {}, {}, {}
     raw_a = raw_b = None
