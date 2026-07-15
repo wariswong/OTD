@@ -5730,12 +5730,11 @@ def main():
 
         logging.info(f"Applied coordinate snapping with tolerance: {SNAP_TOLERANCE} m")
         # ดึง (x,y) หม้อแปลงจาก JSON โดยตรง
-        _fac = None
-        try:
-           # ถ้ามี argparse อยู่ในไฟล์ และรันแบบ --fac ให้ใช้เป็นตัวช่วย match FACILITYID
-            _fac = args.facility_id  # ถ้าไม่มี args ก็ไม่เป็นไร
-        except:
-            pass
+        # หมายเหตุ: ap ด้านบนไม่มี add_argument ใดๆ เลย (args.facility_id ไม่มีจริง)
+        # จึงต้องดึง FACILITYID จากชื่อไฟล์ JSON (_fac_match ที่คำนวณไว้แล้วด้านบน) แทน
+        # ไม่งั้น facilityid=None ตลอด ทำให้ get_transformer_xy_from_json สุ่มเอา point แรกที่เจอ
+        _fac = _fac_match.group(0) if _fac_match else None
+        logging.info(f"[TR] Using FACILITYID for TR match: {_fac}")
 
         # ตรวจสอบสายที่อาจมีปัญหา
         logging.info("Checking for problematic lines after snap...")
@@ -5765,9 +5764,8 @@ def main():
 
         # 4) อ่านขนาดหม้อแปลงจาก JSON ตามที่คุณขอให้ย้ายมาใช้ RATEKVA
         try:
-            # ถ้ามี FACILITYID ของงานนี้อยู่ในสโคป ให้ส่งเป็น facility_id; ไม่มีก็ปล่อย None
             transformerCapacity_kVA, transformerCapacity, powerFactor = \
-                get_transformer_capacity_from_json(json_path, facilityid=None, default_pf=0.875)
+                get_transformer_capacity_from_json(json_path, facilityid=_fac, default_pf=0.875)
             logging.info(
                 f"[TR] RATEKVA={transformerCapacity_kVA} kVA  -> capacity≈{transformerCapacity:.2f} kW (pf={powerFactor})"
             )

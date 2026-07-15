@@ -1193,24 +1193,31 @@ def build_line_length_map_from_json(json_input,
 def get_transformer_xy_from_json(json_input, facilityid=None):
     """
     คืน (x, y) ของหม้อแปลงจาก JSON:
-    - เลือก feature ที่มี RATEKVA ก่อน และ/หรือ FACILITYID ตรง (ถ้าส่งมา)
-    - ถ้าไม่เจอ ใช้ point ตัวแรกที่พบใน JSON
-    หาไม่ได้ -> raise ValueError
+    - ถ้าระบุ facilityid: ต้องหา feature ที่ FACILITYID ตรงเป๊ะก่อนเสมอ (สำคัญที่สุด)
+    - ถ้าไม่ระบุ หรือหาไม่เจอ: fallback ไปใช้ feature แรกที่มี RATEKVA (เดาว่าเป็นหม้อแปลง)
+    - ถ้ายังไม่เจอ: ใช้ point ตัวแรกที่พบใน JSON
+    หาไม่ได้เลย -> raise ValueError
     """
     data  = _load_json(json_input)
     feats = _collect_features(data)
 
-    # หา TR ที่น่าใช่ก่อน (มี RATEKVA หรือ FACILITYID ตรง)
+    # 1) ต้องแมตช์ FACILITYID เป๊ะก่อน ถ้ามีการระบุมา — ห้ามให้ feature อื่น (เช่น หม้อแปลง
+    #    ข้างเคียงที่ถูกดึงมาด้วย MV buffer query) แซงคิวมาแม้จะมี RATEKVA ก็ตาม
+    if facilityid:
+        for f in feats:
+            attrs = (f.get("attributes") or {})
+            g     = (f.get("geometry") or {})
+            if "x" in g and "y" in g and str(attrs.get("FACILITYID", "")).strip() == str(facilityid):
+                return (float(g["x"]), float(g["y"]))
+
+    # 2) ไม่มี facilityid หรือไม่พบที่ตรง -> ใช้ feature แรกที่มี RATEKVA
     for f in feats:
         attrs = (f.get("attributes") or {})
         g     = (f.get("geometry") or {})
-        if "x" in g and "y" in g:
-            has_rate = attrs.get("RATEKVA") is not None
-            fid_ok   = (facilityid is None) or (str(attrs.get("FACILITYID","")).strip() == str(facilityid))
-            if has_rate or fid_ok:
-                return (float(g["x"]), float(g["y"]))
+        if "x" in g and "y" in g and attrs.get("RATEKVA") is not None:
+            return (float(g["x"]), float(g["y"]))
 
-    # ไม่เจอ -> เอา point ตัวแรก
+    # 3) ไม่เจอ -> เอา point ตัวแรกที่มีพิกัด
     for f in feats:
         g = (f.get("geometry") or {})
         if "x" in g and "y" in g:
