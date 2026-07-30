@@ -14,6 +14,11 @@ from typing import Optional
 # from tkinter import ttk, messagebox
 # from datetime import datetime
 
+# Anchor output paths to this file's location, not the process CWD — when run
+# as a Windows Service, CWD is not the project directory (often System32),
+# so relative paths silently resolve elsewhere and fail with PermissionError.
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 # Optional scientific stack (expected in user's environment)
 try:
     import numpy as np
@@ -507,7 +512,7 @@ def run_once_with_facilityid(
 
     out_path = None
     if save:
-        with open(f"{key_balance.lower()}_list.txt", "w", encoding="utf-8") as fp:
+        with open(os.path.join(_BASE_DIR, f"{key_balance.lower()}_list.txt"), "w", encoding="utf-8") as fp:
             for k in keys:
                 fp.write(k + "\n")
 
@@ -525,7 +530,7 @@ def run_once_with_facilityid(
                 "properties": attrs,
                 "geometry": geom
             })
-        base_dir = os.path.join("pea_no_projects", "input", str(project_id))
+        base_dir = os.path.join(_BASE_DIR, "pea_no_projects", "input", str(project_id))
         os.makedirs(base_dir, exist_ok=True)
 
         out_path = os.path.join(
@@ -1905,7 +1910,7 @@ def run_pipeline_for_facilityid(facility_id: str, project_id: str, region: str =
     try:
         buf_geom = buffer_point_utm47(x, y, distance_m=200.0)
         mv_fs    = spatial_query_mv_within(buf_geom, out_fields="*", where="1=1")
-        base_dir = os.path.join("pea_no_projects", "input", str(project_id))
+        base_dir = os.path.join(_BASE_DIR, "pea_no_projects", "input", str(project_id))
         os.makedirs(base_dir, exist_ok=True)
 
         merged_json = os.path.join(
