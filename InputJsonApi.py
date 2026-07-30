@@ -10,6 +10,7 @@ import logging
 import urllib.request
 import urllib.parse
 import tkinter as tk
+from typing import Optional
 # from tkinter import ttk, messagebox
 # from datetime import datetime
 
@@ -119,6 +120,22 @@ BALANCE_BASE   = "http://gisne1.pea.co.th/arcgis/rest/services/PEA/MapServer/ext
 PEA_QUERY_BASE = "http://gisne1.pea.co.th/arcgis/rest/services/PEA_QUERY/MapServer"
 GEOM_BUFFER_URL = "http://gisne1.pea.co.th/arcgis/rest/services/Utilities/Geometry/GeometryServer/buffer"
 GEOM_PROJECT_URL = "http://gisne1.pea.co.th/arcgis/rest/services/Utilities/Geometry/GeometryServer/project"
+
+def set_gis_region(region: Optional[str]) -> None:
+    """Point TR_LAYER_17/BALANCE_BASE/PEA_QUERY_BASE/GEOM_*_URL at the given PEA
+    region's GIS server (e.g. 'NE1', 'C2', 'Z'). No-op if region is falsy —
+    callers keep whatever region was set previously (default: NE1 above).
+    """
+    global TR_LAYER_17, BALANCE_BASE, PEA_QUERY_BASE, GEOM_BUFFER_URL, GEOM_PROJECT_URL
+    if not region:
+        return
+    gis_prefix = 'ne2' if region.upper() == 'Z' else region.lower()
+    cfg = GISConfig(gis_prefix)
+    TR_LAYER_17      = cfg.TR_LAYER_17
+    BALANCE_BASE     = cfg.BALANCE_BASE
+    PEA_QUERY_BASE   = cfg.PEA_QUERY_BASE
+    GEOM_BUFFER_URL  = cfg.GEOM_BUFFER_URL
+    GEOM_PROJECT_URL = cfg.GEOM_PROJECT_URL
 
 BAL_TABLE_ID   = 31          # ตารางใน PEA_QUERY
 BAL_KEY_TABLE  = "PEAMETER"  # คีย์ฝั่งตาราง
@@ -1851,15 +1868,7 @@ def log_pipeline_result(facility_id: str, result: dict):
 
 
 def run_pipeline_for_facilityid(facility_id: str, project_id: str, region: str = None):
-    global TR_LAYER_17, BALANCE_BASE, PEA_QUERY_BASE, GEOM_BUFFER_URL, GEOM_PROJECT_URL
-    if region:
-        gis_prefix = 'ne2' if region.upper() == 'Z' else region.lower()
-        cfg = GISConfig(gis_prefix)
-        TR_LAYER_17      = cfg.TR_LAYER_17
-        BALANCE_BASE     = cfg.BALANCE_BASE
-        PEA_QUERY_BASE   = cfg.PEA_QUERY_BASE
-        GEOM_BUFFER_URL  = cfg.GEOM_BUFFER_URL
-        GEOM_PROJECT_URL = cfg.GEOM_PROJECT_URL
+    set_gis_region(region)
     logging.info(f"[Balance] Start with FACILITYID={facility_id}, region={region}, GIS={PEA_QUERY_BASE}")
 
     # 1) BalanceLoad + Join → เซฟ TRwitmeter{fac}.json (มีแต่จุด/ฟีเจอร์ตาม Balance)

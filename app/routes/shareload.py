@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import threading
 import logging
+import openpyxl
 from pathlib import Path
 from datetime import datetime
 from flask import (
@@ -14,7 +15,9 @@ from flask import (
     session, abort, send_file
 )
 
+from ..config import Config
 from ..utils.decorators import login_required
+from ..utils.helpers import get_user_region
 
 shareload_bp = Blueprint('shareload', __name__)
 
@@ -98,45 +101,68 @@ def _ll(x, y):
 # ------------------------------------------------------------------
 # Plotly HTML parser
 # ------------------------------------------------------------------
+#
+# The map data is pulled straight out of the Plotly figure's own trace
+# array (embedded in the HTML as `Plotly.newPlot("<div>", [<traces>], ...)`)
+# rather than regex-chaining "x"/"y"/"color"/"text" keys across the raw
+# serialized text. Plotly serializes each trace's keys alphabetically, so
+# `marker.color` sorts *before* `name` while `x`/`y`/`text` sort *after*
+# it — a forward-only regex chain starting at "name" can walk past the
+# end of the current trace and silently pick up a *later* trace's color/
+# text arrays once the current trace has no further "color" key of its
+# own after "y". Parsing the whole trace array as JSON sidesteps that
+# entirely and also gets automatic \uXXXX unescaping for free.
 
-def _parse_num_array(s: str) -> list:
-    out = []
-    for tok in s.split(','):
-        tok = tok.strip()
-        if tok == 'null':
-            out.append(None)
-        else:
-            try:
-                out.append(float(tok))
-            except ValueError:
-                pass
-    return out
+_PLOTLY_DATA_RE = re.compile(r'Plotly\.newPlot\(\s*"[^"]*",\s*(\[)')
 
 
-def _extract_trace(html: str, name: str) -> dict | None:
-    pat = re.compile(
-        r'"name":"' + re.escape(name) + r'".*?"x":\[([^\]]*)\].*?"y":\[([^\]]*)\]',
-        re.DOTALL
-    )
-    m = pat.search(html)
+def _match_bracket(html: str, start: int) -> int | None:
+    """Return the index just past the ']' matching the '[' at `start`."""
+    depth = 0
+    in_str = False
+    esc = False
+    for i in range(start, len(html)):
+        c = html[i]
+        if in_str:
+            if esc:
+                esc = False
+            elif c == '\\':
+                esc = True
+            elif c == '"':
+                in_str = False
+            continue
+        if c == '"':
+            in_str = True
+        elif c == '[':
+            depth += 1
+        elif c == ']':
+            depth -= 1
+            if depth == 0:
+                return i + 1
+    return None
+
+
+def _extract_plotly_traces(html: str) -> list:
+    m = _PLOTLY_DATA_RE.search(html)
     if not m:
-        return None
-    return {'x': _parse_num_array(m.group(1)), 'y': _parse_num_array(m.group(2))}
+        return []
+    start = m.start(1)
+    end = _match_bracket(html, start)
+    if end is None:
+        return []
+    try:
+        traces = json.loads(html[start:end])
+    except (ValueError, TypeError):
+        return []
+    return traces if isinstance(traces, list) else []
 
 
-def _extract_trace_prefix(html: str, prefix: str) -> dict | None:
-    pat = re.compile(
-        r'"name":"(' + re.escape(prefix) + r'[^"]*)".*?"x":\[([^\]]*)\].*?"y":\[([^\]]*)\]',
-        re.DOTALL
-    )
-    m = pat.search(html)
-    if not m:
-        return None
-    return {
-        'name': m.group(1),
-        'x': _parse_num_array(m.group(2)),
-        'y': _parse_num_array(m.group(3)),
-    }
+def _trace_by_name(traces: list, name: str) -> dict | None:
+    return next((t for t in traces if t.get('name') == name), None)
+
+
+def _trace_by_prefix(traces: list, prefix: str) -> dict | None:
+    return next((t for t in traces if str(t.get('name') or '').startswith(prefix)), None)
 
 
 def _lines_to_paths(xs: list, ys: list) -> list:
@@ -156,52 +182,34 @@ def _lines_to_paths(xs: list, ys: list) -> list:
     return paths
 
 
-def _extract_voltage_nodes(html: str) -> list:
-    pat = re.compile(
-        r'"name":"Nodes \(voltage\)".*?"x":\[([^\]]*)\].*?"y":\[([^\]]*)\]'
-        r'.*?"color":\[([^\]]*)\].*?"text":\[("[^"]*"(?:,"[^"]*")*)\]',
-        re.DOTALL
-    )
-    m = pat.search(html)
-    if not m:
-        return []
-    xs = _parse_num_array(m.group(1))
-    ys = _parse_num_array(m.group(2))
-    vs = _parse_num_array(m.group(3))
-    texts = re.findall(r'"([^"]*)"', m.group(4))
+def _trace_pts(trace: dict) -> list:
+    """[lon,lat] points for a trace's x/y arrays (nulls/invalid dropped)."""
+    xs, ys = trace.get('x') or [], trace.get('y') or []
+    pts = [_ll(x, y) for x, y in zip(xs, ys) if x is not None and y is not None]
+    return [p for p in pts if p]
+
+
+def _voltage_nodes_from_trace(trace: dict) -> list:
+    xs, ys = trace.get('x') or [], trace.get('y') or []
+    vs = (trace.get('marker') or {}).get('color') or []
+    texts = trace.get('text') or []
     nodes = []
     for i, (x, y) in enumerate(zip(xs, ys)):
-        if x is None:
+        if x is None or y is None:
             continue
         pt = _ll(x, y)
         if not pt:
             continue
+        label = texts[i] if i < len(texts) else ''
         nodes.append({
             'lon': pt[0], 'lat': pt[1],
-            'v': vs[i] if i < len(vs) else None,
-            'label': texts[i].replace('<br>', '\n').replace('<b>', '').replace('</b>', '')
-                     if i < len(texts) else '',
+            'v': vs[i] if i < len(vs) and isinstance(vs[i], (int, float)) else None,
+            'label': str(label).replace('<br>', '\n').replace('<b>', '').replace('</b>', ''),
         })
     return nodes
 
 
-def _extract_all_switches(html: str) -> list:
-    pat = re.compile(
-        r'"name":"Switch #\d+".*?"x":\[([^\]]*)\].*?"y":\[([^\]]*)\]',
-        re.DOTALL
-    )
-    switches = []
-    for m in pat.finditer(html):
-        xs = _parse_num_array(m.group(1))
-        ys = _parse_num_array(m.group(2))
-        pts = [_ll(x, y) for x, y in zip(xs, ys) if x is not None]
-        pts = [p for p in pts if p]
-        if len(pts) >= 2:
-            switches.append(pts)
-    return switches
-
-
-def _extract_all_meters(html: str, prefix: str) -> list:
+def _meter_points(traces: list, prefix: str) -> list:
     """Merge points across all meter traces starting with `prefix`.
 
     The map draws meters as up to two separate traces per network — e.g.
@@ -209,16 +217,12 @@ def _extract_all_meters(html: str, prefix: str) -> list:
     (gray, when no optimal/feasible scenario exists to simulate voltages) —
     so an exact-name match would silently drop meters in the no-sim case.
     """
-    pat = re.compile(
-        r'"name":"(' + re.escape(prefix) + r'[^"]*)".*?"x":\[([^\]]*)\].*?"y":\[([^\]]*)\]',
-        re.DOTALL
-    )
     pts = []
-    for m in pat.finditer(html):
-        xs = _parse_num_array(m.group(2))
-        ys = _parse_num_array(m.group(3))
-        for x, y in zip(xs, ys):
-            if x is None:
+    for t in traces:
+        if not str(t.get('name') or '').startswith(prefix):
+            continue
+        for x, y in zip(t.get('x') or [], t.get('y') or []):
+            if x is None or y is None:
                 continue
             p = _ll(x, y)
             if p:
@@ -226,8 +230,71 @@ def _extract_all_meters(html: str, prefix: str) -> list:
     return pts
 
 
+# Multi-scenario trace names from TransferOptimizer-072026.py's selectable-
+# scenario map, e.g. "#3 Switch", "#1 ★OPT Tie 38.8m", "#2 Voltages" — the
+# ★OPT tag (only present on the optimal scenario) decodes to a literal '★'
+# once the JSON is parsed, so no escape-sequence handling is needed here.
+_SCEN_SWITCH_RE = re.compile(r'^#(\d+)\D* Switch$')
+_SCEN_TIE_RE = re.compile(r'^#(\d+)\D* Tie ([\d.]+)m$')
+_SCEN_VOLT_RE = re.compile(r'^#(\d+)\D* Voltages$')
+
+
+def _extract_scenario_layers(traces: list) -> list:
+    """Per-scenario switch/tie/voltage layers from the new-format (multi-
+    scenario selector) Plotly output — one entry per scenario rank found,
+    sorted ascending, each carrying its own `optimal` flag. This mirrors
+    the "เลือก Scenario" buttons on the Plotly view so the ArcGIS map can
+    offer the same picker instead of only ever showing the optimal one.
+    """
+    switches, ties, volts = {}, {}, {}
+    optimal_ranks = set()
+    for t in traces:
+        name = str(t.get('name') or '')
+        m = _SCEN_SWITCH_RE.match(name)
+        if m:
+            rank = int(m.group(1))
+            switches[rank] = t
+            if '★' in name:
+                optimal_ranks.add(rank)
+            continue
+        m = _SCEN_TIE_RE.match(name)
+        if m:
+            rank = int(m.group(1))
+            ties[rank] = (t, name)
+            if '★' in name:
+                optimal_ranks.add(rank)
+            continue
+        m = _SCEN_VOLT_RE.match(name)
+        if m:
+            rank = int(m.group(1))
+            volts[rank] = t
+            if '★' in name:
+                optimal_ranks.add(rank)
+
+    scenarios = []
+    for rank in sorted(set(switches) | set(ties) | set(volts)):
+        entry = {
+            'rank': rank, 'optimal': rank in optimal_ranks,
+            'switch_opt': None, 'tie': None, 'nodes_voltage': [],
+        }
+        if rank in switches:
+            pts = _trace_pts(switches[rank])
+            if len(pts) >= 2:
+                entry['switch_opt'] = {'pts': pts, 'label': f'Switch OPEN (#{rank})'}
+        if rank in ties:
+            t, name = ties[rank]
+            pts = _trace_pts(t)
+            if len(pts) >= 2:
+                entry['tie'] = {'pts': pts, 'label': name}
+        if rank in volts:
+            entry['nodes_voltage'] = _voltage_nodes_from_trace(volts[rank])
+        scenarios.append(entry)
+    return scenarios
+
+
 def parse_plotly_to_map_data(html_path: Path, fac_a: str, fac_b: str) -> dict:
     html = html_path.read_text(encoding='utf-8')
+    traces = _extract_plotly_traces(html)
 
     result = {
         'fac_a': fac_a, 'fac_b': fac_b,
@@ -237,49 +304,128 @@ def parse_plotly_to_map_data(html_path: Path, fac_a: str, fac_b: str) -> dict:
         'switches_all': [],
         'nodes_voltage': [],
         'meters_a': [], 'meters_b': [],
+        # Per-scenario switch/tie/voltage layers, one entry per feasible
+        # scenario — only populated for the new multi-scenario-selector
+        # format; stays empty for the old single-scenario format, telling
+        # the frontend there's nothing to pick between.
+        'scenarios': [],
     }
 
-    tra = _extract_trace(html, f'TR_A ({fac_a})')
-    if tra and tra['x']:
+    tra = _trace_by_name(traces, f'TR_A ({fac_a})')
+    if tra and tra.get('x'):
         pt = _ll(tra['x'][0], tra['y'][0])
         if pt:
             result['tr_a'] = {'lon': pt[0], 'lat': pt[1], 'fac': fac_a}
 
-    trb = _extract_trace(html, f'TR_B ({fac_b})')
-    if trb and trb['x']:
+    trb = _trace_by_name(traces, f'TR_B ({fac_b})')
+    if trb and trb.get('x'):
         pt = _ll(trb['x'][0], trb['y'][0])
         if pt:
             result['tr_b'] = {'lon': pt[0], 'lat': pt[1], 'fac': fac_b}
 
-    la = _extract_trace(html, f'TR_A Lines ({fac_a})')
+    la = _trace_by_name(traces, f'TR_A Lines ({fac_a})')
     if la:
-        result['lines_a'] = _lines_to_paths(la['x'], la['y'])
+        result['lines_a'] = _lines_to_paths(la.get('x') or [], la.get('y') or [])
 
-    lb = _extract_trace(html, f'TR_B Lines ({fac_b})')
+    lb = _trace_by_name(traces, f'TR_B Lines ({fac_b})')
     if lb:
-        result['lines_b'] = _lines_to_paths(lb['x'], lb['y'])
+        result['lines_b'] = _lines_to_paths(lb.get('x') or [], lb.get('y') or [])
 
-    sw = _extract_trace(html, '[OPT] Switch OPEN')
-    if sw and len(sw['x']) >= 2:
-        pts = [_ll(x, y) for x, y in zip(sw['x'], sw['y']) if x is not None]
-        pts = [p for p in pts if p]
+    result['meters_a'] = _meter_points(traces, 'TR_A Meters')
+    result['meters_b'] = _meter_points(traces, 'TR_B Meters')
+
+    # ---- Old format (TransferOptimizer.py): single fixed-name traces ----
+    sw = _trace_by_name(traces, '[OPT] Switch OPEN')
+    if sw is not None:
+        pts = _trace_pts(sw)
         if len(pts) >= 2:
             result['switch_opt'] = {'pts': pts, 'label': 'Switch OPEN (optimal)'}
 
-    tie = _extract_trace_prefix(html, 'Tie ')
-    if tie and len(tie['x']) >= 2:
-        pts = [_ll(x, y) for x, y in zip(tie['x'], tie['y']) if x is not None]
-        pts = [p for p in pts if p]
+    tie = _trace_by_prefix(traces, 'Tie ')
+    if tie is not None:
+        pts = _trace_pts(tie)
         if len(pts) >= 2:
-            result['tie'] = {'pts': pts, 'label': tie['name']}
+            result['tie'] = {'pts': pts, 'label': tie.get('name')}
 
-    result['switches_all'] = _extract_all_switches(html)
-    result['nodes_voltage'] = _extract_voltage_nodes(html)
+    result['switches_all'] = [
+        pts for t in traces
+        if re.match(r'^Switch #\d+$', str(t.get('name') or ''))
+        for pts in [_trace_pts(t)] if len(pts) >= 2
+    ]
 
-    result['meters_a'] = _extract_all_meters(html, 'TR_A Meters')
-    result['meters_b'] = _extract_all_meters(html, 'TR_B Meters')
+    volt_trace = _trace_by_name(traces, 'Nodes (voltage)')
+    if volt_trace is not None:
+        result['nodes_voltage'] = _voltage_nodes_from_trace(volt_trace)
+
+    # ---- New format (TransferOptimizer-072026.py): multi-scenario selector ----
+    # If nothing above matched, this HTML almost certainly came from the
+    # newer optimizer's per-scenario trace naming — try that scheme too
+    # instead of leaving the map missing tie/switch/voltage layers.
+    if not (result['switch_opt'] or result['tie'] or result['switches_all'] or result['nodes_voltage']):
+        scenarios = _extract_scenario_layers(traces)
+        result['scenarios'] = scenarios
+        result['switches_all'] = [s['switch_opt']['pts'] for s in scenarios if s['switch_opt']]
+        default = next((s for s in scenarios if s['optimal']), scenarios[0] if scenarios else None)
+        if default:
+            result['switch_opt'] = default['switch_opt']
+            result['tie'] = default['tie']
+            result['nodes_voltage'] = default['nodes_voltage']
 
     return result
+
+
+# ------------------------------------------------------------------
+# Results table: derive from the xlsx when the JSON export is missing
+# ------------------------------------------------------------------
+
+def _build_table_from_xlsx(xlsx_path: Path, fac_a: str, fac_b: str) -> dict | None:
+    """Rebuild the per-scenario results table from the xlsx 'Results' sheet.
+
+    Runs from before the JSON export was added only have the xlsx — its
+    'Results' sheet carries the same per-scenario columns (see
+    save_excel_report in TransferOptimizer.py), so the table can be
+    reconstructed from it instead of requiring a full re-run.
+    """
+    wb = openpyxl.load_workbook(xlsx_path, read_only=True, data_only=True)
+    try:
+        if 'Results' not in wb.sheetnames:
+            return None
+        ws = wb['Results']
+
+        def _num(v):
+            return float(v) if v not in (None, '') else None
+
+        scenarios = []
+        for i, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=1):
+            if row is None or all(c is None for c in row):
+                continue
+            cols = list(row) + [None] * 18
+            (_rank, status, su, sv, na, nb, tie_dist, kw, cond,
+             a_before, b_before, a_after, b_after,
+             _a_minv, _b_minv, overall_minv, feasible, error) = cols[:18]
+
+            a_after_n, b_after_n, minv_n = _num(a_after), _num(b_after), _num(overall_minv)
+            scenarios.append({
+                'rank': i,
+                'switch_u': su, 'switch_v': sv,
+                'tie_node_a': na, 'tie_node_b': nb,
+                'tie_distance_m': round(_num(tie_dist) or 0.0, 1),
+                'tie_conductor_size': cond,
+                'subtree_kw': round(_num(kw) or 0.0, 1),
+                'a_loading_before': round(_num(a_before) or 0.0, 1),
+                'a_loading_after': round(a_after_n, 1) if a_after_n is not None else None,
+                'b_loading_before': round(_num(b_before) or 0.0, 1),
+                'b_loading_after': round(b_after_n, 1) if b_after_n is not None else None,
+                'min_v': round(minv_n, 0) if minv_n is not None else None,
+                'feasible': (feasible == 'YES'),
+                'optimal': (status == '** OPTIMAL **'),
+                'error': error or None,
+            })
+        if not scenarios:
+            return None
+        return {'fac_a': fac_a, 'fac_b': fac_b, 'scenarios': scenarios}
+    finally:
+        wb.close()
 
 
 # ------------------------------------------------------------------
@@ -320,7 +466,9 @@ def shareload_list():
     pairs = _list_pairs()
     with _running_lock:
         running = set(_running_jobs)
-    return render_template('shareload.html', pairs=pairs, running=running, user=user)
+    return render_template('shareload.html', pairs=pairs, running=running, user=user,
+                           regions=sorted(set(Config.REGION_MAPPING.values())),
+                           default_region=get_user_region())
 
 
 @shareload_bp.route('/shareload/run', methods=['POST'])
@@ -329,11 +477,14 @@ def shareload_run():
     fac_a = request.form.get('fac_a', '').strip()
     fac_b = request.form.get('fac_b', '').strip()
     force = request.form.get('force') == '1'
+    region = request.form.get('region', '').strip().upper()
 
     if not FAC_RE.match(fac_a) or not FAC_RE.match(fac_b):
         return jsonify({'error': 'รูปแบบ FACILITYID ไม่ถูกต้อง (XX-XXXXXX)'}), 400
     if fac_a == fac_b:
         return jsonify({'error': 'FACILITYID A และ B ต้องไม่เป็นตัวเดียวกัน'}), 400
+    if region not in set(Config.REGION_MAPPING.values()):
+        return jsonify({'error': 'กรุณาเลือกเขต GIS ของหม้อแปลงทั้งคู่'}), 400
 
     pair_key = f'{fac_a}_{fac_b}'
     out_dir = FEASIBLE_DIR / pair_key
@@ -352,9 +503,15 @@ def shareload_run():
             out_dir.mkdir(parents=True, exist_ok=True)
             script = SHARELOAD_DIR / 'run_web.py'
             proc = subprocess.run(
-                [sys.executable, str(script), fac_a, fac_b, str(out_dir)],
+                [sys.executable, str(script), fac_a, fac_b, str(out_dir), region],
                 cwd=str(SHARELOAD_DIR),
                 capture_output=True, text=True, timeout=600,
+                # run_web.py reconfigures its own stdout/stderr to UTF-8; without
+                # this, Python decodes the pipes using the OS locale codepage
+                # (cp874 on Thai Windows), which crashes on the Thai/Unicode text
+                # run_web.py prints, killing the internal reader thread and
+                # leaving proc.stderr as None.
+                encoding="utf-8", errors="replace",
             )
             if proc.returncode != 0:
                 logging.error(f"[shareload] {pair_key} failed:\n{proc.stderr}")
@@ -418,11 +575,32 @@ def shareload_result(pair_key):
 @login_required
 def shareload_table(pair_key):
     """Return the per-scenario results table (switch/tie/loading/status) as JSON."""
-    if not PAIR_RE.match(pair_key):
+    m = PAIR_RE.match(pair_key)
+    if not m:
         abort(400)
-    json_path = FEASIBLE_DIR / pair_key / f'transfer_{pair_key}_results.json'
+    folder = FEASIBLE_DIR / pair_key
+    json_path = folder / f'transfer_{pair_key}_results.json'
+
     if not json_path.exists():
-        return jsonify({'scenarios': None}), 200
+        # Older runs (from before the JSON export existed) only have the
+        # xlsx — rebuild the table from it instead of forcing a re-run.
+        xlsx_path = folder / f'transfer_{pair_key}.xlsx'
+        if not xlsx_path.exists():
+            return jsonify({'scenarios': None}), 200
+        try:
+            data = _build_table_from_xlsx(xlsx_path, m.group(1), m.group(2))
+        except Exception:
+            logging.exception(f"[shareload/table] xlsx fallback failed for {pair_key}")
+            return jsonify({'scenarios': None}), 200
+        if not data:
+            return jsonify({'scenarios': None}), 200
+        try:
+            with open(json_path, 'w', encoding='utf-8') as fh:
+                json.dump(data, fh, ensure_ascii=False)
+        except Exception:
+            logging.exception(f"[shareload/table] failed to cache derived table for {pair_key}")
+        return jsonify(data)
+
     try:
         with open(json_path, encoding='utf-8') as fh:
             data = json.load(fh)

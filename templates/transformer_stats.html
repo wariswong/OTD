@@ -185,8 +185,9 @@
                             {{ "%.1f"|format(unb) }}%
                         </span>
                     </td> -->
-                    <td class="px-6 py-4 text-sm whitespace-normal break-words {{ 'bg-red-50/50 text-red-700 font-medium' if row.problem_summary else 'text-gray-600' }}" style="min-width: 300px;">
-                        {{ row.problem_summary if row.problem_summary else '-' }}
+                    {% set has_problem = row.problem_summary and row.problem_summary|lower != 'none' %}
+                    <td class="px-6 py-4 text-sm whitespace-normal break-words {{ 'bg-red-50/50 text-red-700 font-medium' if has_problem else 'text-gray-600' }}" style="min-width: 300px;">
+                        {{ row.problem_summary if has_problem else '-' }}
                     </td>
                     <td class="px-6 py-4 text-sm whitespace-normal break-words {{ 'bg-blue-50/50 text-blue-700 font-medium' if row.fix_guideline else 'text-gray-600' }}" style="min-width: 400px;">
                         {% if row.fix_guideline %}
@@ -447,16 +448,26 @@
                 );
             });
 
+            // ค่า problem_summary ที่แปลว่า "ไม่มีปัญหา": ว่าง/null หรือข้อความ
+            // "none" (มาจากการอัปโหลด CSV ที่บันทึก Python None เป็น string
+            // "None" ตรงๆ) — ไม่ใช่แค่เช็ค truthy เพราะ "None" ก็เป็น truthy
+            function hasProblemValue(v) {
+                if (!v) return false;
+                const t = String(v).trim().toLowerCase();
+                return t !== '' && t !== 'none';
+            }
+
             // Content function ใช้ร่วมกันทุก marker
             function buildContent(f) {
                 const a = f.graphic.attributes;
-                const probColor = a.problem_summary && a.problem_summary !== 'ปกติ' ? '#dc2626' : '#10b981';
+                const problem = hasProblemValue(a.problem_summary);
+                const probColor = problem ? '#dc2626' : '#10b981';
                 return `<table style="font-size:12px;border-collapse:collapse;width:100%">
                     <tr><td style="color:#6b7280;padding:3px 10px 3px 0;white-space:nowrap">สถานที่</td><td>${a.location}</td></tr>
                     <tr><td style="color:#6b7280;padding:3px 10px 3px 0">Rate KVA</td><td>${a.rate_kva}</td></tr>
                     <tr><td style="color:#6b7280;padding:3px 10px 3px 0">Peak Load</td><td>${a.pload_peak}</td></tr>
                     <tr><td style="color:#6b7280;padding:3px 10px 3px 0;vertical-align:top">สรุปปัญหา</td>
-                        <td style="color:${probColor};font-weight:600">${a.problem_summary || 'ปกติ'}</td></tr>
+                        <td style="color:${probColor};font-weight:600">${problem ? a.problem_summary : 'ปกติ'}</td></tr>
                     <tr><td style="color:#6b7280;padding:3px 10px 3px 0;vertical-align:top">แนวทาง</td><td>${a.fix_guideline}</td></tr>
                 </table>`;
             }
@@ -465,7 +476,7 @@
             .then(r => r.json())
             .then(data => {
                 data.forEach(item => {
-                    const hasProblem = item.problem_summary && item.problem_summary.trim() !== '';
+                    const hasProblem = hasProblemValue(item.problem_summary);
                     const hasSetup   = item.fix_guideline && (item.fix_guideline.includes('ตั้งเสริม') || item.fix_guideline.includes('ตัดจ่าย'));
                     gl.add(new Graphic({
                         geometry: { type: "point", longitude: item.lon, latitude: item.lat },
