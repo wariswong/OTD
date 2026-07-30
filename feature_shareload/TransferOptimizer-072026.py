@@ -185,10 +185,20 @@ class NetworkGraph:
         self.facilityid = fac or str(get_attr(xfmr, "TAG", "XFM1") or "XFM1").strip()
         self.rated_kva = float(get_attr(xfmr, "RATEKVA", 250.0) or 250.0)
 
-        # --- LC backbone lines ---
+        # --- LC backbone lines (SUBTYPECODE=1 เท่านั้น กัน streetlight/อื่นๆ) ---
+        def _subtype_ok(f: dict) -> bool:
+            st = get_attr(f, "SUBTYPECODE", None) or get_attr(f, "SUBTYPECOD", None)
+            if st is None:
+                return True  # ไม่มี field → ไม่บล็อก
+            try:
+                return int(float(st)) == 1
+            except (ValueError, TypeError):
+                return True
+
         lc_list = [
             (i, f) for i, f in enumerate(features)
             if has_paths(f) and "LC" in str(get_attr(f, "TAG", "")).upper()
+            and _subtype_ok(f)
         ]
         if not lc_list:
             raise RuntimeError(f"No backbone lines (TAG contains LC) in {self.json_path.name}")
@@ -332,6 +342,50 @@ def _translate_feature(feat: dict, dx: float, dy: float) -> dict:
         g["x"] += dx
         g["y"] += dy
     return f
+
+
+def _cross2d(o: Tuple, a: Tuple, b: Tuple) -> float:
+    return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+
+
+def _segments_cross(p1: Tuple, p2: Tuple, p3: Tuple, p4: Tuple) -> bool:
+    """True ถ้า segment p1-p2 ตัดผ่าน segment p3-p4 แบบ proper (ไม่นับแค่แตะปลาย)"""
+    d1 = _cross2d(p3, p4, p1)
+    d2 = _cross2d(p3, p4, p2)
+    d3 = _cross2d(p1, p2, p3)
+    d4 = _cross2d(p1, p2, p4)
+    if ((d1 > 0 and d2 < 0) or (d1 < 0 and d2 > 0)) and \
+       ((d3 > 0 and d4 < 0) or (d3 < 0 and d4 > 0)):
+        return True
+    return False
+
+
+def _tie_crosses_lv(na: int, nb: int,
+                    net_a: "NetworkGraph", net_b: "NetworkGraph") -> Tuple[bool, str]:
+    """
+    เช็คว่าสาย tie (เส้นตรง na→nb) ตัดผ่าน LV backbone edge ใดใน net_a หรือ net_b หรือไม่
+    คืนค่า (crossed: bool, description: str)
+    """
+    p1 = net_a.node_coords[na]
+    p2 = net_b.node_coords[nb]
+
+    for u, v in net_a.G.edges():
+        if u == na or v == na:
+            continue
+        p3 = net_a.node_coords[u]
+        p4 = net_a.node_coords[v]
+        if _segments_cross(p1, p2, p3, p4):
+            return True, f"ตัดกับ TR_A edge ({u},{v})"
+
+    for u, v in net_b.G.edges():
+        if u == nb or v == nb:
+            continue
+        p3 = net_b.node_coords[u]
+        p4 = net_b.node_coords[v]
+        if _segments_cross(p1, p2, p3, p4):
+            return True, f"ตัดกับ TR_B edge ({u},{v})"
+
+    return False, ""
 
 
 def make_tie_line_feature(
@@ -486,11 +540,14 @@ def query_transformer_loading(rated_kva: float) -> float:
 
 
 def query_min_voltage_v() -> float:
-    """Return minimum LV phase voltage (V) across all buses (kVBase <= 1 kV), excluding neutrals."""
+    """Return minimum LV phase voltage (V) across backbone buses only (kVBase <= 1 kV),
+    excluding meter buses (m_*) and neutrals so the value matches what is visible on the map."""
     try:
         min_v = float("inf")
         for busname in odss.Circuit.AllBusNames():
             if not busname:
+                continue
+            if busname.lower().startswith("m_"):   # skip meter/service buses
                 continue
             odss.Circuit.SetActiveBus(busname)
             if odss.Bus.kVBase() > 1.0:   # skip HV buses (22 kV)
@@ -645,53 +702,58 @@ def collect_optimal_node_voltages(
         orig_b_tree = cKDTree(all_b_arr)
 
         # ── TR_A modified ───────────────────────────────────────────────
-        net_a_mod = NetworkGraph(str(path_a), snap_tol=snap_tol_a, auto_snap=False)
-        lc_a_mod  = list(net_a_mod.lc_feat_edges.values())
-        new_bus_a_m, _, _, _ = build_bfs_order(
-            len(net_a_mod.node_coords), lc_a_mod, net_a_mod.transformer_node)
-        bus_to_a = {b.lower(): nid for nid, b in new_bus_a_m.items()}
-
         with contextlib.redirect_stdout(io.StringIO()):
             fa, _ = convert_json_to_dss_ordered(str(path_a), dss_a, snap_tol=snap_tol_a)
             solve_with_opendss(fa)
-        for bus, phases in _collect_dss_bus_phase_voltages().items():
-            mod_nid = bus_to_a.get(bus.lower())
-            if mod_nid is None:
+        all_dss_a = _collect_dss_bus_phase_voltages()
+        # Coordinate-based mapping: ใช้ SetBusXY ที่ DSS เขียนไว้ → ไม่ขึ้นกับ BFS ordering
+        for bus in odss.Circuit.AllBusNames():
+            phases = all_dss_a.get(bus, all_dss_a.get(bus.lower()))
+            if not phases:
                 continue
-            x, y = net_a_mod.node_coords[mod_nid]
-            dist, idx = orig_a_tree.query([x, y])
-            if dist < 3.0:
+            odss.Circuit.SetActiveBus(bus)
+            bx, by = odss.Bus.X(), odss.Bus.Y()
+            if bx == 0.0 and by == 0.0:
+                continue
+            dist, idx = orig_a_tree.query([bx, by])
+            if dist < 100.0:
                 nid = orig_a_ids[idx]
-                volt_a[nid]  = min(phases.values())
-                phase_a[nid] = phases
+                v = min(phases.values())
+                if nid not in volt_a or v < volt_a[nid]:
+                    volt_a[nid] = v
+                    if nid not in phase_a or v == volt_a[nid]:
+                        phase_a[nid] = phases
 
         # ── TR_B modified ───────────────────────────────────────────────
-        net_b_mod = NetworkGraph(str(path_b), snap_tol=snap_tol_b, auto_snap=False)
-        lc_b_mod  = list(net_b_mod.lc_feat_edges.values())
-        new_bus_b_m, _, _, _ = build_bfs_order(
-            len(net_b_mod.node_coords), lc_b_mod, net_b_mod.transformer_node)
-        bus_to_b = {b.lower(): nid for nid, b in new_bus_b_m.items()}
-
         with contextlib.redirect_stdout(io.StringIO()):
             fb, _ = convert_json_to_dss_ordered(str(path_b), dss_b, snap_tol=snap_tol_b)
             solve_with_opendss(fb)
         n_orig_b = len(orig_b_ids)
         all_dss_b = _collect_dss_bus_phase_voltages()
-        for bus, phases in all_dss_b.items():
-            mod_nid = bus_to_b.get(bus.lower())
-            if mod_nid is None:
+        # Coordinate-based mapping สำหรับ TR_B (รวม transferred subtree ที่ offset ไปแล้ว)
+        for bus in odss.Circuit.AllBusNames():
+            phases = all_dss_b.get(bus, all_dss_b.get(bus.lower()))
+            if not phases:
                 continue
-            x, y = net_b_mod.node_coords[mod_nid]
-            dist, idx = orig_b_tree.query([x, y])
-            if dist < 3.0:
+            odss.Circuit.SetActiveBus(bus)
+            bx, by = odss.Bus.X(), odss.Bus.Y()
+            if bx == 0.0 and by == 0.0:
+                continue
+            dist, idx = orig_b_tree.query([bx, by])
+            if dist < 100.0:
+                v = min(phases.values())
                 if idx < n_orig_b:
                     nid = orig_b_ids[idx]
-                    volt_b[nid]  = min(phases.values())
-                    phase_b[nid] = phases
+                    if nid not in volt_b or v < volt_b[nid]:
+                        volt_b[nid] = v
+                        if nid not in phase_b or v == volt_b[nid]:
+                            phase_b[nid] = phases
                 else:
                     nid = sub_a_ids[idx - n_orig_b]
-                    volt_a[nid]  = min(phases.values())
-                    phase_a[nid] = phases
+                    if nid not in volt_a or v < volt_a[nid]:
+                        volt_a[nid] = v
+                        if nid not in phase_a or v == volt_a[nid]:
+                            phase_a[nid] = phases
 
     except Exception as exc:
         print(f"[WARN] voltage map collection failed: {exc}")
@@ -1060,6 +1122,12 @@ class TransferOptimizer:
 
             best_nb = b_node_ids[best_nb_idx]
 
+            # Physical feasibility: tie must not cross existing LV segments
+            crossed, cross_desc = _tie_crosses_lv(best_na, best_nb, self.net_a, self.net_b)
+            if crossed:
+                print(f"  [PHYS-NG] switch=({u},{v}) tie {best_na}→{best_nb}  {cross_desc}")
+                continue
+
             # Estimate post-transfer loading (kW-based estimate)
             est_a_kva = max(0.0, (a_baseline / 100.0) * self.net_a.rated_kva - subtree_kw)
             est_b_kva = (b_baseline / 100.0) * self.net_b.rated_kva + subtree_kw
@@ -1117,10 +1185,11 @@ class TransferOptimizer:
         # Step 7: Mark optimal
         feasible = [r for r in results if r.get("feasible")]
         if feasible:
-            # Primary: maximize V_min; Secondary: minimize A_after%
+            # Primary: maximize V_min (rounded to 0.1V); Secondary: minimize A_after%; Tertiary: minimize tie distance
             feasible.sort(key=lambda r: (
-                -r.get("min_v", 0.0),
+                -round(r.get("min_v", 0.0), 1),
                 r["a_loading_after"],
+                r.get("tie_distance_m", 0.0),
             ))
             feasible[0]["optimal"] = True
 
@@ -1347,25 +1416,22 @@ def draw_topology_map(
     ax.annotate(f"TR_B\n{net_b.facilityid}", (tx_bx, tx_by),
                 xytext=(6, 6), textcoords="offset points", fontsize=8, color=DEF_B, fontweight="bold")
 
-    # --- Non-optimal feasible switch edges (thin dotted, ranked) ---
-    rank = 0
-    for r in results:
-        if not r.get("feasible"):
-            continue
-        rank += 1
-        if r.get("optimal"):
+    # --- Non-optimal feasible switch edges (thin dotted, labeled with table row #) ---
+    for idx, r in enumerate(results, start=1):
+        if not r.get("feasible") or r.get("optimal"):
             continue
         su2, sv2 = r["switch_edge"]
         xu2, yu2 = net_a.node_coords[su2]; xv2, yv2 = net_a.node_coords[sv2]
         ax.plot([xu2, xv2], [yu2, yv2], color="#FF9999", linewidth=1.5,
                 linestyle=":", zorder=5, alpha=0.8)
         mx2, my2 = (xu2 + xv2) / 2, (yu2 + yv2) / 2
-        ax.text(mx2, my2, f"#{rank}", fontsize=6, ha="center", va="center",
+        ax.text(mx2, my2, f"#{idx}", fontsize=6, ha="center", va="center",
                 color="crimson", zorder=6,
                 bbox=dict(fc="white", ec="#FF9999", pad=1, alpha=0.7, boxstyle="round,pad=0.2"))
 
     # --- Optimal scenario ---
     opt = next((r for r in results if r.get("optimal")), None)
+    opt_idx = next((i for i, r in enumerate(results, start=1) if r.get("optimal")), None)
     if opt:
         su, sv = opt["switch_edge"]
         xu, yu = net_a.node_coords[su]; xv, yv = net_a.node_coords[sv]
@@ -1387,7 +1453,7 @@ def draw_topology_map(
 
         # OPEN label at midpoint
         mx, my = (xu + xv) / 2, (yu + yv) / 2
-        ax.text(mx, my, "[OPT] OPEN", fontsize=8, ha="center", va="center",
+        ax.text(mx, my, f"[OPT] OPEN (#{opt_idx})", fontsize=8, ha="center", va="center",
                 color="red", fontweight="bold", zorder=8,
                 bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="red", alpha=0.92))
 
@@ -1484,7 +1550,10 @@ def draw_interactive_map(
     phase_b: Dict[int, Dict[int, float]] = None,
     raw_a: dict = None,
     raw_b: dict = None,
+    scenario_voltages: List[Tuple] = None,
 ) -> None:
+    # scenario_voltages: list of (volt_a, volt_b, phase_a, phase_b) per top-5 scenario
+    # If provided, replaces single-scenario volt_a/volt_b for per-scenario coloring
     import plotly.graph_objects as go
     from plotly.subplots import make_subplots
 
@@ -1532,54 +1601,12 @@ def draw_interactive_map(
     _add_edges(net_a, "#4472C4", "a", f"TR_A Lines ({net_a.facilityid})")
     _add_edges(net_b, "#ED7D31", "b", f"TR_B Lines ({net_b.facilityid})")
 
-    # ── Colored nodes (voltage known) ──────────────────────────────────
-    all_x, all_y, all_v, all_txt, all_sz = [], [], [], [], []
-    for net, vd, pd, lbl in [
-            (net_a, volt_a, phase_a, "TR_A"),
-            (net_b, volt_b, phase_b, "TR_B")]:
-        for nid in sorted(net.node_coords.keys()):
-            v = vd.get(nid)
-            if v is None:
-                continue
-            x, y = net.node_coords[nid]
-            kw    = net.node_kw.get(nid, 0.0)
-            ph    = pd.get(nid, {})
-            all_x.append(x); all_y.append(y); all_v.append(v)
-            all_txt.append(
-                f"<b>{lbl}  nid={nid}</b>"
-                + _phase_hover(ph)
-                + (f"<br><b>Vmin = {v:.1f} V</b>" if len(ph) > 1 else "")
-                + f"<br>Load = {kw:.2f} kW"
-                + f"<br>({x:.0f}, {y:.0f})"
-            )
-            all_sz.append(8 + min(kw * 0.6, 14))
-
-    if all_x:
-        fig.add_trace(go.Scatter(
-            x=all_x, y=all_y, mode="markers",
-            marker=dict(
-                color=all_v, colorscale=cscale, cmin=vmin, cmax=vmax,
-                size=all_sz, opacity=0.92, line=dict(width=0),
-                colorbar=dict(
-                    title=dict(text="Voltage (V)", side="right"),
-                    tickvals=list(range(150, 241, 10)),
-                    thickness=14, len=0.50, x=1.01, outlinewidth=0.5,
-                ),
-                showscale=True,
-            ),
-            name="Nodes (voltage)",
-            text=all_txt,
-            hovertemplate="%{text}<extra></extra>",
-        ), row=1, col=1)
-
-    # ── Plain nodes (no voltage data) ──────────────────────────────────
-    for net, vd, lbl, color in [
-            (net_a, volt_a, "TR_A", "#4472C4"),
-            (net_b, volt_b, "TR_B", "#ED7D31")]:
+    # ── Static nodes (flat color, always visible) ──────────────────────
+    for net, lbl, color in [
+            (net_a, "TR_A", "#4472C4"),
+            (net_b, "TR_B", "#ED7D31")]:
         xs2, ys2, txt2, sz2 = [], [], [], []
         for nid in sorted(net.node_coords.keys()):
-            if nid in vd:
-                continue
             x, y = net.node_coords[nid]
             kw = net.node_kw.get(nid, 0.0)
             xs2.append(x); ys2.append(y)
@@ -1588,85 +1615,34 @@ def draw_interactive_map(
         if xs2:
             fig.add_trace(go.Scatter(
                 x=xs2, y=ys2, mode="markers",
-                marker=dict(color=color, size=sz2, opacity=0.65, line=dict(width=0)),
+                marker=dict(color=color, size=sz2, opacity=0.35, line=dict(width=0)),
                 name=f"{lbl} nodes",
                 text=txt2, hovertemplate="%{text}<extra></extra>",
             ), row=1, col=1)
 
-    # ── Low-voltage rings (< 200 V) ────────────────────────────────────
-    lx, ly, lt = [], [], []
-    for net, vd, pd, lbl in [
-            (net_a, volt_a, phase_a, "TR_A"),
-            (net_b, volt_b, phase_b, "TR_B")]:
-        for nid, v in vd.items():
-            if v < 200 and nid in net.node_coords:
-                x, y = net.node_coords[nid]
-                ph   = pd.get(nid, {})
-                lx.append(x); ly.append(y)
-                lt.append(f"<b>{lbl} nid={nid}  Vmin={v:.1f}V</b>" + _phase_hover(ph))
-    if lx:
-        fig.add_trace(go.Scatter(
-            x=lx, y=ly, mode="markers",
-            marker=dict(symbol="circle-open", color="red", size=20, line=dict(width=2.5)),
-            name="V < 200 V",
-            text=lt, hovertemplate="%{text}<extra></extra>",
-        ), row=1, col=1)
-
-    # ── Meter points (individual customers) ────────────────────────────
-    for net, vd, raw, lbl in [
-            (net_a, volt_a, raw_a, "TR_A"),
-            (net_b, volt_b, raw_b, "TR_B")]:
+    # ── Meter points (always visible, gray) ────────────────────────────
+    for net, raw, lbl in [(net_a, raw_a, "TR_A"), (net_b, raw_b, "TR_B")]:
         if not raw:
             continue
-        mx, my, mv, mtxt = [], [], [], []
+        mx, my, mtxt = [], [], []
         for feat_idx, nid in net.load_feat_nodes.items():
             feat = raw["features"][feat_idx]
             g = feat.get("geometry", {})
             fx = g.get("x"); fy = g.get("y")
             if fx is None or fy is None:
                 continue
-            peano   = str(get_attr(feat, "PEANO",   "") or "").strip()
-            peameter= str(get_attr(feat, "PEAMETER","") or "").strip()
-            kw      = float(get_attr(feat, "KWP", 0.0) or 0.0)
-            v       = vd.get(nid)
-            label   = peano or peameter or f"nid={nid}"
-            tip = f"<b>{lbl} Meter {label}</b><br>kW = {kw:.2f}<br>"
-            if v is not None:
-                tip += f"<b>V = {v:.1f} V</b>"
-                mv.append(v)
-            else:
-                tip += "V = —"
-                mv.append(float("nan"))
-            mx.append(fx); my.append(fy); mtxt.append(tip)
-
-        # meters with voltage (colored)
-        vx, vy, vv, vt = [], [], [], []
-        nx2, ny2, nt2 = [], [], []
-        for x, y, v, t in zip(mx, my, mv, mtxt):
-            if v == v:  # not nan
-                vx.append(x); vy.append(y); vv.append(v); vt.append(t)
-            else:
-                nx2.append(x); ny2.append(y); nt2.append(t)
-
-        if vx:
+            peano    = str(get_attr(feat, "PEANO",    "") or "").strip()
+            peameter = str(get_attr(feat, "PEAMETER", "") or "").strip()
+            kw       = float(get_attr(feat, "KWP", 0.0) or 0.0)
+            label    = peano or peameter or f"nid={nid}"
+            mx.append(fx); my.append(fy)
+            mtxt.append(f"<b>{lbl} Meter {label}</b><br>kW = {kw:.2f}")
+        if mx:
             fig.add_trace(go.Scatter(
-                x=vx, y=vy, mode="markers",
-                marker=dict(
-                    symbol="diamond",
-                    color=vv, colorscale=cscale, cmin=vmin, cmax=vmax,
-                    size=9, opacity=0.9,
-                    line=dict(width=0.8, color="rgba(0,0,0,0.4)"),
-                    showscale=False,
-                ),
-                name=f"{lbl} Meters",
-                text=vt, hovertemplate="%{text}<extra></extra>",
-            ), row=1, col=1)
-        if nx2:
-            fig.add_trace(go.Scatter(
-                x=nx2, y=ny2, mode="markers",
+                x=mx, y=my, mode="markers",
                 marker=dict(symbol="diamond", color="gray", size=7, opacity=0.5),
-                name=f"{lbl} Meters (no sim)",
-                text=nt2, hovertemplate="%{text}<extra></extra>",
+                name=f"{lbl} Meters",
+                text=mtxt, hovertemplate="%{text}<extra></extra>",
             ), row=1, col=1)
 
     # ── Transformers ────────────────────────────────────────────────────
@@ -1676,7 +1652,7 @@ def draw_interactive_map(
         x, y = net.node_coords[net.transformer_node]
         fig.add_trace(go.Scatter(
             x=[x], y=[y], mode="markers+text",
-            marker=dict(symbol="star", size=22, color=color,
+            marker=dict(symbol="triangle-up", size=22, color=color,
                         line=dict(color="black", width=1.5)),
             text=[lbl], textposition="top right",
             textfont=dict(size=10, color=color),
@@ -1684,70 +1660,160 @@ def draw_interactive_map(
             hovertemplate=f"<b>{lbl}</b><br>({x:.0f}, {y:.0f})<extra></extra>",
         ), row=1, col=1)
 
-    # ── Optimal switch + tie ─────────────────────────────────────────────
+    # ── Top-5 feasible scenarios: switch + tie (selectable) ──────────────
     opt = next((r for r in results if r.get("optimal")), None)
-    if opt:
-        su, sv = opt["switch_edge"]
+    feasible_top = [r for r in results if r.get("feasible")][:5]
+    SCEN_COLORS  = ["#00B050", "#0070C0", "#7030A0", "#FF6600", "#A0522D"]
+
+    scen_trace_start = len(fig.data)
+    # Traces per scenario: voltage_nodes, low_v_rings, switch, tie  (4 each)
+    TRACES_PER_SCEN = 5
+
+    for i, r in enumerate(feasible_top):
+        color = SCEN_COLORS[i]
+        rank  = next(j + 1 for j, x in enumerate(results) if x is r)
+        tag   = " ★OPT" if r.get("optimal") else ""
+        grp   = f"scen{i + 1}"
+        lw    = 5 if r.get("optimal") else 2.5
+
+        # voltage data for this scenario
+        sv_data = scenario_voltages[i] if (scenario_voltages and i < len(scenario_voltages)) else None
+        va_i  = sv_data[0] if sv_data else {}
+        vb_i  = sv_data[1] if sv_data else {}
+        pa_i  = sv_data[2] if sv_data else {}
+        pb_i  = sv_data[3] if sv_data else {}
+
+        # ── Voltage-colored nodes (per scenario) ──────────────────────
+        all_x, all_y, all_v, all_txt, all_sz = [], [], [], [], []
+        _vmin_x = _vmin_y = _vmin_v = _vmin_nid = _vmin_lbl = None
+        for net, vd, pd, lbl in [
+                (net_a, va_i, pa_i, "TR_A"),
+                (net_b, vb_i, pb_i, "TR_B")]:
+            for nid in sorted(net.node_coords.keys()):
+                v = vd.get(nid)
+                if v is None:
+                    continue
+                x, y = net.node_coords[nid]
+                kw = net.node_kw.get(nid, 0.0)
+                ph = pd.get(nid, {})
+                all_x.append(x); all_y.append(y); all_v.append(v)
+                all_txt.append(
+                    f"<b>#{rank}{tag}  {lbl}  nid={nid}</b>"
+                    + _phase_hover(ph)
+                    + (f"<br><b>Vmin = {v:.1f} V</b>" if len(ph) > 1 else f"<br>V = {v:.1f} V")
+                    + f"<br>Load = {kw:.2f} kW"
+                    + f"<br>({x:.0f}, {y:.0f})"
+                )
+                all_sz.append(8 + min(kw * 0.6, 14))
+                if _vmin_v is None or v < _vmin_v:
+                    _vmin_x, _vmin_y, _vmin_v, _vmin_nid, _vmin_lbl = x, y, v, nid, lbl
+
+        show_colorbar = (i == 0)
+        fig.add_trace(go.Scatter(
+            x=all_x, y=all_y, mode="markers",
+            marker=dict(
+                color=all_v if all_v else [0],
+                colorscale=cscale, cmin=vmin, cmax=vmax,
+                size=all_sz if all_sz else [8],
+                opacity=0.95, line=dict(width=0),
+                colorbar=dict(
+                    title=dict(text="Voltage (V)", side="right"),
+                    tickvals=list(range(150, 241, 10)),
+                    thickness=14, len=0.50, x=1.01, outlinewidth=0.5,
+                ) if show_colorbar else None,
+                showscale=show_colorbar,
+            ),
+            name=f"#{rank}{tag} Voltages",
+            legendgroup=grp,
+            text=all_txt,
+            hovertemplate="%{text}<extra></extra>",
+        ), row=1, col=1)
+
+        # ── Low-voltage rings < 200 V (per scenario) ─────────────────
+        lx, ly, lt = [], [], []
+        for net, vd, pd, lbl in [
+                (net_a, va_i, pa_i, "TR_A"),
+                (net_b, vb_i, pb_i, "TR_B")]:
+            for nid, v in vd.items():
+                if v < 200 and nid in net.node_coords:
+                    x, y = net.node_coords[nid]
+                    ph = pd.get(nid, {})
+                    lx.append(x); ly.append(y)
+                    lt.append(f"<b>#{rank} {lbl} nid={nid}  Vmin={v:.1f}V</b>" + _phase_hover(ph))
+        fig.add_trace(go.Scatter(
+            x=lx, y=ly, mode="markers",
+            marker=dict(symbol="circle-open", color="red", size=20, line=dict(width=2.5)),
+            name=f"#{rank}{tag} V<200V",
+            legendgroup=grp,
+            text=lt, hovertemplate="%{text}<extra></extra>",
+            visible=True,
+        ), row=1, col=1)
+
+        # ── Vmin node highlight (red star) ────────────────────────────
+        if _vmin_x is not None:
+            _ph = pa_i.get(_vmin_nid, pb_i.get(_vmin_nid, {}))
+            _tip = (f"<b>⚠ Vmin Node  #{rank}{tag}</b><br>"
+                    f"{_vmin_lbl}  nid={_vmin_nid}<br>"
+                    f"<b>V = {_vmin_v:.1f} V</b>"
+                    + _phase_hover(_ph)
+                    + f"<br>({_vmin_x:.0f}, {_vmin_y:.0f})")
+            fig.add_trace(go.Scatter(
+                x=[_vmin_x], y=[_vmin_y], mode="markers",
+                marker=dict(symbol="star", color="red", size=24,
+                            line=dict(width=2, color="#8B0000")),
+                name=f"#{rank}{tag} Vmin={_vmin_v:.0f}V",
+                legendgroup=grp,
+                text=[_tip],
+                hovertemplate="%{text}<extra></extra>",
+            ), row=1, col=1)
+        else:
+            fig.add_trace(go.Scatter(x=[], y=[], mode="markers",
+                name=f"#{rank}{tag} Vmin", legendgroup=grp,
+            ), row=1, col=1)
+
+        # ── Switch trace ───────────────────────────────────────────────
+        su, sv = r["switch_edge"]
         xu, yu = net_a.node_coords[su]
         xv, yv = net_a.node_coords[sv]
-        ph_su  = phase_a.get(su, {}); ph_sv = phase_a.get(sv, {})
-        sw_tip = (
-            "<b>[OPT] Switch OPEN</b><br>"
-            f"<b>sw_u nid={su}</b>" + _phase_hover(ph_su) + "<br>"
-            f"<b>sw_v nid={sv}</b>" + _phase_hover(ph_sv)
-            + "<extra></extra>"
-        )
+        ph_su  = pa_i.get(su, {}); ph_sv = pa_i.get(sv, {})
+
         fig.add_trace(go.Scatter(
             x=[xu, xv], y=[yu, yv], mode="lines+markers",
-            line=dict(color="red", width=5, dash="dash"),
-            marker=dict(symbol="x", size=16, color="red", line=dict(width=3)),
-            name="[OPT] Switch OPEN", hovertemplate=sw_tip,
-        ), row=1, col=1)
-
-        xna, yna = net_a.node_coords[opt["tie_node_a"]]
-        xnb, ynb = net_b.node_coords[opt["tie_node_b"]]
-        ph_na = phase_a.get(opt["tie_node_a"], {})
-        ph_nb = phase_b.get(opt["tie_node_b"], {})
-        tie_tip = (
-            "<b>New Tie Line (CLOSE)</b><br>"
-            f"<b>TIE_A nid={opt['tie_node_a']}</b>" + _phase_hover(ph_na) + "<br>"
-            f"<b>TIE_B nid={opt['tie_node_b']}</b>" + _phase_hover(ph_nb) + "<br>"
-            f"Dist: {opt['tie_distance_m']:.1f} m  AW {opt.get('tie_conductor_size', 50)}mm²<br>"
-            f"Transfer: {opt['subtree_kw']:.1f} kW<br>"
-            f"TR_A: {opt['a_loading_after']:.1f}%  TR_B: {opt['b_loading_after']:.1f}%<br>"
-            f"Vmin: {opt['min_v']:.0f} V"
-            "<extra></extra>"
-        )
-        fig.add_trace(go.Scatter(
-            x=[xna, xnb], y=[yna, ynb], mode="lines+markers",
-            line=dict(color="#00B050", width=5, dash="dash"),
-            marker=dict(symbol="diamond", size=16, color="#00B050"),
-            name=f"Tie {opt['tie_distance_m']:.1f}m AW{opt.get('tie_conductor_size', 50)}",
-            hovertemplate=tie_tip,
-        ), row=1, col=1)
-
-    # ── Other feasible switch edges ──────────────────────────────────────
-    rank = 0
-    for r in results:
-        if not r.get("feasible"):
-            continue
-        rank += 1
-        if r.get("optimal"):
-            continue
-        su2, sv2 = r["switch_edge"]
-        xu2, yu2 = net_a.node_coords[su2]
-        xv2, yv2 = net_a.node_coords[sv2]
-        fig.add_trace(go.Scatter(
-            x=[xu2, xv2], y=[yu2, yv2], mode="lines",
-            line=dict(color="#FF9999", width=2.5, dash="dot"),
-            name=f"Switch #{rank}",
+            line=dict(color=color, width=lw, dash="dash"),
+            marker=dict(symbol="x", size=14, color=color, line=dict(width=3)),
+            name=f"#{rank}{tag} Switch", legendgroup=grp,
             hovertemplate=(
-                f"<b>Switch #{rank}</b><br>"
-                f"sw_u={su2}  sw_v={sv2}<br>"
-                f"A:{r.get('a_loading_after',0):.1f}%  B:{r.get('b_loading_after',0):.1f}%<br>"
-                f"Vmin:{r.get('min_v',0):.0f} V<extra></extra>"
+                f"<b>Scenario #{rank}{tag} — Switch OPEN</b><br>"
+                f"<b>sw_u nid={su}</b>" + _phase_hover(ph_su) + "<br>"
+                f"<b>sw_v nid={sv}</b>" + _phase_hover(ph_sv)
+                + "<extra></extra>"
             ),
         ), row=1, col=1)
+
+        # ── Tie trace ─────────────────────────────────────────────────
+        xna, yna = net_a.node_coords[r["tie_node_a"]]
+        xnb, ynb = net_b.node_coords[r["tie_node_b"]]
+        ph_na = pa_i.get(r["tie_node_a"], {})
+        ph_nb = pb_i.get(r["tie_node_b"], {})
+
+        fig.add_trace(go.Scatter(
+            x=[xna, xnb], y=[yna, ynb], mode="lines+markers",
+            line=dict(color=color, width=lw, dash="dot"),
+            marker=dict(symbol="diamond", size=14, color=color),
+            name=f"#{rank}{tag} Tie {r['tie_distance_m']:.1f}m", legendgroup=grp,
+            hovertemplate=(
+                f"<b>Scenario #{rank}{tag} — Tie CLOSE</b><br>"
+                f"<b>TIE_A nid={r['tie_node_a']}</b>" + _phase_hover(ph_na) + "<br>"
+                f"<b>TIE_B nid={r['tie_node_b']}</b>" + _phase_hover(ph_nb) + "<br>"
+                f"Dist: {r['tie_distance_m']:.1f} m  AW {r.get('tie_conductor_size', 50)}mm²<br>"
+                f"Transfer: {r['subtree_kw']:.1f} kW<br>"
+                f"TR_A: {r['a_loading_after']:.1f}%  TR_B: {r['b_loading_after']:.1f}%<br>"
+                f"Vmin: {r.get('min_v', 0):.0f} V"
+                "<extra></extra>"
+            ),
+        ), row=1, col=1)
+
+    scen_trace_end = len(fig.data)
 
     # ── Summary table ────────────────────────────────────────────────────
     def _scenario_status(r, min_v_thr=200.0, load_lim=80.0):
@@ -1814,9 +1880,44 @@ def draw_interactive_map(
         ),
     ), row=2, col=1)
 
-    # ── Layout ───────────────────────────────────────────────────────────
+    # ── Layout + Scenario selector buttons ───────────────────────────────
     base_a = results[0].get("a_loading_before", 0) if results else 0
     base_b = results[0].get("b_loading_before", 0) if results else 0
+
+    # Build visibility masks for updatemenus
+    # traces: [base...][scen_switch, scen_tie, ...][table]
+    n_base   = scen_trace_start
+    n_scen   = len(feasible_top)
+    n_after  = len(fig.data) - scen_trace_end   # table trace(s)
+
+    def _vis_mask(sel):
+        vis = [True] * n_base
+        for i in range(n_scen):
+            show = (sel is None or sel == i)
+            vis += [show] * TRACES_PER_SCEN
+        vis += [True] * n_after
+        return vis
+
+    scen_buttons = [dict(
+        label="แสดงทั้งหมด",
+        method="update",
+        args=[{"visible": _vis_mask(None)}],
+    )]
+    for i, r in enumerate(feasible_top):
+        rank = next(j + 1 for j, x in enumerate(results) if x is r)
+        tag  = "★ " if r.get("optimal") else ""
+        lbl  = (
+            f"{tag}#{rank}  "
+            f"A:{r['a_loading_after']:.0f}%→{r['b_loading_after']:.0f}%  "
+            f"Vmin:{r.get('min_v', 0):.0f}V  "
+            f"Tie:{r['tie_distance_m']:.0f}m"
+        )
+        scen_buttons.append(dict(
+            label=lbl,
+            method="update",
+            args=[{"visible": _vis_mask(i)}],
+        ))
+
     fig.update_layout(
         title=dict(
             text=(
@@ -1837,7 +1938,25 @@ def draw_interactive_map(
             bordercolor="#cccccc", borderwidth=1,
             font=dict(size=11),
         ),
-        margin=dict(r=210, t=90, l=75, b=30),
+        margin=dict(r=230, t=90, l=75, b=30),
+        updatemenus=[dict(
+            type="buttons",
+            direction="down",
+            x=1.16, y=0.58,
+            xanchor="left",
+            showactive=True,
+            bgcolor="white",
+            bordercolor="#cccccc",
+            font=dict(size=11),
+            buttons=scen_buttons,
+        )],
+        annotations=[dict(
+            text="<b>เลือก Scenario</b>",
+            x=1.16, y=0.61,
+            xref="paper", yref="paper",
+            xanchor="left", showarrow=False,
+            font=dict(size=11, color="#333333"),
+        )],
     )
     fig.update_xaxes(
         title_text="Easting (UTM47N, m)", tickformat="d",

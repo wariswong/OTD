@@ -67,29 +67,37 @@ def _clean_results_for_json(results, fac_a, fac_b, rated_a, rated_b):
 
 def main():
     if len(sys.argv) < 4:
-        print("ERROR: Usage: python run_web.py <FAC_A> <FAC_B> <OUT_DIR>", flush=True)
+        print("ERROR: Usage: python run_web.py <FAC_A> <FAC_B> <OUT_DIR> [REGION]", flush=True)
         sys.exit(1)
 
     fac_a = sys.argv[1].strip()
     fac_b = sys.argv[2].strip()
     out_dir = Path(sys.argv[3])
+    region = sys.argv[4].strip() if len(sys.argv) > 4 and sys.argv[4].strip() else None
     out_dir.mkdir(parents=True, exist_ok=True)
 
     pair_key = f"{fac_a}_{fac_b}"
     stem = str(out_dir / f"transfer_{pair_key}")
 
-    logging.info(f"Starting TransferOptimizer for {fac_a} <-> {fac_b}")
+    logging.info(f"Starting TransferOptimizer for {fac_a} <-> {fac_b} (region={region})")
     logging.info(f"Output dir: {out_dir}")
 
-    from TransferOptimizer import (
-        TransferOptimizer,
-        save_excel_report,
-        draw_topology_map,
-        draw_interactive_map,
-        collect_optimal_node_voltages,
+    # Module filename has a hyphen (TransferOptimizer-072026.py), so it can't
+    # be reached with a plain `import` statement — load it by file path.
+    import importlib.util
+    _spec = importlib.util.spec_from_file_location(
+        "TransferOptimizer_072026", Path(__file__).parent / "TransferOptimizer-072026.py"
     )
+    _optimizer_mod = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(_optimizer_mod)
 
-    optimizer = TransferOptimizer(fac_a=fac_a, fac_b=fac_b, force_refresh=True)
+    TransferOptimizer = _optimizer_mod.TransferOptimizer
+    save_excel_report = _optimizer_mod.save_excel_report
+    draw_topology_map = _optimizer_mod.draw_topology_map
+    draw_interactive_map = _optimizer_mod.draw_interactive_map
+    collect_optimal_node_voltages = _optimizer_mod.collect_optimal_node_voltages
+
+    optimizer = TransferOptimizer(fac_a=fac_a, fac_b=fac_b, force_refresh=True, region=region)
     results = optimizer.run()
 
     if not results:
