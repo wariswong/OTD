@@ -493,10 +493,13 @@ def run_once_with_facilityid(
     keys = extract_keys_from_balance(balance, key_balance)
     if not keys:
         feats = collect_features(balance)
-        sample_attr_keys = list((feats[0].get("attributes") or {}).keys()) if feats else []
+        sample_attrs = feats[0].get("attributes") or {} if feats else {}
+        trace_result = balance.get("traceResult") or {}
         logging.error(
             f"[GIS] {key_balance} not found: facilityid={facilityid} x={x} y={y} "
-            f"features={len(feats)} sample_attr_keys={sample_attr_keys}"
+            f"success={balance.get('success')} message={balance.get('message')} "
+            f"features={len(feats)} sample_attrs.PEANO={sample_attrs.get('PEANO')!r} "
+            f"traceResult_keys={list(trace_result.keys())}"
         )
         raise RuntimeError(f"ไม่พบ {key_balance} ใน BalanceLoad")
     table_map = query_table_join_map(keys, table_id=table_id, key_table=key_table, init_chunk_size=300)
