@@ -135,6 +135,7 @@ def set_gis_region(region: Optional[str]) -> None:
     BALANCE_BASE     = cfg.BALANCE_BASE
     PEA_QUERY_BASE   = cfg.PEA_QUERY_BASE
     GEOM_BUFFER_URL  = cfg.GEOM_BUFFER_URL
+    logging.info(f"[GIS] region={region!r} -> gis_prefix={gis_prefix!r} base={cfg.base}")
     GEOM_PROJECT_URL = cfg.GEOM_PROJECT_URL
 
 BAL_TABLE_ID   = 31          # ตารางใน PEA_QUERY
@@ -317,6 +318,7 @@ def get_tr_xy_by_facilityid(facilityid: str, timeout=15):
         "f": "pjson",
     }
     url  = f"{TR_LAYER_17}?{urllib.parse.urlencode(params)}"
+    logging.info(f"[GIS] get_tr_xy_by_facilityid url={url}")
     data = http_json_get(url, timeout=timeout)
 
     feats = (data or {}).get("features") or []
@@ -329,6 +331,7 @@ def get_tr_xy_by_facilityid(facilityid: str, timeout=15):
 
     sr_resp = (data.get("spatialReference") or {}).get("wkid")
     x_raw, y_raw = float(g["x"]), float(g["y"])
+    logging.info(f"[GIS] TR xy for {facilityid}: x={x_raw} y={y_raw} sr_resp={sr_resp}")
 
     if sr_resp and int(sr_resp) != SR_UTM47:
         # กันเหนียว: project ฝั่งเรา ถ้า service เพิกเฉย outSR
@@ -348,7 +351,11 @@ def fetch_balance(x: float, y: float) -> dict:
         "f": "pjson"
     }
     url = build_url(BALANCE_BASE, params)
-    return http_json_get(url)
+    logging.info(f"[GIS] fetch_balance url={url}")
+    data = http_json_get(url)
+    n_feats = len(collect_features(data))
+    logging.info(f"[GIS] fetch_balance response features={n_feats} keys={list((data or {}).keys())}")
+    return data
 
 
 # -------------------------------------------------------------------
@@ -477,6 +484,7 @@ def run_once_with_facilityid(
     save: bool = True,
     project_id: str = None
 ) -> dict:
+    logging.info(f"[GIS] run_once_with_facilityid: TR_LAYER_17={TR_LAYER_17} BALANCE_BASE={BALANCE_BASE}")
     x, y = get_tr_xy_by_facilityid(facilityid)
     balance = fetch_balance(x, y)
     balance = reproject_balance_to_32647(balance)
@@ -484,6 +492,12 @@ def run_once_with_facilityid(
         raise RuntimeError(balance["error"].get("message"))
     keys = extract_keys_from_balance(balance, key_balance)
     if not keys:
+        feats = collect_features(balance)
+        sample_attr_keys = list((feats[0].get("attributes") or {}).keys()) if feats else []
+        logging.error(
+            f"[GIS] {key_balance} not found: facilityid={facilityid} x={x} y={y} "
+            f"features={len(feats)} sample_attr_keys={sample_attr_keys}"
+        )
         raise RuntimeError(f"ไม่พบ {key_balance} ใน BalanceLoad")
     table_map = query_table_join_map(keys, table_id=table_id, key_table=key_table, init_chunk_size=300)
     joined = join_balance_with_table(balance, table_map, key_balance=key_balance, prefix="")
