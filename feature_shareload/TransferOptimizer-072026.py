@@ -1653,6 +1653,10 @@ def draw_interactive_map(
         lines = [f"V{PHASE_MAP.get(n, str(n))} = {v:.1f} V" for n, v in sorted(phases.items())]
         return "<br>" + "<br>".join(lines)
 
+    # Trace indices whose text labels (voltage numbers) should only render
+    # once the user has zoomed in close — populated as meter traces are added.
+    meter_text_trace_indices: List[int] = []
+
     fig = make_subplots(
         rows=2, cols=1,
         row_heights=[0.72, 0.28],
@@ -1743,6 +1747,8 @@ def draw_interactive_map(
                 textfont=dict(size=8, color="#333333"),
                 hovertext=mtxt, hovertemplate="%{hovertext}<extra></extra>",
             ), row=1, col=1)
+            if sim:
+                meter_text_trace_indices.append(len(fig.data) - 1)
 
     # ── Transformers ────────────────────────────────────────────────────
     for net, lbl, color in [
@@ -2069,7 +2075,37 @@ def draw_interactive_map(
         row=1, col=1,
     )
 
-    fig.write_html(out_path, include_plotlyjs="cdn")
+    # Voltage number labels on meters only clutter the map when zoomed out —
+    # keep them hidden until the user has zoomed in past ~15% of the initial
+    # (auto-ranged) extent. Threshold is relative rather than a fixed meter
+    # distance since networks vary widely in real-world span.
+    zoom_label_script = f"""
+    var gd = document.getElementById('{{plot_id}}');
+    var meterIdx = {json.dumps(meter_text_trace_indices)};
+    if (meterIdx.length) {{
+        var fullSpan = null;
+        var currentSpan = function() {{
+            var xr = gd._fullLayout.xaxis.range;
+            return Math.abs(xr[1] - xr[0]);
+        }};
+        var applyZoomState = function() {{
+            var span = currentSpan();
+            if (fullSpan === null) fullSpan = span;
+            var showText = span <= fullSpan * 0.15;
+            var modes = meterIdx.map(function(i) {{
+                if (!gd.data[i]._baseMode) gd.data[i]._baseMode = gd.data[i].mode;
+                return showText ? gd.data[i]._baseMode : 'markers';
+            }});
+            Plotly.restyle(gd, {{mode: modes}}, meterIdx);
+        }};
+        gd.on('plotly_afterplot', function onFirstPlot() {{
+            gd.removeListener('plotly_afterplot', onFirstPlot);
+            applyZoomState();
+        }});
+        gd.on('plotly_relayout', applyZoomState);
+    }}
+    """
+    fig.write_html(out_path, include_plotlyjs="cdn", post_script=zoom_label_script)
     print(f"[Map]   Interactive: {out_path}")
 
 

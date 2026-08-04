@@ -210,12 +210,15 @@ require([
   const switchOptLayer = new GraphicsLayer({ title: "Switch OPEN (optimal)" });
   const nodeLayer    = new GraphicsLayer({ title: "Nodes (voltage)" });
   const meterLayer   = new GraphicsLayer({ title: "Meters" });
+  // Voltage number labels only clutter the map when zoomed out — keep them
+  // hidden until the user zooms in close enough to read them individually.
+  const meterLabelLayer = new GraphicsLayer({ title: "Meter Voltage Labels", minScale: 1500 });
   const trLayer      = new GraphicsLayer({ title: "Transformers" });
 
   const map = new Map({
     basemap: "streets-navigation-vector",
     layers: [linesALayer, linesBLayer, switchLayer, tieLayer,
-             switchOptLayer, nodeLayer, meterLayer, trLayer]
+             switchOptLayer, nodeLayer, meterLayer, meterLabelLayer, trLayer]
   });
 
   const view = new MapView({
@@ -428,7 +431,7 @@ require([
           { title: 'Meter TR_A', content: 'มิเตอร์ในเครือข่าย ' + d.fac_a + vTxt }
         ));
         if (m.v !== null && m.v !== undefined) {
-          meterLayer.add(makePoint(m.lon, m.lat, textSymbol(m.v.toFixed(0) + 'V', '#374151', 8, 10)));
+          meterLabelLayer.add(makePoint(m.lon, m.lat, textSymbol(m.v.toFixed(0) + 'V', '#374151', 8, 10)));
         }
       });
 
@@ -440,7 +443,7 @@ require([
           { title: 'Meter TR_B', content: 'มิเตอร์ในเครือข่าย ' + d.fac_b + vTxt }
         ));
         if (m.v !== null && m.v !== undefined) {
-          meterLayer.add(makePoint(m.lon, m.lat, textSymbol(m.v.toFixed(0) + 'V', '#374151', 8, 10)));
+          meterLabelLayer.add(makePoint(m.lon, m.lat, textSymbol(m.v.toFixed(0) + 'V', '#374151', 8, 10)));
         }
       });
 
