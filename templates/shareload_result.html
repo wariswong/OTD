@@ -250,12 +250,12 @@ require([
     };
   }
 
-  // Voltage → color (blue=high, red=low)
+  // Voltage (V) → color (green=good, red=below the 200V feasibility limit)
   function voltageColor(v) {
     if (v === null || v === undefined) return [120, 120, 120, 200];
-    if (v >= 0.98) return [22, 163, 74, 220];
-    if (v >= 0.95) return [234, 179, 8, 220];
-    if (v >= 0.90) return [249, 115, 22, 220];
+    if (v >= 215) return [22, 163, 74, 220];
+    if (v >= 205) return [234, 179, 8, 220];
+    if (v >= 200) return [249, 115, 22, 220];
     return [239, 68, 68, 220];
   }
 
@@ -420,20 +420,28 @@ require([
         }));
       });
 
-      // === Meters TR_A (blue small diamonds) ===
+      // === Meters TR_A (colored by simulated voltage when available) ===
       d.meters_a.forEach(m => {
+        const vTxt = (m.v === null || m.v === undefined) ? '' : ('<br>V = ' + m.v.toFixed(1) + ' V');
         meterLayer.add(makePoint(m.lon, m.lat,
-          markerSymbol("diamond", [59, 130, 246, 180], 7, "white"),
-          { title: 'Meter TR_A', content: 'มิเตอร์ในเครือข่าย ' + d.fac_a }
+          markerSymbol("diamond", voltageColor(m.v), 7, "white"),
+          { title: 'Meter TR_A', content: 'มิเตอร์ในเครือข่าย ' + d.fac_a + vTxt }
         ));
+        if (m.v !== null && m.v !== undefined) {
+          meterLayer.add(makePoint(m.lon, m.lat, textSymbol(m.v.toFixed(0) + 'V', '#374151', 8, 10)));
+        }
       });
 
-      // === Meters TR_B (orange small diamonds) ===
+      // === Meters TR_B (colored by simulated voltage when available) ===
       d.meters_b.forEach(m => {
+        const vTxt = (m.v === null || m.v === undefined) ? '' : ('<br>V = ' + m.v.toFixed(1) + ' V');
         meterLayer.add(makePoint(m.lon, m.lat,
-          markerSymbol("diamond", [251, 146, 60, 180], 7, "white"),
-          { title: 'Meter TR_B', content: 'มิเตอร์ในเครือข่าย ' + d.fac_b }
+          markerSymbol("diamond", voltageColor(m.v), 7, "white"),
+          { title: 'Meter TR_B', content: 'มิเตอร์ในเครือข่าย ' + d.fac_b + vTxt }
         ));
+        if (m.v !== null && m.v !== undefined) {
+          meterLayer.add(makePoint(m.lon, m.lat, textSymbol(m.v.toFixed(0) + 'V', '#374151', 8, 10)));
+        }
       });
 
       // === Transformer A (large blue star) ===

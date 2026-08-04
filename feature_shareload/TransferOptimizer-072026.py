@@ -60,6 +60,7 @@ from Runopendss_All20032026 import (
     convert_json_to_dss_ordered,
     solve_with_opendss,
     build_bfs_order,
+    build_meter_bus_names,
 )
 import opendssdirect as odss
 
@@ -706,23 +707,37 @@ def collect_optimal_node_voltages(
             fa, _ = convert_json_to_dss_ordered(str(path_a), dss_a, snap_tol=snap_tol_a)
             solve_with_opendss(fa)
         all_dss_a = _collect_dss_bus_phase_voltages()
+        print(
+            f"[VOLTMAP] TR_A modified: converged={odss.Solution.Converged()} "
+            f"buses={odss.Circuit.NumBuses()} bus_voltages_found={len(all_dss_a)}"
+        )
         # Coordinate-based mapping: ใช้ SetBusXY ที่ DSS เขียนไว้ → ไม่ขึ้นกับ BFS ordering
+        _n_phases = _n_zero_xy = _n_far = _n_matched = 0
         for bus in odss.Circuit.AllBusNames():
             phases = all_dss_a.get(bus, all_dss_a.get(bus.lower()))
             if not phases:
                 continue
+            _n_phases += 1
             odss.Circuit.SetActiveBus(bus)
             bx, by = odss.Bus.X(), odss.Bus.Y()
             if bx == 0.0 and by == 0.0:
+                _n_zero_xy += 1
                 continue
             dist, idx = orig_a_tree.query([bx, by])
             if dist < 100.0:
+                _n_matched += 1
                 nid = orig_a_ids[idx]
                 v = min(phases.values())
                 if nid not in volt_a or v < volt_a[nid]:
                     volt_a[nid] = v
                     if nid not in phase_a or v == volt_a[nid]:
                         phase_a[nid] = phases
+            else:
+                _n_far += 1
+        print(
+            f"[VOLTMAP] TR_A match: phases_ok={_n_phases} zero_xy={_n_zero_xy} "
+            f"too_far={_n_far} matched={_n_matched} volt_a_size={len(volt_a)}"
+        )
 
         # ── TR_B modified ───────────────────────────────────────────────
         with contextlib.redirect_stdout(io.StringIO()):
@@ -730,17 +745,25 @@ def collect_optimal_node_voltages(
             solve_with_opendss(fb)
         n_orig_b = len(orig_b_ids)
         all_dss_b = _collect_dss_bus_phase_voltages()
+        print(
+            f"[VOLTMAP] TR_B modified: converged={odss.Solution.Converged()} "
+            f"buses={odss.Circuit.NumBuses()} bus_voltages_found={len(all_dss_b)}"
+        )
         # Coordinate-based mapping สำหรับ TR_B (รวม transferred subtree ที่ offset ไปแล้ว)
+        _n_phases_b = _n_zero_xy_b = _n_far_b = _n_matched_b = 0
         for bus in odss.Circuit.AllBusNames():
             phases = all_dss_b.get(bus, all_dss_b.get(bus.lower()))
             if not phases:
                 continue
+            _n_phases_b += 1
             odss.Circuit.SetActiveBus(bus)
             bx, by = odss.Bus.X(), odss.Bus.Y()
             if bx == 0.0 and by == 0.0:
+                _n_zero_xy_b += 1
                 continue
             dist, idx = orig_b_tree.query([bx, by])
             if dist < 100.0:
+                _n_matched_b += 1
                 v = min(phases.values())
                 if idx < n_orig_b:
                     nid = orig_b_ids[idx]
@@ -754,6 +777,65 @@ def collect_optimal_node_voltages(
                         volt_a[nid] = v
                         if nid not in phase_a or v == volt_a[nid]:
                             phase_a[nid] = phases
+            else:
+                _n_far_b += 1
+        print(
+            f"[VOLTMAP] TR_B match: phases_ok={_n_phases_b} zero_xy={_n_zero_xy_b} "
+            f"too_far={_n_far_b} matched={_n_matched_b} volt_b_size={len(volt_b)}"
+        )
+
+        # ── Meter voltages by bus name ─────────────────────────────────
+        # The coordinate matching above needs SetBusXY-written bus
+        # coordinates, which convert_json_to_dss_ordered never writes (see
+        # zero_xy counts) — so it can never match anything. Meters don't
+        # need it: convert_json_to_dss_ordered names each meter's bus
+        # deterministically as "M_<PEANO>" (build_meter_bus_names replicates
+        # that naming exactly), so look voltages up by that name instead.
+        # Falls back across both circuits since a transferred subtree's
+        # meters end up simulated in TR_B's circuit even though they're
+        # drawn/reported at TR_A's node ids.
+        meter_bus_a = build_meter_bus_names(raw_a["features"])
+        meter_bus_b = build_meter_bus_names(raw_b["features"])
+
+        _n_meter_a = _n_meter_a_hit = 0
+        for feat_idx, nid in net_a.load_feat_nodes.items():
+            bus_name = meter_bus_a.get(feat_idx)
+            if not bus_name:
+                continue
+            _n_meter_a += 1
+            key = bus_name.lower()
+            phases = (all_dss_a.get(key) or all_dss_a.get(bus_name)
+                      or all_dss_b.get(key) or all_dss_b.get(bus_name))
+            if not phases:
+                continue
+            _n_meter_a_hit += 1
+            v = min(phases.values())
+            if nid not in volt_a or v < volt_a[nid]:
+                volt_a[nid] = v
+                if nid not in phase_a or v == volt_a[nid]:
+                    phase_a[nid] = phases
+
+        _n_meter_b = _n_meter_b_hit = 0
+        for feat_idx, nid in net_b.load_feat_nodes.items():
+            bus_name = meter_bus_b.get(feat_idx)
+            if not bus_name:
+                continue
+            _n_meter_b += 1
+            key = bus_name.lower()
+            phases = all_dss_b.get(key) or all_dss_b.get(bus_name)
+            if not phases:
+                continue
+            _n_meter_b_hit += 1
+            v = min(phases.values())
+            if nid not in volt_b or v < volt_b[nid]:
+                volt_b[nid] = v
+                if nid not in phase_b or v == volt_b[nid]:
+                    phase_b[nid] = phases
+
+        print(
+            f"[VOLTMAP] Meter match by name: TR_A {_n_meter_a_hit}/{_n_meter_a}  "
+            f"TR_B {_n_meter_b_hit}/{_n_meter_b}"
+        )
 
     except Exception as exc:
         print(f"[WARN] voltage map collection failed: {exc}")
@@ -1620,11 +1702,11 @@ def draw_interactive_map(
                 text=txt2, hovertemplate="%{text}<extra></extra>",
             ), row=1, col=1)
 
-    # ── Meter points (always visible, gray) ────────────────────────────
-    for net, raw, lbl in [(net_a, raw_a, "TR_A"), (net_b, raw_b, "TR_B")]:
+    # ── Meter points (colored by simulated voltage when available) ─────
+    for net, raw, lbl, vd in [(net_a, raw_a, "TR_A", volt_a), (net_b, raw_b, "TR_B", volt_b)]:
         if not raw:
             continue
-        mx, my, mtxt = [], [], []
+        mx, my, mtxt, mv = [], [], [], []
         for feat_idx, nid in net.load_feat_nodes.items():
             feat = raw["features"][feat_idx]
             g = feat.get("geometry", {})
@@ -1635,14 +1717,31 @@ def draw_interactive_map(
             peameter = str(get_attr(feat, "PEAMETER", "") or "").strip()
             kw       = float(get_attr(feat, "KWP", 0.0) or 0.0)
             label    = peano or peameter or f"nid={nid}"
+            v = vd.get(nid)
             mx.append(fx); my.append(fy)
-            mtxt.append(f"<b>{lbl} Meter {label}</b><br>kW = {kw:.2f}")
+            mv.append(v)
+            mtxt.append(
+                f"<b>{lbl} Meter {label}</b><br>kW = {kw:.2f}"
+                + (f"<br>V = {v:.1f} V" if v is not None else "")
+            )
         if mx:
+            sim = any(v is not None for v in mv)
+            marker = (
+                dict(symbol="diamond",
+                     color=[v if v is not None else vmin for v in mv],
+                     colorscale=cscale, cmin=vmin, cmax=vmax,
+                     size=7, opacity=0.85, line=dict(width=0))
+                if sim else
+                dict(symbol="diamond", color="gray", size=7, opacity=0.5)
+            )
+            mlabel = [f"{v:.0f}V" if v is not None else "" for v in mv]
             fig.add_trace(go.Scatter(
-                x=mx, y=my, mode="markers",
-                marker=dict(symbol="diamond", color="gray", size=7, opacity=0.5),
-                name=f"{lbl} Meters",
-                text=mtxt, hovertemplate="%{text}<extra></extra>",
+                x=mx, y=my, mode="markers+text" if sim else "markers",
+                marker=marker,
+                name=f"{lbl} Meters" if sim else f"{lbl} Meters (no sim)",
+                text=mlabel, textposition="top center",
+                textfont=dict(size=8, color="#333333"),
+                hovertext=mtxt, hovertemplate="%{hovertext}<extra></extra>",
             ), row=1, col=1)
 
     # ── Transformers ────────────────────────────────────────────────────

@@ -221,12 +221,16 @@ def _meter_points(traces: list, prefix: str) -> list:
     for t in traces:
         if not str(t.get('name') or '').startswith(prefix):
             continue
-        for x, y in zip(t.get('x') or [], t.get('y') or []):
+        colors = (t.get('marker') or {}).get('color')
+        colors = colors if isinstance(colors, list) else None
+        for i, (x, y) in enumerate(zip(t.get('x') or [], t.get('y') or [])):
             if x is None or y is None:
                 continue
             p = _ll(x, y)
-            if p:
-                pts.append({'lon': p[0], 'lat': p[1]})
+            if not p:
+                continue
+            v = colors[i] if colors and i < len(colors) and isinstance(colors[i], (int, float)) else None
+            pts.append({'lon': p[0], 'lat': p[1], 'v': v})
     return pts
 
 
@@ -497,6 +501,13 @@ def shareload_run():
         if pair_key in _running_jobs:
             return jsonify({'status': 'running', 'key': pair_key}), 202
         _running_jobs.add(pair_key)
+
+    if force and out_dir.exists():
+        # Clear stale output before rerunning — otherwise /shareload/status
+        # and /shareload/table keep reporting the previous run's html/table
+        # as ready while this run is still in progress or has failed, and
+        # the UI never reflects the rerun's real outcome.
+        shutil.rmtree(out_dir, ignore_errors=True)
 
     def _worker():
         try:

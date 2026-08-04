@@ -45,6 +45,47 @@ def sanitize_min(name: str) -> str:
     name = re.sub(r"_+", "_", name).strip("_")
     return name if name else "UNKNOWN"
 
+def build_meter_bus_names(features: List[Dict[str, Any]]) -> Dict[int, str]:
+    """Map each load-point feature's index in `features` to the OpenDSS meter
+    bus name convert_json_to_dss_ordered() assigns it ("M_<name>").
+
+    Replicates that function's load-point filter and duplicate-name
+    suffixing exactly (convert_json_to_dss_ordered calls this same helper),
+    so other code — e.g. voltage lookups matching a meter back to its
+    simulated bus — has one source of truth instead of re-deriving the
+    naming/dedup rules and risking silent drift from what actually got
+    written to the .dss file.
+    """
+    names: Dict[int, str] = {}
+    used_load_names: set = set()
+    for i, f in enumerate(features):
+        if not has_point(f):
+            continue
+        try:
+            subtype = int(get_attr(f, "SUBTYPECODE", -999) or -999)
+        except Exception:
+            subtype = -999
+        if subtype != 1:
+            continue
+        tag = str(get_attr(f, "TAG", "") or "").upper()
+        if "XF" in tag:
+            continue
+        peano = str(get_attr(f, "PEANO", "") or "").strip()
+        peameter = str(get_attr(f, "PEAMETER", "") or "").strip()
+        if not peano and not peameter:
+            continue
+        if not peano:
+            peano = str(get_attr(f, "TAG", "") or get_attr(f, "PEAMETER", "") or "UNKNOWN").strip()
+        load_name = sanitize_min(peano)
+        if load_name in used_load_names:
+            suffix = 2
+            while f"{load_name}_{suffix}" in used_load_names:
+                suffix += 1
+            load_name = f"{load_name}_{suffix}"
+        used_load_names.add(load_name)
+        names[i] = f"M_{load_name}"
+    return names
+
 def phase_nodes_from_designation(pd: Any) -> List[int]:
     # 7-ABC, 6-AB, 5-CA, 4-A, 3-BC, 2-B, 1-C
     try:
@@ -336,22 +377,15 @@ def convert_json_to_dss_ordered(
     cfg = str(get_attr(xfmr, "CONFIGURATION", "") or "").strip().upper()
     hv_conn = "Delta" if cfg == "D" else "Wye"
 
-    # Meter meta (Load name = PEANO ตรง ๆ)
+    # Meter meta (Load name = PEANO ตรง ๆ) — bus names come from the shared
+    # build_meter_bus_names() helper (same filter/order as load_points above)
+    # so voltage-lookup code elsewhere can match a meter to its simulated bus
+    # without re-deriving this naming/dedup logic separately.
     meter_meta = []
     meter_pts = []
-    used_load_names: set = set()
-    for f in load_points:
-        peano = str(get_attr(f, "PEANO", "") or "").strip()
-        if not peano:
-            peano = str(get_attr(f, "TAG", "") or get_attr(f, "PEAMETER", "") or "UNKNOWN").strip()
-        load_name = sanitize_min(peano)
-        if load_name in used_load_names:
-            suffix = 2
-            while f"{load_name}_{suffix}" in used_load_names:
-                suffix += 1
-            load_name = f"{load_name}_{suffix}"
-        used_load_names.add(load_name)
-        meter_bus = f"M_{load_name}"
+    meter_bus_names = list(build_meter_bus_names(features).values())
+    for f, meter_bus in zip(load_points, meter_bus_names):
+        load_name = meter_bus[len("M_"):]
 
         pnode = phase_node_from_letter(get_attr(f, "PHASE"))
         if pnode is None:

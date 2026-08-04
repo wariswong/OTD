@@ -500,11 +500,12 @@ def run_once_with_facilityid(
         feats = collect_features(balance)
         sample_attrs = feats[0].get("attributes") or {} if feats else {}
         trace_result = balance.get("traceResult") or {}
+        trace_result_keys = list(trace_result.keys()) if isinstance(trace_result, dict) else trace_result
         logging.error(
             f"[GIS] {key_balance} not found: facilityid={facilityid} x={x} y={y} "
             f"success={balance.get('success')} message={balance.get('message')} "
             f"features={len(feats)} sample_attrs.PEANO={sample_attrs.get('PEANO')!r} "
-            f"traceResult_keys={list(trace_result.keys())}"
+            f"traceResult_keys={trace_result_keys}"
         )
         raise RuntimeError(f"ไม่พบ {key_balance} ใน BalanceLoad")
     table_map = query_table_join_map(keys, table_id=table_id, key_table=key_table, init_chunk_size=300)
