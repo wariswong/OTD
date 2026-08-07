@@ -1,11 +1,34 @@
-testpy/
+# --- Python ---
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+venv/
+.venv/
+
+# --- Secrets / environment ---
+.env
+.env.*
+!.env.example
+
+# --- Generated / runtime data (not source, not needed to build or deploy) ---
 uploads/
 output/
-pea_no_projects/
-db/
-uploads/
-venv/
-__pycache__/
 logs/
-.env
-#app.py
+testpy/
+pea_no_projects/
+feature_shareload/FEASIBLE/
+feature_shareload/peano_list.txt
+peano_list.txt
+*.log
+
+# --- Dev-only scratch, not part of the deployed app ---
+scratch/
+notUse/
+.claude/
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

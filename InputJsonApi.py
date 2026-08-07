@@ -9,7 +9,6 @@ import re
 import logging
 import urllib.request
 import urllib.parse
-import tkinter as tk
 from typing import Optional
 # from tkinter import ttk, messagebox
 # from datetime import datetime
