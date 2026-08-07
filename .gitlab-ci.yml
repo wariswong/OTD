@@ -1,0 +1,59 @@
+stages:
+  - build
+  - deploy
+
+variables:
+  IMAGE_SHA: "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA"
+  IMAGE_LATEST: "$CI_REGISTRY_IMAGE:latest"
+
+build:
+  stage: build
+  image: docker:27
+  services:
+    - docker:27-dind
+  before_script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+  script:
+    - docker build -t "$IMAGE_SHA" -t "$IMAGE_LATEST" .
+    - docker push "$IMAGE_SHA"
+    - docker push "$IMAGE_LATEST"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+# TEMPLATE — adjust to how the target server actually runs containers
+# (this assumes SSH access to a host that already has Docker installed).
+# Requires these CI/CD variables set under Settings > CI/CD > Variables:
+#   DEPLOY_SSH_PRIVATE_KEY  - private key for a user allowed to SSH in and run docker
+#   DEPLOY_HOST             - server hostname/IP
+#   DEPLOY_USER             - SSH user on that server
+# Real secrets (SECRET_KEY, DB_*, SSO_*) are never baked into the image —
+# they live only in an .env file kept on the server itself (outside git),
+# referenced below via --env-file.
+deploy:
+  stage: deploy
+  image: alpine:3.20
+  needs: ["build"]
+  before_script:
+    - apk add --no-cache openssh-client
+    - eval $(ssh-agent -s)
+    - echo "$DEPLOY_SSH_PRIVATE_KEY" | tr -d '\r' | ssh-add -
+    - mkdir -p ~/.ssh && chmod 700 ~/.ssh
+    - ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+  script:
+    - >
+      ssh "$DEPLOY_USER@$DEPLOY_HOST"
+      "docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY &&
+      docker pull $IMAGE_LATEST &&
+      docker stop otd-app || true &&
+      docker rm otd-app || true &&
+      docker run -d --name otd-app --restart unless-stopped
+      --env-file /opt/otd/.env
+      -p 5000:5000
+      -v /opt/otd/data/uploads:/app/uploads
+      -v /opt/otd/data/output:/app/output
+      -v /opt/otd/data/logs:/app/logs
+      -v /opt/otd/data/feasible:/app/feature_shareload/FEASIBLE
+      $IMAGE_LATEST"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+  when: manual
