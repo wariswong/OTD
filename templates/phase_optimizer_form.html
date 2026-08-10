@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% block title %}วิเคราะห์ Phase Optimizer | GIS OTD{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <div class="mb-8">
+        <a href="{{ url_for('phase_optimizer.phase_optimizer_list') }}" class="inline-flex items-center text-gray-500 hover:text-primary transition-colors mb-4">
+            <i class="bi bi-arrow-left mr-2"></i>
+            <span>กลับไปยังหน้ารายการ</span>
+        </a>
+        <h1 class="text-3xl font-bold text-gray-800">วิเคราะห์ Phase Optimizer</h1>
+        <p class="text-gray-500 mt-1">ระบุหมายเลข PEA ของหม้อแปลงเพื่อวิเคราะห์และแนะนำการย้ายเฟส/เพิ่มขนาดสาย/เพิ่มเฟส</p>
+    </div>
+
+    <div class="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+        <div class="p-8">
+            <form id="phaseOptForm" class="space-y-6">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2 flex justify-between">
+                        <span>หมายเลข PEA Number ของหม้อแปลง <span class="text-red-500">*</span></span>
+                        <span class="text-xs text-primary bg-primary-light/30 px-2 py-0.5 rounded-full">Format: XX-XXXXXX</span>
+                    </label>
+                    <input type="text" name="facility_id" required
+                           class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all outline-none text-xl tracking-wider font-mono"
+                           placeholder="62-003920">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">เขตพื้นที่ (Region/Area)</label>
+                    <select name="region" id="regionSelector" required
+                            class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all outline-none">
+                        <option value="" disabled selected>กรุณาเลือกเขตพื้นที่</option>
+                        {% for r in regions %}
+                        <option value="{{ r }}">{{ r }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">รายละเอียดงาน</label>
+                    <textarea name="project_detail" rows="4"
+                              class="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all outline-none"
+                              placeholder="ระบุรายละเอียดเพิ่มเติม เช่น พื้นที่งาน หรือ ชื่องาน"></textarea>
+                </div>
+
+                <div class="p-6 bg-amber-50 rounded-2xl border border-amber-100">
+                    <p class="text-sm text-amber-800 flex items-start">
+                        <i class="bi bi-exclamation-triangle-fill mr-3 text-amber-500 mt-0.5"></i>
+                        <span>
+                            <strong>หมายเหตุ:</strong> ระบบจะใช้เวลาสักครู่ในการดึงข้อมูลจาก GIS Server ของ กฟภ. รัน OpenDSS จำลองระบบ และวิเคราะห์แนวทางแก้ไข กรุณาอย่าปิดหน้าต่างนี้จนกว่าจะดำเนินการเสร็จสิ้น
+                        </span>
+                    </p>
+                </div>
+
+                <div class="pt-6 border-t border-gray-100 flex justify-end space-x-4">
+                    <button type="submit" class="inline-flex items-center space-x-2 bg-primary hover:bg-primary-dark text-white px-8 py-3 rounded-xl shadow-lg transition-all duration-200 transform hover:-translate-y-1">
+                        <i class="bi bi-lightning-charge-fill"></i>
+                        <span>วิเคราะห์</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const form = document.getElementById('phaseOptForm');
+    const regionSelector = document.getElementById('regionSelector');
+
+    // Auto-select region based on hr_business_area
+    document.addEventListener('DOMContentLoaded', () => {
+        const businessArea = "{{ user.hr_business_area if user else '' }}";
+        if (businessArea && businessArea.length > 0) {
+            const firstChar = businessArea.charAt(0).toUpperCase();
+            const mapping = {
+                'A': 'N1', 'B': 'N2', 'C': 'N3',
+                'D': 'NE1', 'E': 'NE2', 'F': 'NE3',
+                'G': 'C1', 'H': 'C2', 'I': 'C3',
+                'J': 'S1', 'K': 'S2', 'L': 'S3',
+                'Z': 'Z'
+            };
+            if (mapping[firstChar]) {
+                regionSelector.value = mapping[firstChar];
+            }
+        }
+    });
+
+    form.addEventListener('submit', function (e) {
+        e.preventDefault();
+
+        Swal.fire({
+            title: 'ยืนยันการวิเคราะห์?',
+            text: 'ระบบจะส่งคำขอไปยัง GIS Server เพื่อดึงข้อมูลหม้อแปลงและเริ่มวิเคราะห์',
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#7e468f',
+            cancelButtonColor: '#6b7280',
+            confirmButtonText: 'ตกลง',
+            cancelButtonText: 'ยกเลิก',
+            customClass: { popup: 'rounded-2xl' }
+        }).then(result => {
+            if (!result.isConfirmed) return;
+
+            const formData = new FormData(form);
+
+            Swal.fire({
+                title: 'กำลังวิเคราะห์...',
+                html: '<div class="mt-2 text-sm text-gray-500 font-sans">กำลังดึงข้อมูลและรันจำลองระบบ กรุณารอสักครู่...</div>',
+                didOpen: () => { Swal.showLoading() },
+                allowOutsideClick: false,
+                customClass: { popup: 'rounded-2xl' }
+            });
+
+            fetch('{{ url_for("phase_optimizer.phase_optimizer_create") }}', {
+                method: 'POST',
+                body: formData
+            })
+            .then(async res => {
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'เกิดข้อผิดพลาดจากระบบ');
+                return data;
+            })
+            .then(data => {
+                Swal.fire({
+                    title: 'สำเร็จ',
+                    text: data.message || 'วิเคราะห์สำเร็จ',
+                    icon: 'success',
+                    confirmButtonColor: '#7e468f'
+                }).then(() => {
+                    window.location.href = "{{ url_for('phase_optimizer.phase_optimizer_list') }}";
+                });
+            })
+            .catch(err => {
+                Swal.fire({
+                    title: "ไม่สามารถวิเคราะห์ได้",
+                    html: '<div class="text-left text-sm font-sans">' +
+                          '<p class="mb-2"><strong>สาเหตุที่เป็นไปได้:</strong></p>' +
+                          '<ul class="list-disc ml-4 space-y-1">' +
+                          '<li>ไม่พบหมายเลข PEA number นี้ในระบบ หรือเลือกเขตไม่ตรง</li>' +
+                          '<li>เครือข่ายภายใน กฟภ. (VPN/WAN) ขัดข้อง</li>' +
+                          '<li>GIS Server ไม่ตอบสนอง หรือ Baseline จำลองไม่ converge</li>' +
+                          '</ul>' +
+                          '<p class="mt-2 text-xs text-gray-400">' + (err.message || '') + '</p>' +
+                          '</div>',
+                    icon: "error",
+                    confirmButtonColor: '#7e468f'
+                });
+            });
+        });
+    });
+</script>
+{% endblock %}

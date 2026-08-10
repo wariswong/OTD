@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+
+{% block title %}Phase Optimizer | GIS OTD{% endblock %}
+
+{% block content %}
+<div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+    <div>
+        <h1 class="text-3xl font-bold text-gray-800">Phase Optimizer</h1>
+        <p class="text-gray-500 mt-1">วิเคราะห์และแนะนำการย้ายเฟส / เพิ่มขนาดสาย / เพิ่มเฟส รายหม้อแปลง</p>
+    </div>
+    <div class="flex items-center space-x-3">
+        <a href="{{ url_for('phase_optimizer.phase_optimizer_create_page') }}"
+           class="inline-flex items-center space-x-2 bg-primary hover:bg-primary-dark text-white px-6 py-3 rounded-xl shadow-md transition-all duration-200 transform hover:-translate-y-1">
+            <i class="bi bi-plus-circle-fill"></i>
+            <span>วิเคราะห์หม้อแปลงใหม่</span>
+        </a>
+    </div>
+</div>
+
+<div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+    <div class="overflow-x-auto">
+        <table class="w-full text-left">
+            <thead>
+                <tr class="bg-gray-50 text-gray-600 text-sm font-semibold uppercase tracking-wider">
+                    <th class="px-6 py-4">ลำดับ</th>
+                    <th class="px-6 py-4">FACILITYID</th>
+                    <th class="px-6 py-4">เขต</th>
+                    <th class="px-6 py-4">รายละเอียด</th>
+                    <th class="px-6 py-4">วันที่สร้าง</th>
+                    <th class="px-6 py-4 text-center">สถานะ</th>
+                    <th class="px-6 py-4 text-center">จัดการ</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+                {% for project in projects %}
+                <tr class="hover:bg-primary-light/10 transition-colors group">
+                    <td class="px-6 py-4 text-sm text-gray-500">{{ loop.index }}</td>
+                    <td class="px-6 py-4">
+                        <span class="font-mono font-semibold text-primary">{{ project.project_name }}</span>
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-500">{{ project.region or '-' }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">
+                        <div class="max-w-xs truncate" title="{{ project.project_detail }}">
+                            {{ project.project_detail if project.project_detail else '-' }}
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-500">
+                        {{ project.created_at.strftime('%Y-%m-%d %H:%M') if project.created_at else '-' }}
+                    </td>
+                    <td class="px-6 py-4 text-center">
+                        {% if project.has_output %}
+                        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">
+                            <span class="w-1.5 h-1.5 mr-1.5 rounded-full bg-green-500"></span>
+                            มีผลลัพธ์แล้ว
+                        </span>
+                        {% else %}
+                        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-500">
+                            <span class="w-1.5 h-1.5 mr-1.5 rounded-full bg-gray-400"></span>
+                            ยังไม่มีผลลัพธ์
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 text-center">
+                        <div class="flex items-center justify-center space-x-1">
+                            <button onclick="confirmDelete({{ project.id }})"
+                                    class="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors" title="ลบโปรเจค">
+                                <i class="bi bi-trash text-lg"></i>
+                            </button>
+
+                            <button onclick="runProject({{ project.id }})"
+                                    class="p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors" title="วิเคราะห์ใหม่">
+                                <i class="bi bi-play-circle-fill text-xl"></i>
+                            </button>
+
+                            {% if project.has_output %}
+                            <a href="{{ url_for('phase_optimizer.phase_optimizer_map_view', project_id=project.id) }}"
+                               class="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors" title="ดูแผนที่ผลลัพธ์">
+                                <i class="bi bi-map-fill text-lg"></i>
+                            </a>
+                            <a href="{{ url_for('phase_optimizer.phase_optimizer_download', project_id=project.id) }}"
+                               class="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="ดาวน์โหลดไฟล์ผลลัพธ์">
+                                <i class="bi bi-download text-lg"></i>
+                            </a>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not projects %}
+                <tr>
+                    <td colspan="7" class="px-6 py-16 text-center">
+                        <div class="flex flex-col items-center space-y-3 text-gray-400">
+                            <i class="bi bi-folder2-open text-5xl"></i>
+                            <p class="text-lg font-medium">ยังไม่มีการวิเคราะห์ในขณะนี้</p>
+                            <a href="{{ url_for('phase_optimizer.phase_optimizer_create_page') }}" class="text-sm text-primary hover:underline">
+                                + วิเคราะห์หม้อแปลงใหม่
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function confirmDelete(projectId) {
+        Swal.fire({
+            title: 'แน่ใจหรือไม่?',
+            text: "การลบนี้จะไม่สามารถย้อนกลับได้!",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#7e468f',
+            cancelButtonColor: '#6b7280',
+            confirmButtonText: 'ใช่, ลบเลย!',
+            cancelButtonText: 'ยกเลิก',
+            customClass: { popup: 'rounded-2xl' }
+        }).then((result) => {
+            if (result.isConfirmed) {
+                fetch(`/phase_optimizer/delete/${projectId}`, { method: 'POST' })
+                    .then(response => {
+                        if (response.ok) {
+                            Swal.fire({
+                                title: 'ลบแล้ว!',
+                                text: 'โปรเจคถูกลบเรียบร้อย',
+                                icon: 'success',
+                                confirmButtonColor: '#7e468f'
+                            }).then(() => location.reload());
+                        } else {
+                            Swal.fire('ผิดพลาด', 'ไม่สามารถลบโปรเจคได้', 'error');
+                        }
+                    });
+            }
+        });
+    }
+
+    function runProject(projectId) {
+        Swal.fire({
+            title: 'กำลังวิเคราะห์...',
+            html: '<div class="mt-2 text-sm text-gray-500 font-sans">กำลังรันจำลองระบบใหม่ กรุณารอสักครู่...</div>',
+            didOpen: () => { Swal.showLoading() },
+            allowOutsideClick: false,
+            customClass: { popup: 'rounded-2xl' }
+        });
+
+        fetch(`/phase_optimizer/run/${projectId}`, { method: 'POST' })
+        .then(async res => {
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'เกิดข้อผิดพลาดจากระบบ');
+            return data;
+        })
+        .then(data => {
+            Swal.fire({
+                title: 'สำเร็จ',
+                text: data.message,
+                icon: 'success',
+                confirmButtonColor: '#7e468f'
+            }).then(() => location.reload());
+        })
+        .catch(error => {
+            Swal.fire('ผิดพลาด', String(error.message || error), 'error');
+        });
+    }
+</script>
+{% endblock %}

@@ -19,11 +19,13 @@ def create_app(config_class=Config):
     from .routes.projects import projects_bp
     from .routes.stats import stats_bp
     from .routes.shareload import shareload_bp
+    from .routes.phase_optimizer import phase_optimizer_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(projects_bp)
     app.register_blueprint(stats_bp)
     app.register_blueprint(shareload_bp)
+    app.register_blueprint(phase_optimizer_bp)
 
     @app.context_processor
     def utility_processor():

@@ -520,20 +520,29 @@ def _rephase_feature(feat: dict, new_pd: int) -> dict:
 
 
 def query_transformer_loading(rated_kva: float) -> float:
-    """Return loading % = actual secondary kVA / rated_kva * 100 from active circuit."""
+    """Return loading % = actual secondary kVA / rated_kva * 100 from active circuit.
+
+    Single/two-phase transformers get split into multiple DSS Transformer
+    objects (one per phase) by convert_json_to_dss_ordered — sum across all
+    of them, not just the first, or split-phase loading comes out silently
+    under-reported. Mirrors the aggregation in Runopendss's
+    report_transformer_pattern.
+    """
     try:
         tx_names = odss.Transformers.AllNames()
         if not tx_names:
             return 0.0
-        odss.Circuit.SetActiveElement(f"Transformer.{tx_names[0]}")
-        pq_flat = odss.CktElement.Powers()           # [P0,Q0, P1,Q1, ...]
-        pq = list(zip(pq_flat[0::2], pq_flat[1::2]))
-        # Secondary terminal always has 4 conductors (phases 1,2,3 + neutral via .1.2.3.0).
-        # Primary has 3 (delta) or 4 (wye) conductors depending on CONFIGURATION.
-        # Use len(pq)-4 as offset so we always hit secondary phases 1,2,3.
-        offset = len(pq) - 4
-        P2 = sum(pq[offset + i][0] for i in range(min(3, len(pq) - offset)))
-        Q2 = sum(pq[offset + i][1] for i in range(min(3, len(pq) - offset)))
+        P2 = Q2 = 0.0
+        for name in tx_names:
+            odss.Circuit.SetActiveElement(f"Transformer.{name}")
+            pq_flat = odss.CktElement.Powers()           # [P0,Q0, P1,Q1, ...]
+            pq = list(zip(pq_flat[0::2], pq_flat[1::2]))
+            # Secondary terminal always has 4 conductors (phases 1,2,3 + neutral via .1.2.3.0).
+            # Primary has 3 (delta) or 4 (wye) conductors depending on CONFIGURATION.
+            # Use len(pq)-4 as offset so we always hit secondary phases 1,2,3.
+            offset = len(pq) - 4
+            P2 += sum(pq[offset + i][0] for i in range(min(3, len(pq) - offset)))
+            Q2 += sum(pq[offset + i][1] for i in range(min(3, len(pq) - offset)))
         actual_kva = math.sqrt(P2 ** 2 + Q2 ** 2)
         return actual_kva / rated_kva * 100.0
     except Exception:

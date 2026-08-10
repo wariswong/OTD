@@ -1,0 +1,302 @@
+{% extends "base.html" %}
+
+{% block title %}ผลวิเคราะห์ {{ project.project_name }} | Phase Optimizer | GIS OTD{% endblock %}
+
+{% block container_class %}max-w-[98%] mx-auto px-2 md:px-4{% endblock %}
+
+{% block head %}
+  <link rel="stylesheet" href="https://js.arcgis.com/4.29/esri/themes/light/main.css">
+  <script src="https://js.arcgis.com/4.29/"></script>
+  <style>
+    #viewDiv { height: 70vh; min-height: 460px; width: 100%; border-radius: 1.5rem; }
+    .esri-ui .esri-component { box-shadow: none !important; border-radius: 12px !important; overflow: hidden; }
+    .esri-legend { border-radius: 16px !important; margin: 10px !important; border: 1px solid rgba(0,0,0,0.05) !important; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    .animate-fade-in { animation: fadeIn 0.35s ease both; }
+    @media (prefers-reduced-motion: reduce) {
+      .animate-fade-in, .animate-pulse, .animate-spin { animation: none !important; }
+      * { transition-duration: 0.01ms !important; }
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+
+{# ===== TOP TOOLBAR ===== #}
+<div class="mb-4">
+  <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+    <div class="flex items-center gap-3">
+      <a href="{{ url_for('phase_optimizer.phase_optimizer_list') }}"
+         class="flex items-center justify-center w-11 h-11 rounded-xl bg-white shadow-sm border border-gray-100 text-gray-500 hover:text-primary transition-all shrink-0">
+        <i class="bi bi-arrow-left text-sm"></i>
+      </a>
+      <div>
+        <h1 class="text-lg font-black text-gray-800 leading-tight">
+          <span class="font-mono text-primary">{{ project.project_name }}</span>
+          <span class="ml-2 text-sm font-bold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-lg">{{ project.region or '-' }}</span>
+        </h1>
+      </div>
+    </div>
+
+    <div class="flex flex-wrap items-center gap-2">
+      {% if result.improved %}
+      <div class="inline-flex items-center gap-1.5 bg-green-100 text-green-700 rounded-xl px-3 py-2 text-xs font-black uppercase tracking-wide">
+        <i class="bi bi-check-circle-fill"></i> แก้ไขสำเร็จ
+      </div>
+      {% elif result.final_has_problem %}
+      <div class="inline-flex items-center gap-1.5 bg-amber-100 text-amber-700 rounded-xl px-3 py-2 text-xs font-black uppercase tracking-wide">
+        <i class="bi bi-exclamation-triangle-fill"></i> ยังพบปัญหาหลังปรับปรุง
+      </div>
+      {% else %}
+      <div class="inline-flex items-center gap-1.5 bg-gray-100 text-gray-500 rounded-xl px-3 py-2 text-xs font-black uppercase tracking-wide">
+        <i class="bi bi-info-circle-fill"></i> ระบบปกติตั้งแต่แรก
+      </div>
+      {% endif %}
+      <button id="rerunBtn"
+              class="inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold rounded-xl shadow-md shadow-amber-500/20 transition-all active:scale-95">
+        <i class="bi bi-arrow-repeat"></i><span>วิเคราะห์ใหม่</span>
+      </button>
+      <a href="{{ url_for('phase_optimizer.phase_optimizer_download', project_id=project_id) }}"
+         class="inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] bg-primary hover:bg-primary-dark text-white text-sm font-bold rounded-xl shadow-md shadow-primary/20 transition-all active:scale-95">
+        <i class="bi bi-download"></i>ดาวน์โหลด
+      </a>
+    </div>
+  </div>
+</div>
+
+{# ===== STEPS APPLIED ===== #}
+<div class="flex flex-wrap items-center gap-2 mb-4">
+  <span class="text-xs font-black text-gray-400 uppercase tracking-widest">ขั้นตอนที่ใช้:</span>
+  {% set steps = result.steps_applied or [] %}
+  <span class="px-3 py-1.5 rounded-lg text-xs font-bold {{ 'bg-cyan-100 text-cyan-700' if 'phase_transfer' in steps else 'bg-gray-100 text-gray-400' }}">
+    <i class="bi bi-arrow-left-right mr-1"></i>ย้ายเฟสมิเตอร์{% if 'phase_transfer' in steps %} ({{ result.phase_transfer.n_moves }} จุด){% endif %}
+  </span>
+  <span class="px-3 py-1.5 rounded-lg text-xs font-bold {{ 'bg-indigo-100 text-indigo-700' if 'conductor_upgrade' in steps else 'bg-gray-100 text-gray-400' }}">
+    <i class="bi bi-lightning-charge mr-1"></i>เพิ่มขนาดสาย{% if 'conductor_upgrade' in steps %} ({{ result.conductor_upgrade.from_size }}→{{ result.conductor_upgrade.to_size }}mm²){% endif %}
+  </span>
+  <span class="px-3 py-1.5 rounded-lg text-xs font-bold {{ 'bg-pink-100 text-pink-700' if 'phase_addition' in steps else 'bg-gray-100 text-gray-400' }}">
+    <i class="bi bi-plus-circle mr-1"></i>เพิ่มเฟสสาย{% if 'phase_addition' in steps %} ({{ result.phase_addition.n_edges_upgraded }} ช่วง){% endif %}
+  </span>
+  {% if not steps %}
+  <span class="px-3 py-1.5 rounded-lg text-xs font-bold bg-green-100 text-green-700">ไม่จำเป็นต้องปรับปรุง</span>
+  {% endif %}
+</div>
+
+{# ===== MAP (FULL WIDTH) ===== #}
+<div class="relative mb-6">
+  <div class="bg-white rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100 overflow-hidden relative">
+    <div id="mapLoading" class="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-gray-50" style="height: 70vh; min-height: 460px;">
+      <div class="w-10 h-10 border-4 border-primary/20 border-t-primary rounded-full animate-spin" role="status" aria-label="กำลังโหลดแผนที่"></div>
+      <p class="text-sm font-bold text-gray-400">กำลังโหลดแผนที่...</p>
+    </div>
+    <div id="viewDiv"></div>
+  </div>
+</div>
+
+{# ===== BEFORE / AFTER COMPARISON ===== #}
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 animate-fade-in">
+  <div class="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-hidden">
+    <div class="bg-gray-50 py-4 px-8 border-b border-gray-100">
+      <span class="text-xs font-black text-gray-500 uppercase tracking-widest"><i class="bi bi-clock-history mr-2"></i>Baseline (ก่อนปรับปรุง)</span>
+    </div>
+    <div class="p-8 space-y-4">
+      {% set b = result.baseline %}
+      <div class="flex justify-between items-center">
+        <span class="text-sm text-gray-500">แรงดันต่ำสุด</span>
+        <span class="text-2xl font-black {{ 'text-red-500' if b and b.min_v < result.min_voltage_v else 'text-gray-800' }}">{{ b.min_v if b else '—' }} <small class="text-sm font-normal">V</small></span>
+      </div>
+      <div class="flex justify-between items-center">
+        <span class="text-sm text-gray-500">โหลดหม้อแปลง</span>
+        <span class="text-2xl font-black text-gray-800">{{ b.tr_loading_pct if b else '—' }}<small class="text-sm font-normal">%</small></span>
+      </div>
+      <div class="flex justify-between items-center">
+        <span class="text-sm text-gray-500">Phase Imbalance</span>
+        <span class="text-2xl font-black {{ 'text-red-500' if b and b.phase_imbalance_pct > result.max_imbalance_pct else 'text-gray-800' }}">{{ b.phase_imbalance_pct if b else '—' }}<small class="text-sm font-normal">%</small></span>
+      </div>
+      <div class="flex justify-between items-center">
+        <span class="text-sm text-gray-500">จุดแรงดันตก (&lt; {{ result.min_voltage_v }}V)</span>
+        <span class="text-2xl font-black text-gray-800">{{ b.low_v_count if b else '—' }} <small class="text-sm font-normal">จุด</small></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="bg-white rounded-[2rem] shadow-2xl shadow-primary/10 border-2 border-primary/20 overflow-hidden">
+    <div class="bg-primary/5 py-4 px-8 border-b border-primary/10">
+      <span class="text-xs font-black text-primary uppercase tracking-widest"><i class="bi bi-stars mr-2"></i>Final (หลังปรับปรุง)</span>
+    </div>
+    <div class="p-8 space-y-4">
+      {% set f = result.final %}
+      <div class="flex justify-between items-center">
+        <span class="text-sm text-gray-500">แรงดันต่ำสุด</span>
+        <span class="text-2xl font-black {{ 'text-green-500' if f and f.min_v >= result.min_voltage_v else 'text-red-500' }}">{{ f.min_v if f else '—' }} <small class="text-sm font-normal">V</small></span>
+      </div>
+      <div class="flex justify-between items-center">
+        <span class="text-sm text-gray-500">โหลดหม้อแปลง</span>
+        <span class="text-2xl font-black text-gray-800">{{ f.tr_loading_pct if f else '—' }}<small class="text-sm font-normal">%</small></span>
+      </div>
+      <div class="flex justify-between items-center">
+        <span class="text-sm text-gray-500">Phase Imbalance</span>
+        <span class="text-2xl font-black {{ 'text-green-500' if f and f.phase_imbalance_pct <= result.max_imbalance_pct else 'text-red-500' }}">{{ f.phase_imbalance_pct if f else '—' }}<small class="text-sm font-normal">%</small></span>
+      </div>
+      <div class="flex justify-between items-center">
+        <span class="text-sm text-gray-500">จุดแรงดันตก (&lt; {{ result.min_voltage_v }}V)</span>
+        <span class="text-2xl font-black {{ 'text-green-500' if f and f.low_v_count == 0 else 'text-gray-800' }}">{{ f.low_v_count if f else '—' }} <small class="text-sm font-normal">จุด</small></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ===== FEATURE INFO PANEL ===== #}
+<div class="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-hidden mb-6">
+  <div class="px-8 py-5 border-b border-gray-100 bg-gray-50/50">
+    <h3 class="font-black text-gray-700 uppercase tracking-widest text-sm"><i class="bi bi-geo-alt mr-2"></i>จุดสำคัญบนแผนที่</h3>
+  </div>
+  <div id="featureGroupsInfo" class="p-6 text-sm max-h-80 overflow-y-auto">
+    <p class="text-gray-300">กำลังโหลด...</p>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const projectId = {{ project_id }};
+
+  let _mapView = null;
+  function panToFeature(lon, lat) {
+    if (_mapView) _mapView.goTo({ center: [lon, lat], zoom: 17 });
+  }
+
+  require([
+    "esri/Map", "esri/views/MapView", "esri/layers/GeoJSONLayer", "esri/widgets/Legend"
+  ], function(Map, MapView, GeoJSONLayer, Legend) {
+
+    const map = new Map({ basemap: "streets-navigation-vector" });
+    const view = new MapView({
+      container: "viewDiv", map,
+      center: [102.5, 16.0], zoom: 7,
+      ui: { components: ["zoom", "compass"] }
+    });
+    _mapView = view;
+    view.when(() => {
+      const loadingEl = document.getElementById("mapLoading");
+      if (loadingEl) loadingEl.remove();
+    });
+
+    const lvLineLayer = new GeoJSONLayer({
+      url: `/phase_optimizer/output/${projectId}/lv_lines.geojson`,
+      title: "ระบบจำหน่าย 400/230 V",
+      renderer: { type: "simple", symbol: { type: "simple-line", color: "#5fd918", width: 2.5 } }
+    });
+    const meterLayer = new GeoJSONLayer({
+      url: `/phase_optimizer/output/${projectId}/meter_groups.geojson`,
+      title: "มิเตอร์ (เฟส)",
+      renderer: {
+        type: "unique-value", field: "phase_after",
+        uniqueValueInfos: [
+          { value: "A", symbol: { type: "simple-marker", color: "#ef4444", size: 7, outline: { color: "white", width: 1 } }, label: "เฟส A" },
+          { value: "B", symbol: { type: "simple-marker", color: "#eab308", size: 7, outline: { color: "white", width: 1 } }, label: "เฟส B" },
+          { value: "C", symbol: { type: "simple-marker", color: "#3b82f6", size: 7, outline: { color: "white", width: 1 } }, label: "เฟส C" }
+        ]
+      },
+      popupTemplate: {
+        title: "มิเตอร์ {peano}",
+        content: "เฟสก่อน: {phase_before} → เฟสหลัง: {phase_after}<br>โหลด: {kw} kW"
+      }
+    });
+    const featureGroups = new GeoJSONLayer({
+      url: `/phase_optimizer/output/${projectId}/feature_groups.geojson`,
+      title: "จุดสำคัญ",
+      renderer: {
+        type: "unique-value", field: "group",
+        uniqueValueInfos: [
+          { value: "transformer",     label: "หม้อแปลง", symbol: { type: "simple-marker", style: "square", color: "#1f2937", size: 14, outline: { color: "white", width: 2 } } },
+          { value: "low_v_fixed",     label: "แก้ไขแรงดันตกแล้ว", symbol: { type: "simple-marker", style: "diamond", color: "#22c55e", size: 12, outline: { color: "white", width: 1.5 } } },
+          { value: "low_v_remaining", label: "แรงดันตกยังคงอยู่", symbol: { type: "simple-marker", style: "diamond", color: "#ef4444", size: 12, outline: { color: "white", width: 1.5 } } },
+          { value: "conductor_upgrade", label: "จุดเพิ่มขนาดสาย", symbol: { type: "simple-marker", style: "triangle", color: "#6366f1", size: 14, outline: { color: "white", width: 1.5 } } },
+          { value: "phase_addition",  label: "จุดเพิ่มเฟสสาย", symbol: { type: "simple-marker", style: "triangle", color: "#ec4899", size: 14, outline: { color: "white", width: 1.5 } } }
+        ]
+      },
+      labelingInfo: [{
+        labelExpressionInfo: { expression: "$feature.name" },
+        labelPlacement: "above-right",
+        symbol: { type: "text", color: "#111827", font: { size: 10, family: "Arial", weight: "bold" }, haloColor: "white", haloSize: 1.5 }
+      }],
+      popupTemplate: { title: "{name}", content: "กลุ่ม: {group}" }
+    });
+
+    map.addMany([lvLineLayer, meterLayer, featureGroups]);
+    view.ui.add(new Legend({ view, style: "classic" }), "top-right");
+
+    const fgStyles = {
+      transformer:       { color: "#1f2937", icon: "bi-square-fill",   label: "หม้อแปลง" },
+      low_v_fixed:       { color: "#22c55e", icon: "bi-check-circle-fill", label: "แก้ไขแรงดันตกแล้ว" },
+      low_v_remaining:   { color: "#ef4444", icon: "bi-exclamation-triangle-fill", label: "แรงดันตกยังคงอยู่" },
+      conductor_upgrade: { color: "#6366f1", icon: "bi-lightning-charge-fill", label: "จุดเพิ่มขนาดสาย" },
+      phase_addition:    { color: "#ec4899", icon: "bi-plus-circle-fill", label: "จุดเพิ่มเฟสสาย" }
+    };
+
+    featureGroups.when(() => {
+      const q = featureGroups.createQuery();
+      q.where = "group = 'transformer'"; q.returnGeometry = true;
+      featureGroups.queryFeatures(q).then(r => {
+        if (r.features.length > 0) view.goTo({ target: r.features[0].geometry, zoom: 16 });
+      });
+
+      const qAll = featureGroups.createQuery();
+      qAll.returnGeometry = true;
+      qAll.outFields = ["group", "name"];
+      return featureGroups.queryFeatures(qAll).then(result => {
+        const el = document.getElementById("featureGroupsInfo");
+        if (!el) return;
+        if (!result.features.length) { el.innerHTML = '<p class="text-gray-300">ไม่มีข้อมูล</p>'; return; }
+
+        let html = "";
+        result.features.forEach(f => {
+          const cfg = fgStyles[f.attributes.group] || { color: "#6b7280", icon: "bi-circle-fill", label: f.attributes.group };
+          const geom = f.geometry;
+          const lat = geom ? geom.latitude.toFixed(5) : "—";
+          const lon = geom ? geom.longitude.toFixed(5) : "—";
+          html += `
+            <div class="flex items-start gap-2 py-1.5 border-b border-gray-50 last:border-0 cursor-pointer hover:bg-gray-50 rounded-lg px-1 transition-colors"
+                 onclick="panToFeature(${geom ? geom.longitude : 0}, ${geom ? geom.latitude : 0})">
+              <i class="bi ${cfg.icon} mt-0.5 shrink-0" style="color:${cfg.color}"></i>
+              <div class="min-w-0">
+                <p class="font-black text-gray-700 truncate">${f.attributes.name || cfg.label}</p>
+                <p class="text-gray-300 text-[10px]">${lat}, ${lon}</p>
+              </div>
+            </div>`;
+        });
+        el.innerHTML = html;
+      });
+    });
+  });
+
+  document.getElementById('rerunBtn').addEventListener('click', function() {
+    Swal.fire({
+      title: 'วิเคราะห์ใหม่?',
+      text: 'ผลลัพธ์เดิมจะถูกแทนที่ด้วยผลลัพธ์ใหม่',
+      icon: 'question', showCancelButton: true,
+      confirmButtonText: 'วิเคราะห์ใหม่', cancelButtonText: 'ยกเลิก',
+      confirmButtonColor: '#7e468f',
+    }).then(result => {
+      if (!result.isConfirmed) return;
+      Swal.fire({
+        title: 'กำลังวิเคราะห์...',
+        didOpen: () => { Swal.showLoading() },
+        allowOutsideClick: false,
+      });
+      fetch('/phase_optimizer/run/' + projectId, { method: 'POST' })
+        .then(async res => {
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'เกิดข้อผิดพลาด');
+          return data;
+        })
+        .then(() => location.reload())
+        .catch(err => {
+          Swal.fire({ icon: 'error', title: 'เกิดข้อผิดพลาด', text: String(err.message || err), confirmButtonColor: '#7e468f' });
+        });
+    });
+  });
+</script>
+{% endblock %}

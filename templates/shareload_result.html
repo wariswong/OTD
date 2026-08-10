@@ -26,12 +26,6 @@
       <i class="bi bi-arrow-left text-sm"></i>
     </a>
     <div>
-      <nav class="flex mb-0.5">
-        <ol class="inline-flex items-center space-x-1 text-[10px] text-gray-400">
-          <li><a href="{{ url_for('shareload.shareload_list') }}" class="hover:text-primary">Share Load</a></li>
-          <li><div class="flex items-center"><i class="bi bi-chevron-right mx-1"></i><span>ผลลัพธ์</span></div></li>
-        </ol>
-      </nav>
       <h1 class="text-lg font-black text-gray-800 leading-tight flex items-center gap-2">
         <span class="font-mono text-primary">{{ fac_a }}</span>
         <i class="bi bi-arrow-left-right text-gray-400 text-sm"></i>
@@ -212,13 +206,13 @@ require([
   const meterLayer   = new GraphicsLayer({ title: "Meters" });
   // Voltage number labels only clutter the map when zoomed out — keep them
   // hidden until the user zooms in close enough to read them individually.
-  const meterLabelLayer = new GraphicsLayer({ title: "Meter Voltage Labels", minScale: 1500 });
+  const nodeLabelLayer  = new GraphicsLayer({ title: "Node Va/Vb/Vc Labels", minScale: 1500 });
   const trLayer      = new GraphicsLayer({ title: "Transformers" });
 
   const map = new Map({
     basemap: "streets-navigation-vector",
     layers: [linesALayer, linesBLayer, switchLayer, tieLayer,
-             switchOptLayer, nodeLayer, meterLayer, meterLabelLayer, trLayer]
+             switchOptLayer, nodeLayer, nodeLabelLayer, meterLayer, trLayer]
   });
 
   const view = new MapView({
@@ -299,6 +293,7 @@ require([
     switchOptLayer.removeAll();
     tieLayer.removeAll();
     nodeLayer.removeAll();
+    nodeLabelLayer.removeAll();
     const list = Array.isArray(selection) ? selection : (selection ? [selection] : []);
 
     list.forEach(scenario => {
@@ -330,10 +325,27 @@ require([
       }
 
       (scenario.nodes_voltage || []).forEach(n => {
+        // The raw data carries per-phase Va/Vb/Vc (parsed server-side from
+        // TransferOptimizer's hover text) — show those directly instead of
+        // just the single Vmin the dot color is based on.
+        const fmt1 = v => (v != null ? v.toFixed(1) + ' V' : '—');
+        const content =
+          '<b>Va</b>: ' + fmt1(n.va) + '<br>' +
+          '<b>Vb</b>: ' + fmt1(n.vb) + '<br>' +
+          '<b>Vc</b>: ' + fmt1(n.vc) + '<br>' +
+          '<b>Vmin</b>: ' + fmt1(n.v);
+
         nodeLayer.add(makePoint(n.lon, n.lat,
           { type: "simple-marker", style: "circle", color: voltageColor(n.v), size: 6, outline: { color: "white", width: 0.8 } },
-          { title: 'Node' + rankTag, content: (n.label || '').replace(/\n/g, '<br>') }
+          { title: 'Node' + rankTag, content: content }
         ));
+
+        if (n.va != null || n.vb != null || n.vc != null) {
+          const fmt0 = v => (v != null ? Math.round(v) : '-');
+          nodeLabelLayer.add(makePoint(n.lon, n.lat,
+            textSymbol('A' + fmt0(n.va) + ' B' + fmt0(n.vb) + ' C' + fmt0(n.vc), '#1f2937', 7, -9)
+          ));
+        }
       });
     });
   }
@@ -423,28 +435,20 @@ require([
         }));
       });
 
-      // === Meters TR_A (colored by simulated voltage when available) ===
+      // === Meters TR_A (plain — voltage is shown at the node layer instead) ===
       d.meters_a.forEach(m => {
-        const vTxt = (m.v === null || m.v === undefined) ? '' : ('<br>V = ' + m.v.toFixed(1) + ' V');
         meterLayer.add(makePoint(m.lon, m.lat,
-          markerSymbol("diamond", voltageColor(m.v), 7, "white"),
-          { title: 'Meter TR_A', content: 'มิเตอร์ในเครือข่าย ' + d.fac_a + vTxt }
+          markerSymbol("diamond", [59, 130, 246, 180], 7, "white"),
+          { title: 'Meter TR_A', content: 'มิเตอร์ในเครือข่าย ' + d.fac_a }
         ));
-        if (m.v !== null && m.v !== undefined) {
-          meterLabelLayer.add(makePoint(m.lon, m.lat, textSymbol(m.v.toFixed(0) + 'V', '#374151', 8, 10)));
-        }
       });
 
-      // === Meters TR_B (colored by simulated voltage when available) ===
+      // === Meters TR_B (plain — voltage is shown at the node layer instead) ===
       d.meters_b.forEach(m => {
-        const vTxt = (m.v === null || m.v === undefined) ? '' : ('<br>V = ' + m.v.toFixed(1) + ' V');
         meterLayer.add(makePoint(m.lon, m.lat,
-          markerSymbol("diamond", voltageColor(m.v), 7, "white"),
-          { title: 'Meter TR_B', content: 'มิเตอร์ในเครือข่าย ' + d.fac_b + vTxt }
+          markerSymbol("diamond", [251, 146, 60, 180], 7, "white"),
+          { title: 'Meter TR_B', content: 'มิเตอร์ในเครือข่าย ' + d.fac_b }
         ));
-        if (m.v !== null && m.v !== undefined) {
-          meterLabelLayer.add(makePoint(m.lon, m.lat, textSymbol(m.v.toFixed(0) + 'V', '#374151', 8, 10)));
-        }
       });
 
       // === Transformer A (large blue star) ===

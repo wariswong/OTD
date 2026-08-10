@@ -189,6 +189,19 @@ def _trace_pts(trace: dict) -> list:
     return [p for p in pts if p]
 
 
+# TransferOptimizer's _phase_hover() bakes per-phase readings into the hover
+# text as "VA = 223.8 V<br>VB = ... V<br>VC = ... V" — the only place those
+# numbers exist in the Plotly output (there's no separate per-phase field).
+_PHASE_V_RE = re.compile(r'V([ABC])\s*=\s*([\d.]+)\s*V')
+
+
+def _parse_phase_voltages(label: str) -> dict:
+    out = {'va': None, 'vb': None, 'vc': None}
+    for letter, val in _PHASE_V_RE.findall(label):
+        out['v' + letter.lower()] = float(val)
+    return out
+
+
 def _voltage_nodes_from_trace(trace: dict) -> list:
     xs, ys = trace.get('x') or [], trace.get('y') or []
     vs = (trace.get('marker') or {}).get('color') or []
@@ -200,12 +213,14 @@ def _voltage_nodes_from_trace(trace: dict) -> list:
         pt = _ll(x, y)
         if not pt:
             continue
-        label = texts[i] if i < len(texts) else ''
-        nodes.append({
+        label = str(texts[i] if i < len(texts) else '')
+        node = {
             'lon': pt[0], 'lat': pt[1],
             'v': vs[i] if i < len(vs) and isinstance(vs[i], (int, float)) else None,
-            'label': str(label).replace('<br>', '\n').replace('<b>', '').replace('</b>', ''),
-        })
+            'label': label.replace('<br>', '\n').replace('<b>', '').replace('</b>', ''),
+        }
+        node.update(_parse_phase_voltages(label))
+        nodes.append(node)
     return nodes
 
 

@@ -8,4 +8,5 @@ venv/
 __pycache__/
 logs/
 .env
+feature_PhaseOptimizer/output/
 #app.py
