@@ -10,7 +10,8 @@ Produces, under <out_dir>:
     results.json               - summary of baseline/steps-applied/final state
     lv_lines.geojson           - LV backbone lines (for the ArcGIS map)
     meter_groups.geojson       - per-meter points (phase before/after, moved?)
-    feature_groups.geojson     - transformer / low-voltage / upgrade markers
+    feature_groups.geojson     - transformer / low-voltage point markers
+    upgrade_lines.geojson      - conductor-upgrade / phase-addition edges (lines)
     downloads/phase_opt_<facilityid>.xlsx
 
 Usage (CLI):
@@ -160,7 +161,7 @@ def _write_geojson_layers(opt: LVOptimizer, out_dir: Path) -> None:
     with open(out_dir / "meter_groups.geojson", "w", encoding="utf-8") as fh:
         json.dump({"type": "FeatureCollection", "features": meter_features}, fh, ensure_ascii=False)
 
-    # ---- feature_groups.geojson: transformer / low-voltage / upgrade markers ----
+    # ---- feature_groups.geojson: transformer / low-voltage point markers ----
     feature_groups = []
 
     def _add_point(node_id, name, group):
@@ -182,35 +183,36 @@ def _write_geojson_layers(opt: LVOptimizer, out_dir: Path) -> None:
     for node_id in sorted(final_low_v):
         _add_point(node_id, f"แรงดันตกยังคงอยู่ (node {node_id})", "low_v_remaining")
 
+    with open(out_dir / "feature_groups.geojson", "w", encoding="utf-8") as fh:
+        json.dump({"type": "FeatureCollection", "features": feature_groups}, fh, ensure_ascii=False)
+
+    # ---- upgrade_lines.geojson: conductor-upgrade / phase-addition edges ----
+    upgrade_lines = []
+
+    def _add_line(u, v, name, group):
+        pu, pv = net.node_coords.get(u), net.node_coords.get(v)
+        if not (pu and pv):
+            return
+        upgrade_lines.append({
+            "type": "Feature",
+            "geometry": {"type": "LineString", "coordinates": [_ll(*pu), _ll(*pv)]},
+            "properties": {"name": name, "group": group},
+        })
+
     if opt.applied_upgrade:
         u, v = opt.applied_upgrade.edge
-        pu, pv = net.node_coords.get(u), net.node_coords.get(v)
-        if pu and pv:
-            mid = ((pu[0] + pv[0]) / 2, (pu[1] + pv[1]) / 2)
-            _add_point_coord = mid
-            feature_groups.append({
-                "type": "Feature",
-                "geometry": {"type": "Point", "coordinates": _ll(*mid)},
-                "properties": {
-                    "name": f"เพิ่มขนาดสาย {opt.applied_upgrade.from_size}→{opt.applied_upgrade.to_size}mm²",
-                    "group": "conductor_upgrade",
-                },
-            })
+        _add_line(
+            u, v,
+            f"เพิ่มขนาดสาย {opt.applied_upgrade.from_size}→{opt.applied_upgrade.to_size}mm²",
+            "conductor_upgrade",
+        )
 
     if opt.applied_phase_add:
         for _fi, eu, ev in opt.applied_phase_add.upgraded_edges:
-            pu, pv = net.node_coords.get(eu), net.node_coords.get(ev)
-            if not (pu and pv):
-                continue
-            mid = ((pu[0] + pv[0]) / 2, (pu[1] + pv[1]) / 2)
-            feature_groups.append({
-                "type": "Feature",
-                "geometry": {"type": "Point", "coordinates": _ll(*mid)},
-                "properties": {"name": "เพิ่มเฟสสาย → 3 เฟส", "group": "phase_addition"},
-            })
+            _add_line(eu, ev, "เพิ่มเฟสสาย → 3 เฟส", "phase_addition")
 
-    with open(out_dir / "feature_groups.geojson", "w", encoding="utf-8") as fh:
-        json.dump({"type": "FeatureCollection", "features": feature_groups}, fh, ensure_ascii=False)
+    with open(out_dir / "upgrade_lines.geojson", "w", encoding="utf-8") as fh:
+        json.dump({"type": "FeatureCollection", "features": upgrade_lines}, fh, ensure_ascii=False)
 
 
 def run_phase_optimizer(
