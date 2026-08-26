@@ -193,7 +193,7 @@
       title: "มิเตอร์ (เฟส)",
       renderer: {
         type: "unique-value",
-        valueExpression: "$feature.phase_after + (IIf($feature.moved == 1, '_moved', ''))",
+        valueExpression: "var moved = $feature.moved == 1; return moved ? $feature.phase_after + '_moved' : $feature.phase_after;",
         uniqueValueInfos: [
           { value: "A", symbol: { type: "simple-marker", color: "#ef4444", size: 7, outline: { color: "white", width: 1 } }, label: "เฟส A" },
           { value: "B", symbol: { type: "simple-marker", color: "#eab308", size: 7, outline: { color: "white", width: 1 } }, label: "เฟส B" },
