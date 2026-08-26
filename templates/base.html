@@ -144,7 +144,7 @@
                               {% if request.endpoint == 'projects.projectspeanumber' %}bg-white text-primary shadow-sm{% else %}text-white/90 hover:bg-white/15 hover:text-white{% endif %}"
                        href="{{ url_for('projects.projectspeanumber') }}">
                         <i class="bi bi-lightning-charge-fill"></i>
-                        <span>ออกแบบงานปรับปรุงระบบจำหน่ายอัตโนมัติ</span>
+                        <span>ออกแบบงานตั้งเสริมตัดจ่าย</span>
                     </a>                    
                     <a class="flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium tracking-wide transition-all duration-200
                               {% if request.endpoint and request.endpoint.startswith('shareload.') %}bg-white text-primary shadow-sm{% else %}text-white/90 hover:bg-white/15 hover:text-white{% endif %}"
@@ -156,7 +156,7 @@
                               {% if request.endpoint and request.endpoint.startswith('phase_optimizer.') %}bg-white text-primary shadow-sm{% else %}text-white/90 hover:bg-white/15 hover:text-white{% endif %}"
                        href="{{ url_for('phase_optimizer.phase_optimizer_list') }}">
                         <i class="bi bi-shuffle"></i>
-                        <span>Phase Optimizer</span>
+                        <span>ออกแบบงานปรับปรุงทั่วไป</span>
                     </a>
                 </div>
             </div>
@@ -175,7 +175,7 @@
                           {% if request.endpoint == 'projects.projectspeanumber' %}bg-white text-primary{% else %}text-white/90 hover:bg-white/10{% endif %}"
                    href="{{ url_for('projects.projectspeanumber') }}">
                     <i class="bi bi-lightning-charge-fill"></i>
-                    <span>ออกแบบงานปรับปรุงระบบจำหน่ายอัตโนมัติ</span>
+                    <span>ออกแบบงานตั้งเสริมตัดจ่าย</span>
                 </a>                
                 <a class="flex items-center space-x-2 px-3 py-2.5 rounded-lg text-sm font-medium
                           {% if request.endpoint and request.endpoint.startswith('shareload.') %}bg-white text-primary{% else %}text-white/90 hover:bg-white/10{% endif %}"
@@ -193,7 +193,7 @@
                             {% if request.endpoint and request.endpoint.startswith('phase_optimizer.') %}bg-white text-primary shadow-sm{% else %}text-white/90 hover:bg-white/15 hover:text-white{% endif %}"
                     href="{{ url_for('phase_optimizer.phase_optimizer_list') }}">
                     <i class="bi bi-shuffle"></i>
-                    <span>Phase Optimizer</span>
+                    <span>ออกแบบงานปรับปรุงทั่วไป</span>
                 </a>
                 {% if is_admin() %}
                 <a class="flex items-center space-x-2 px-3 py-2.5 rounded-lg text-sm font-medium text-yellow-200 hover:bg-white/10"
@@ -221,20 +221,20 @@
          automatically, without each template having to build its own. -->
     {% set BREADCRUMBS = {
         'projects.shape_projects': [('อัปโหลดข้อมูล Shapefile', none)],
-        'projects.projectspeanumber': [('ออกแบบงานปรับปรุงระบบจำหน่ายอัตโนมัติ', none)],
+        'projects.projectspeanumber': [('ออกแบบงานตั้งเสริมตัดจ่าย', none)],
         'projects.create': [('อัปโหลดข้อมูล Shapefile', url_for('projects.shape_projects')), ('สร้างโปรเจคใหม่', none)],
-        'projects.createPeaNumber': [('ออกแบบงานปรับปรุงระบบจำหน่ายอัตโนมัติ', url_for('projects.projectspeanumber')), ('สร้างโปรเจคใหม่', none)],
+        'projects.createPeaNumber': [('ออกแบบงานตั้งเสริมตัดจ่าย', url_for('projects.projectspeanumber')), ('สร้างโปรเจคใหม่', none)],
         'projects.edit': [('อัปโหลดข้อมูล Shapefile', url_for('projects.shape_projects')), ('แก้ไขโปรเจค', none)],
         'projects.map_view': [('อัปโหลดข้อมูล Shapefile', url_for('projects.shape_projects')), ('แผนที่ผลลัพธ์', none)],
-        'projects.pea_no_project_map_view': [('ออกแบบงานปรับปรุงระบบจำหน่ายอัตโนมัติ', url_for('projects.projectspeanumber')), ('แผนที่ผลลัพธ์', none)],
+        'projects.pea_no_project_map_view': [('ออกแบบงานตั้งเสริมตัดจ่าย', url_for('projects.projectspeanumber')), ('แผนที่ผลลัพธ์', none)],
         'stats.transformer_stats': [('วิเคราะห์ปัญหาหม้อแปลงและแนวทางการแก้ไข', none)],
         'stats.admin_upload_stats': [('อัปโหลดข้อมูลสถิติ', none)],
         'stats.admin_management': [('จัดการสิทธิ์ผู้ดูแลระบบ', none)],
         'shareload.shareload_list': [('วิเคราะห์การแบ่งโหลดหม้อแปลงข้างเคียง', none)],
         'shareload.shareload_result': [('วิเคราะห์การแบ่งโหลดหม้อแปลงข้างเคียง', url_for('shareload.shareload_list')), ('ผลลัพธ์', none)],
-        'phase_optimizer.phase_optimizer_list': [('Phase Optimizer', none)],
-        'phase_optimizer.phase_optimizer_create_page': [('Phase Optimizer', url_for('phase_optimizer.phase_optimizer_list')), ('วิเคราะห์ใหม่', none)],
-        'phase_optimizer.phase_optimizer_map_view': [('Phase Optimizer', url_for('phase_optimizer.phase_optimizer_list')), ('ผลลัพธ์', none)],
+        'phase_optimizer.phase_optimizer_list': [('ออกแบบงานปรับปรุงทั่วไป', none)],
+        'phase_optimizer.phase_optimizer_create_page': [('ออกแบบงานปรับปรุงทั่วไป', url_for('phase_optimizer.phase_optimizer_list')), ('วิเคราะห์ใหม่', none)],
+        'phase_optimizer.phase_optimizer_map_view': [('ออกแบบงานปรับปรุงทั่วไป', url_for('phase_optimizer.phase_optimizer_list')), ('ผลลัพธ์', none)],
     } %}
     {% set breadcrumb_trail = BREADCRUMBS.get(request.endpoint) %}
     {% if breadcrumb_trail %}
