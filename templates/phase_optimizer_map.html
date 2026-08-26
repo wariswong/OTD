@@ -192,16 +192,19 @@
       url: `/phase_optimizer/output/${projectId}/meter_groups.geojson`,
       title: "มิเตอร์ (เฟส)",
       renderer: {
-        type: "unique-value",
-        valueExpression: "var moved = $feature.moved == 1; return moved ? $feature.phase_after + '_moved' : $feature.phase_after;",
+        type: "unique-value", field: "phase_after",
         uniqueValueInfos: [
           { value: "A", symbol: { type: "simple-marker", color: "#ef4444", size: 7, outline: { color: "white", width: 1 } }, label: "เฟส A" },
           { value: "B", symbol: { type: "simple-marker", color: "#eab308", size: 7, outline: { color: "white", width: 1 } }, label: "เฟส B" },
-          { value: "C", symbol: { type: "simple-marker", color: "#3b82f6", size: 7, outline: { color: "white", width: 1 } }, label: "เฟส C" },
-          { value: "A_moved", symbol: { type: "simple-marker", color: "#ef4444", size: 12, outline: { color: "#111827", width: 2 } }, label: "เฟส A (ย้ายเฟสแล้ว)" },
-          { value: "B_moved", symbol: { type: "simple-marker", color: "#eab308", size: 12, outline: { color: "#111827", width: 2 } }, label: "เฟส B (ย้ายเฟสแล้ว)" },
-          { value: "C_moved", symbol: { type: "simple-marker", color: "#3b82f6", size: 12, outline: { color: "#111827", width: 2 } }, label: "เฟส C (ย้ายเฟสแล้ว)" }
-        ]
+          { value: "C", symbol: { type: "simple-marker", color: "#3b82f6", size: 7, outline: { color: "white", width: 1 } }, label: "เฟส C" }
+        ],
+        visualVariables: [{
+          type: "size", field: "moved",
+          stops: [
+            { value: 0, size: 7,  label: "ไม่ได้ย้ายเฟส" },
+            { value: 1, size: 14, label: "ย้ายเฟสแล้ว" }
+          ]
+        }]
       },
       popupTemplate: {
         title: "มิเตอร์ {peano}",

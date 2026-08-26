@@ -155,7 +155,7 @@ def _write_geojson_layers(opt: LVOptimizer, out_dir: Path) -> None:
                 "kw": round(before.kw, 2),
                 "phase_before": PD_TO_PHASE.get(before.current_pd, "?"),
                 "phase_after": PD_TO_PHASE.get(after_pd, "?"),
-                "moved": bool(after_pd != before.current_pd),
+                "moved": 1 if after_pd != before.current_pd else 0,
             },
         })
     with open(out_dir / "meter_groups.geojson", "w", encoding="utf-8") as fh:
