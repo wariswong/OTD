@@ -115,10 +115,17 @@ def _build_results_json(opt: LVOptimizer) -> dict:
     }
 
 
-def _write_geojson_layers(opt: LVOptimizer, out_dir: Path) -> None:
+def _write_geojson_layers(opt: LVOptimizer, out_dir: Path) -> list:
+    """Write lv_lines/meter_groups/feature_groups/upgrade_lines geojson.
+
+    Returns the list of meters whose phase actually changed (peano, kw,
+    phase_before, phase_after) so the caller can surface it as a readable
+    activity list on the results page, not just as rings on the map.
+    """
     net = opt.net
     baseline_raw = opt.raw
     final_raw = opt.final_raw or opt.raw
+    moved_meters = []
 
     # ---- lv_lines.geojson: backbone LV lines from the parsed network graph ----
     line_features = []
@@ -149,6 +156,7 @@ def _write_geojson_layers(opt: LVOptimizer, out_dir: Path) -> None:
         after_pd = _meter_current_pd(after_feat) if after_feat is not None else before.current_pd
         phase_before = PD_TO_PHASE.get(before.current_pd, "?")
         phase_after = PD_TO_PHASE.get(after_pd, "?")
+        moved = after_pd != before.current_pd
         meter_features.append({
             "type": "Feature",
             "geometry": {"type": "Point", "coordinates": _ll(*pt)},
@@ -157,11 +165,19 @@ def _write_geojson_layers(opt: LVOptimizer, out_dir: Path) -> None:
                 "kw": round(before.kw, 2),
                 "phase_before": phase_before,
                 "phase_after": phase_after,
-                "moved": 1 if after_pd != before.current_pd else 0,
+                "moved": 1 if moved else 0,
                 # คู่เฟส "ก่อน->หลัง" เช่น "A->B" ใช้แยกสีวงแหวนตามทิศทางการย้ายเฟสบนแผนที่
                 "phase_move": f"{phase_before}->{phase_after}",
             },
         })
+        if moved:
+            moved_meters.append({
+                "peano": before.peano or f"nid={node_id}",
+                "kw": round(before.kw, 2),
+                "phase_before": phase_before,
+                "phase_after": phase_after,
+            })
+    moved_meters.sort(key=lambda m: (m["phase_before"], m["phase_after"], m["peano"]))
     with open(out_dir / "meter_groups.geojson", "w", encoding="utf-8") as fh:
         json.dump({"type": "FeatureCollection", "features": meter_features}, fh, ensure_ascii=False)
 
@@ -218,6 +234,8 @@ def _write_geojson_layers(opt: LVOptimizer, out_dir: Path) -> None:
     with open(out_dir / "upgrade_lines.geojson", "w", encoding="utf-8") as fh:
         json.dump({"type": "FeatureCollection", "features": upgrade_lines}, fh, ensure_ascii=False)
 
+    return moved_meters
+
 
 def run_phase_optimizer(
     facilityid: str,
@@ -254,9 +272,10 @@ def run_phase_optimizer(
 
     save_excel_report(optimizer, str(out_path / "downloads" / f"phase_opt_{facilityid}.xlsx"))
     draw_map(optimizer, str(out_path / "downloads" / f"phase_opt_{facilityid}.png"))
-    _write_geojson_layers(optimizer, out_path)
+    moved_meters = _write_geojson_layers(optimizer, out_path)
 
     results = _build_results_json(optimizer)
+    results["moved_meters"] = moved_meters
     with open(out_path / "results.json", "w", encoding="utf-8") as fh:
         json.dump(results, fh, ensure_ascii=False, indent=2)
 

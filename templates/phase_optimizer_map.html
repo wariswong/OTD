@@ -146,6 +146,47 @@
   </div>
 </div>
 
+{# ===== MOVED METERS LIST ===== #}
+{% set moved_meters = result.moved_meters or [] %}
+{% if moved_meters %}
+{% set move_colors = {
+  'A->B': '#f97316', 'A->C': '#a855f7',
+  'B->A': '#14b8a6', 'B->C': '#ec4899',
+  'C->A': '#84cc16', 'C->B': '#06b6d4'
+} %}
+<div class="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-hidden mb-6">
+  <div class="px-8 py-5 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
+    <h3 class="font-black text-gray-700 uppercase tracking-widest text-sm"><i class="bi bi-arrow-left-right mr-2"></i>รายการมิเตอร์ที่ย้ายเฟส</h3>
+    <span class="text-xs font-bold text-gray-400">{{ moved_meters|length }} จุด</span>
+  </div>
+  <div class="p-6 overflow-x-auto max-h-96 overflow-y-auto">
+    <table class="w-full text-sm">
+      <thead class="sticky top-0 bg-white">
+        <tr class="text-left text-gray-400 text-xs uppercase tracking-wide">
+          <th class="pb-2 pr-4">มิเตอร์ (PEANO)</th>
+          <th class="pb-2 pr-4">ย้ายเฟส</th>
+          <th class="pb-2 pr-4 text-right">โหลด (kW)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in moved_meters %}
+        {% set move_key = m.phase_before ~ '->' ~ m.phase_after %}
+        <tr class="border-t border-gray-50">
+          <td class="py-2 pr-4 font-bold text-gray-700">{{ m.peano }}</td>
+          <td class="py-2 pr-4">
+            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-white" style="background-color: {{ move_colors.get(move_key, '#00B050') }}">
+              {{ m.phase_before }} → {{ m.phase_after }}
+            </span>
+          </td>
+          <td class="py-2 pr-4 text-right text-gray-500">{{ m.kw }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
 {# ===== FEATURE INFO PANEL ===== #}
 <div class="bg-white rounded-[2rem] shadow-sm border border-gray-100 overflow-hidden mb-6">
   <div class="px-8 py-5 border-b border-gray-100 bg-gray-50/50">
