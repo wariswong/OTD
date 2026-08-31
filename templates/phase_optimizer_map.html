@@ -197,19 +197,54 @@
           { value: "A", symbol: { type: "simple-marker", color: "#ef4444", size: 7, outline: { color: "white", width: 1 } }, label: "เฟส A" },
           { value: "B", symbol: { type: "simple-marker", color: "#eab308", size: 7, outline: { color: "white", width: 1 } }, label: "เฟส B" },
           { value: "C", symbol: { type: "simple-marker", color: "#3b82f6", size: 7, outline: { color: "white", width: 1 } }, label: "เฟส C" }
-        ],
-        visualVariables: [{
-          type: "size", field: "moved",
-          stops: [
-            { value: 0, size: 7,  label: "ไม่ได้ย้ายเฟส" },
-            { value: 1, size: 14, label: "ย้ายเฟสแล้ว" }
-          ]
-        }]
+        ]
       },
       popupTemplate: {
         title: "มิเตอร์ {peano}",
         content: "เฟสก่อน: {phase_before} → เฟสหลัง: {phase_after}<br>โหลด: {kw} kW"
       }
+    });
+    // วงกลมโปร่งล้อมมิเตอร์ที่ย้ายเฟส — ใช้ภาษาภาพเดียวกับ draw_interactive_map()/draw_map()
+    // ใน PhaseOptimizer.py (circle-open ทับตำแหน่งมิเตอร์ที่ moved=1) แยกสีตามคู่ "ย้ายจาก→ไป"
+    const ringSymbol = (color) => ({
+      type: "simple-marker", style: "circle",
+      color: [0, 0, 0, 0], size: 16,
+      outline: { color, width: 2.5 }
+    });
+    // สีต่อคู่ทิศทางการย้ายเฟส — ใช้เท่าที่มีจริงในข้อมูล (เติม fallback สีเทาให้คู่ที่ไม่รู้จัก)
+    const PHASE_MOVE_COLORS = {
+      "A->B": "#f97316", "A->C": "#a855f7",
+      "B->A": "#14b8a6", "B->C": "#ec4899",
+      "C->A": "#84cc16", "C->B": "#06b6d4"
+    };
+    const movedMeterRing = new GeoJSONLayer({
+      url: `/phase_optimizer/output/${projectId}/meter_groups.geojson`,
+      title: "มิเตอร์ที่ย้ายเฟส",
+      definitionExpression: "moved = 1",
+      popupTemplate: {
+        title: "มิเตอร์ {peano} (ย้ายเฟสแล้ว)",
+        content: "เฟสก่อน: {phase_before} → เฟสหลัง: {phase_after}<br>โหลด: {kw} kW"
+      }
+    });
+    // สร้าง renderer จากคู่ทิศทางที่มีอยู่จริงในข้อมูลเท่านั้น (ไม่โชว์ legend คู่ที่ไม่เกิดขึ้น)
+    movedMeterRing.when(() => {
+      const qDistinct = movedMeterRing.createQuery();
+      qDistinct.where = "moved = 1";
+      qDistinct.outFields = ["phase_move"];
+      qDistinct.returnDistinctValues = true;
+      qDistinct.returnGeometry = false;
+      return movedMeterRing.queryFeatures(qDistinct).then(result => {
+        const values = [...new Set(result.features.map(f => f.attributes.phase_move).filter(Boolean))];
+        if (!values.length) return;
+        movedMeterRing.renderer = {
+          type: "unique-value", field: "phase_move",
+          uniqueValueInfos: values.map(v => ({
+            value: v,
+            symbol: ringSymbol(PHASE_MOVE_COLORS[v] || "#00B050"),
+            label: `ย้าย ${v.replace("->", " → ")}`
+          }))
+        };
+      });
     });
     const featureGroups = new GeoJSONLayer({
       url: `/phase_optimizer/output/${projectId}/feature_groups.geojson`,
@@ -242,7 +277,7 @@
       popupTemplate: { title: "{name}", content: "กลุ่ม: {group}" }
     });
 
-    map.addMany([lvLineLayer, meterLayer, featureGroups, upgradeLines]);
+    map.addMany([lvLineLayer, meterLayer, movedMeterRing, featureGroups, upgradeLines]);
     view.ui.add(new Legend({ view, style: "classic" }), "top-right");
 
     const fgStyles = {

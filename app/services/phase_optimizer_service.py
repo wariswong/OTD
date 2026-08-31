@@ -70,7 +70,7 @@ class PhaseOptimizerService:
         """Run the optimizer synchronously and return the results dict.
 
         Raises on failure — callers should catch and surface the message,
-        same as optimized_transformer_group_300669.main_pipeline's callers do.
+        same as optimized_transformer_group_310869.main_pipeline's callers do.
         """
         out_dir = os.path.join(OUTPUT_ROOT, str(project_id))
         return run_phase_optimizer(facility_id, out_dir, region=region)

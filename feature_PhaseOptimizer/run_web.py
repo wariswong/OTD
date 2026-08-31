@@ -3,7 +3,7 @@ run_web.py (feature_PhaseOptimizer)
 ------------------------------------
 Web-callable wrapper for LVOptimizer. Unlike feature_shareload/run_web.py
 (invoked as a subprocess), this is designed to be imported and called
-in-process from the Flask app — mirroring how optimized_transformer_group_300669
+in-process from the Flask app — mirroring how optimized_transformer_group_310869
 .main_pipeline() is called directly from app/services/project_service.py.
 
 Produces, under <out_dir>:
@@ -147,15 +147,19 @@ def _write_geojson_layers(opt: LVOptimizer, out_dir: Path) -> None:
             continue
         after_feat = final_raw["features"][feat_idx] if feat_idx < len(final_raw["features"]) else None
         after_pd = _meter_current_pd(after_feat) if after_feat is not None else before.current_pd
+        phase_before = PD_TO_PHASE.get(before.current_pd, "?")
+        phase_after = PD_TO_PHASE.get(after_pd, "?")
         meter_features.append({
             "type": "Feature",
             "geometry": {"type": "Point", "coordinates": _ll(*pt)},
             "properties": {
                 "peano": before.peano,
                 "kw": round(before.kw, 2),
-                "phase_before": PD_TO_PHASE.get(before.current_pd, "?"),
-                "phase_after": PD_TO_PHASE.get(after_pd, "?"),
+                "phase_before": phase_before,
+                "phase_after": phase_after,
                 "moved": 1 if after_pd != before.current_pd else 0,
+                # คู่เฟส "ก่อน->หลัง" เช่น "A->B" ใช้แยกสีวงแหวนตามทิศทางการย้ายเฟสบนแผนที่
+                "phase_move": f"{phase_before}->{phase_after}",
             },
         })
     with open(out_dir / "meter_groups.geojson", "w", encoding="utf-8") as fh:

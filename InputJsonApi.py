@@ -55,13 +55,13 @@ def get_base_url(area_code: str) -> str:
         'G': 'c1','H': 'c2','I': 'c3',
         'J': 's1','K': 's2','L': 's3','Z' : 'ne2'
     }
-    
+
     prefix = area_code[0].upper()
     region = region_map.get(prefix)
-    
+
     if not region:
         raise ValueError(f"Unknown prefix: {prefix}")
-        
+
     return region
 
 def setup_run_file_logger(facility_id, folder="logs", info_only=False):
@@ -150,11 +150,9 @@ BAL_KEY_BAL    = "PEANO"     # คีย์ฝั่ง BalanceLoad
 # -------------------------------------------------------------------
 # GeometryServer buffer + Spatial Query (MV layer 26)
 # -------------------------------------------------------------------
-
 MV_LAYER_ID     = 26  # DS_MVconductor ใน PEA_QUERY/MapServer/26
 
 SR_UTM47 = 32647
-
 
 def project_geoms(geoms, in_wkid: int, out_wkid: int):
     # รับ list ของ geometry (ArcGIS JSON: points/paths/rings) แล้วเรียก GeometryServer /project ทีละชนิด
@@ -294,11 +292,11 @@ def merge_balance_and_mv_to_file(balance_json_path: str, mv_featureset: dict, ou
 # -------------------------------------------------------------------
 # HTTP helpers
 # -------------------------------------------------------------------
-def http_json_get(url: str, timeout=30) -> dict:
+def http_json_get(url: str, timeout=120) -> dict:
     with urllib.request.urlopen(url, timeout=timeout) as r:
         return json.loads(r.read().decode())
 
-def http_json_post(url: str, params: dict, timeout=30) -> dict:
+def http_json_post(url: str, params: dict, timeout=120) -> dict:
     data = urllib.parse.urlencode(params).encode("utf-8")
     req  = urllib.request.Request(url, data=data, method="POST")
     with urllib.request.urlopen(req, timeout=timeout) as r:
@@ -314,7 +312,7 @@ def _sql_eq(field: str, value: str) -> str:
 # -------------------------------------------------------------------
 # Core fetchers
 # -------------------------------------------------------------------
-def get_tr_xy_by_facilityid(facilityid: str, timeout=15):
+def get_tr_xy_by_facilityid(facilityid: str, timeout=120):
     params = {
         "where": f"FACILITYID='{facilityid}'",
         "outFields": "*",
@@ -323,7 +321,6 @@ def get_tr_xy_by_facilityid(facilityid: str, timeout=15):
         "f": "pjson",
     }
     url  = f"{TR_LAYER_17}?{urllib.parse.urlencode(params)}"
-    logging.info(f"[GIS] get_tr_xy_by_facilityid url={url}")
     data = http_json_get(url, timeout=timeout)
 
     feats = (data or {}).get("features") or []
@@ -336,7 +333,6 @@ def get_tr_xy_by_facilityid(facilityid: str, timeout=15):
 
     sr_resp = (data.get("spatialReference") or {}).get("wkid")
     x_raw, y_raw = float(g["x"]), float(g["y"])
-    logging.info(f"[GIS] TR xy for {facilityid}: x={x_raw} y={y_raw} sr_resp={sr_resp}")
 
     if sr_resp and int(sr_resp) != SR_UTM47:
         # กันเหนียว: project ฝั่งเรา ถ้า service เพิกเฉย outSR
@@ -348,7 +344,6 @@ def get_tr_xy_by_facilityid(facilityid: str, timeout=15):
 def fetch_balance(x: float, y: float) -> dict:
     # ส่ง geometry เป็น 32647 และย้ำ inSR/outSR ให้คืน 32647 กลับมา
     geom = {"x": x, "y": y, "spatialReference": {"wkid": SR_UTM47}}
-    print(geom)
     params = {
         "geometry": json.dumps(geom),
         "inSR": SR_UTM47,
@@ -356,11 +351,7 @@ def fetch_balance(x: float, y: float) -> dict:
         "f": "pjson"
     }
     url = build_url(BALANCE_BASE, params)
-    logging.info(f"[GIS] fetch_balance url={url}")
-    data = http_json_get(url)
-    n_feats = len(collect_features(data))
-    logging.info(f"[GIS] fetch_balance response features={n_feats} keys={list((data or {}).keys())}")
-    return data
+    return http_json_get(url)
 
 
 # -------------------------------------------------------------------
@@ -481,7 +472,7 @@ def join_balance_with_table(balance_json: dict, table_map: dict, key_balance: st
         joined.append({"attributes": attrsA, "geometry": fa.get("geometry")})
     return joined
 
-def run_once_with_facilityid(    
+def run_once_with_facilityid(
     facilityid: str,
     table_id: int = BAL_TABLE_ID,
     key_table: str = BAL_KEY_TABLE,
@@ -489,7 +480,6 @@ def run_once_with_facilityid(
     save: bool = True,
     project_id: str = None
 ) -> dict:
-    logging.info(f"[GIS] run_once_with_facilityid: TR_LAYER_17={TR_LAYER_17} BALANCE_BASE={BALANCE_BASE}")
     x, y = get_tr_xy_by_facilityid(facilityid)
     balance = fetch_balance(x, y)
     balance = reproject_balance_to_32647(balance)
@@ -538,7 +528,6 @@ def run_once_with_facilityid(
             base_dir,
             f"{project_id}_NetworkLV{facilityid}.json"
         )
-        # out_path = f"NetworkLV_{facilityid}.json"
         with open(out_path, "w", encoding="utf-8") as fp:
             json.dump(out_geo, fp, ensure_ascii=False, indent=2)
 
@@ -813,6 +802,11 @@ def extractMeterData_json(json_input, default_voltage: float = 230.0,
 
     initialVoltages = np.where(np.isfinite(initialVoltages), initialVoltages, float(default_voltage))
     totalLoads = np.where(np.isfinite(totalLoads) & (totalLoads > 0), totalLoads, 0.0)
+
+    if meter_xy.ndim < 2 or len(meter_xy) == 0:
+        empty = np.zeros((0, 2), dtype=float)
+        empty_pl = {'A': np.zeros(0), 'B': np.zeros(0), 'C': np.zeros(0)}
+        return empty, np.zeros(0), np.zeros(0), empty_pl, np.zeros(0, dtype=object), np.zeros(0, dtype=object)
 
     mask = np.isfinite(meter_xy[:,0]) & np.isfinite(meter_xy[:,1])
     if drop_zero_load:
@@ -1148,7 +1142,7 @@ def build_line_length_map_from_json(json_input,
     - unit_factor: ตัวคูณหน่วย (ปกติ ArcGIS SHAPE.LEN เป็นเมตร -> ใช้ 1.0)
     """
     data  = _load_json(json_input)
-    feats = _collect_features(data)
+    feats = data.get("features", [])
     line_length_map = {}
 
     def _first_num(attrs, keys):
@@ -1233,31 +1227,24 @@ def build_line_length_map_from_json(json_input,
 def get_transformer_xy_from_json(json_input, facilityid=None):
     """
     คืน (x, y) ของหม้อแปลงจาก JSON:
-    - ถ้าระบุ facilityid: ต้องหา feature ที่ FACILITYID ตรงเป๊ะก่อนเสมอ (สำคัญที่สุด)
-    - ถ้าไม่ระบุ หรือหาไม่เจอ: fallback ไปใช้ feature แรกที่มี RATEKVA (เดาว่าเป็นหม้อแปลง)
-    - ถ้ายังไม่เจอ: ใช้ point ตัวแรกที่พบใน JSON
-    หาไม่ได้เลย -> raise ValueError
+    - เลือก feature ที่มี RATEKVA ก่อน และ/หรือ FACILITYID ตรง (ถ้าส่งมา)
+    - ถ้าไม่เจอ ใช้ point ตัวแรกที่พบใน JSON
+    หาไม่ได้ -> raise ValueError
     """
     data  = _load_json(json_input)
     feats = _collect_features(data)
 
-    # 1) ต้องแมตช์ FACILITYID เป๊ะก่อน ถ้ามีการระบุมา — ห้ามให้ feature อื่น (เช่น หม้อแปลง
-    #    ข้างเคียงที่ถูกดึงมาด้วย MV buffer query) แซงคิวมาแม้จะมี RATEKVA ก็ตาม
-    if facilityid:
-        for f in feats:
-            attrs = (f.get("attributes") or {})
-            g     = (f.get("geometry") or {})
-            if "x" in g and "y" in g and str(attrs.get("FACILITYID", "")).strip() == str(facilityid):
-                return (float(g["x"]), float(g["y"]))
-
-    # 2) ไม่มี facilityid หรือไม่พบที่ตรง -> ใช้ feature แรกที่มี RATEKVA
+    # หา TR ที่น่าใช่ก่อน (มี RATEKVA หรือ FACILITYID ตรง)
     for f in feats:
         attrs = (f.get("attributes") or {})
         g     = (f.get("geometry") or {})
-        if "x" in g and "y" in g and attrs.get("RATEKVA") is not None:
-            return (float(g["x"]), float(g["y"]))
+        if "x" in g and "y" in g:
+            has_rate = attrs.get("RATEKVA") is not None
+            fid_ok   = (facilityid is None) or (str(attrs.get("FACILITYID","")).strip() == str(facilityid))
+            if has_rate or fid_ok:
+                return (float(g["x"]), float(g["y"]))
 
-    # 3) ไม่เจอ -> เอา point ตัวแรกที่มีพิกัด
+    # ไม่เจอ -> เอา point ตัวแรก
     for f in feats:
         g = (f.get("geometry") or {})
         if "x" in g and "y" in g:
@@ -1291,13 +1278,16 @@ def build_phase_indexer_from_json(
     data = _load_json(json_input)
     feats = data.get("features", [])
 
-    # --- helper: prefix filter ---
+    # --- helper: tag filter (substring match, ตาม convention เดียวกับ extractMeterData_json/
+    # extractServiceLines_json ที่เช็ค "MT"/"EL" in tag แทน startswith เพราะ office/area code
+    # นำหน้า TAG ไม่คงที่ เช่น "2233LC...", "22LCEA...", "2244LC..." ล้วนมี "LC" อยู่ในตัว) ---
     def _tag_ok(tag: str) -> bool:
         if not tag_prefix_for_lv:
             return True
+        tag = str(tag)
         if isinstance(tag_prefix_for_lv, (list, tuple, set)):
-            return any(str(tag).startswith(p) for p in tag_prefix_for_lv)
-        return str(tag).startswith(str(tag_prefix_for_lv))
+            return any(p in tag for p in tag_prefix_for_lv)
+        return str(tag_prefix_for_lv) in tag
 
     # --- helper: phase mapping (ให้ตรงกับไฟล์นี้) ---
     # หลักฐานใน JSON:
@@ -1472,6 +1462,7 @@ def build_phase_indexer_from_json(
         return allowed_list[best_i] if allowed_list[best_i] else ["A", "B", "C"]
 
     return allowed_for_xy
+
 
 # -------------------------------------------------------------------
 # Build network & validate
@@ -1895,7 +1886,7 @@ def run_pipeline_for_facilityid(facility_id: str, project_id: str, region: str =
     logging.info(f"[Balance] Start with FACILITYID={facility_id}, region={region}, GIS={PEA_QUERY_BASE}")
 
     # 1) BalanceLoad + Join → เซฟ TRwitmeter{fac}.json (มีแต่จุด/ฟีเจอร์ตาม Balance)
-    result = run_once_with_facilityid(        
+    result = run_once_with_facilityid(
         facilityid=facility_id,
         table_id=BAL_TABLE_ID,
         key_table=BAL_KEY_TABLE,
@@ -1918,7 +1909,6 @@ def run_pipeline_for_facilityid(facility_id: str, project_id: str, region: str =
             base_dir,
             f"{project_id}_NetworkLV{facility_id}_with_MV.json"
         )
-        # merged_json = f"NetworkLV{facility_id}_with_MV.json"
         out_json    = merge_balance_and_mv_to_file(base_json, mv_fs, merged_json)
         logging.info(f"[MV] Merged JSON saved: {out_json} (MV features: {len(mv_fs.get('features', []))})")
     except Exception as e:
@@ -1928,11 +1918,7 @@ def run_pipeline_for_facilityid(facility_id: str, project_id: str, region: str =
     # 3) Extract เส้น + มิเตอร์ จากไฟล์รวม
     lvX, lvY, lvLines, snap_tol, snap_map = extractLineData_json(out_json, snap_tolerance=None)
     meterLocations, initialVoltages, totalLoads, phase_loads, peano, phases = extractMeterData_json(out_json)
-    
-    # 3.1) Eservice line Extract
     svcX, svcY, svcLines, svc_tol, svc_snap = extractServiceLines_json(out_json)
-   
-    # 3.2) MV Line
     try:
         mvX, mvY, mvLines, mv_tol, mv_snap = extractMVLineData_json(
             out_json,
