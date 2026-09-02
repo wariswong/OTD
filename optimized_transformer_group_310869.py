@@ -6866,12 +6866,16 @@ def main():
 
     # 5‑A.2)  recursive split (optional — เปิดด้วย --recursive-split)
     if RECURSIVE_SPLIT_ENABLED:
-        run_recursive_optimisation(
+        _recursive_leaves = run_recursive_optimisation(
             latest_split_result, lvLines, mvLines, initialVoltage, conductorResistance,
             powerFactor, conductor_reactance=conductorReactance, lv_data=lvData, svc_lines=svcLines,
             max_group_kVA=RECURSIVE_SPLIT_MAX_KVA, max_depth=RECURSIVE_SPLIT_MAX_DEPTH,
             peano=peano
         )
+        if _API_PROJECT_ID is not None and _recursive_leaves:
+            _write_recursive_split_output(
+                os.path.join("pea_no_projects", "output", _API_PROJECT_ID), _recursive_leaves
+            )
 
     # 5‑B)  open the candidate‑edge dialog (GUI mode only — skip in headless/batch)
     if IS_GUI:
@@ -6887,6 +6891,49 @@ def main():
                             conductorReactance, lvData, svcLines)
 
     logging.info("Program finished successfully.")
+
+
+def _write_recursive_split_output(output_dir, leaves):
+    """เขียนผล recursive split (leaf groups) เป็น JSON + GeoJSON สำหรับหน้าเว็บ
+
+    leaves: list ของ dict จาก run_recursive_optimisation() — แต่ละอันมี
+    tag/meter_locs/phase_loads/tx_loc/load_kVA/n_meters/meter_idx
+    """
+    try:
+        _proj_tm3 = pyproj.CRS.from_proj4("+proj=utm +zone=47 +datum=WGS84 +units=m +no_defs")
+        _proj_wgs84 = pyproj.CRS("EPSG:4326")
+        _xf = pyproj.Transformer.from_crs(_proj_tm3, _proj_wgs84, always_xy=True)
+    except Exception as e:
+        logging.error(f"[recursive-split] pyproj init failed: {e}")
+        return
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    rows = []
+    feat_items = []
+    for leaf in leaves:
+        tx_loc = leaf.get('tx_loc')
+        lat = lon = None
+        if tx_loc is not None:
+            lon, lat = _xf.transform(tx_loc[0], tx_loc[1])
+        rows.append({
+            "tag": leaf['tag'],
+            "load_kVA": round(float(leaf['load_kVA']), 1),
+            "n_meters": int(leaf['n_meters']),
+            "lat": round(float(lat), 7) if lat is not None else None,
+            "lon": round(float(lon), 7) if lon is not None else None,
+        })
+        if lat is not None:
+            feat_items.append(Feature(geometry=Point((lon, lat)), properties={
+                "name": leaf['tag'], "load_kVA": rows[-1]["load_kVA"], "n_meters": rows[-1]["n_meters"],
+            }))
+
+    with open(os.path.join(output_dir, "recursive_split.json"), "w", encoding="utf-8") as _f:
+        json.dump(rows, _f, ensure_ascii=False, indent=2)
+    with open(os.path.join(output_dir, "recursive_split_points.geojson"), "w", encoding="utf-8") as _f:
+        json.dump(FeatureCollection(feat_items), _f, ensure_ascii=False, indent=2)
+
+    logging.info(f"[recursive-split] wrote {len(rows)} leaf group(s) to: {output_dir}")
 
 
 def _write_headless_geojson(output_dir, lvLines, mvLines, eserviceLines,
@@ -6971,14 +7018,22 @@ def _write_headless_geojson(output_dir, lvLines, mvLines, eserviceLines,
     logging.info(f"[headless] GeoJSON outputs written to: {output_dir}")
 
 
-def main_pipeline(project_id: str, facility_id: str, sp_index: int = 0):
+def main_pipeline(project_id: str, facility_id: str, sp_index: int = 0,
+                   recursive_split: bool = False, max_group_kva: float = None,
+                   max_split_depth: int = None):
     """API entry point — แทนที่ processNew_no_gui_peanumber.main_pipeline()
 
     อ่านไฟล์ JSON จาก pea_no_projects/input/{project_id}/
     เขียน results.json + GeoJSON ไปที่ pea_no_projects/output/{project_id}/
     เขียน downloads (shapefile/CSV) ไปที่ pea_no_projects/output/{project_id}/downloads/
+
+    recursive_split=True: หลังแบ่ง Group1/Group2 แล้ว แบ่งกลุ่มย่อยต่อไปอีก
+    (ดู run_recursive_optimisation) จนกว่าโหลดแต่ละกลุ่มใบจะ <= max_group_kva
+    (kVA, ค่าเริ่มต้น RECURSIVE_SPLIT_MAX_KVA) — ใช้ตอนขนาดหม้อแปลงที่คำนวณได้
+    ไม่มีในคลัง ผลลัพธ์เขียนไปที่ recursive_split.json/recursive_split_points.geojson
     """
     global out_json, OUT_DIR, IS_GUI, _API_PROJECT_ID, _API_SP_INDEX
+    global RECURSIVE_SPLIT_ENABLED, RECURSIVE_SPLIT_MAX_KVA, RECURSIVE_SPLIT_MAX_DEPTH
 
     json_file = os.path.join(
         "pea_no_projects", "input", str(project_id),
@@ -6987,12 +7042,25 @@ def main_pipeline(project_id: str, facility_id: str, sp_index: int = 0):
     if not os.path.exists(json_file):
         raise FileNotFoundError(f"Input JSON not found: {json_file}")
 
-    logging.info(f"[main_pipeline] project={project_id}, fac={facility_id}, sp_index={sp_index}, json={json_file}")
+    logging.info(f"[main_pipeline] project={project_id}, fac={facility_id}, sp_index={sp_index}, "
+                 f"recursive_split={recursive_split}, json={json_file}")
 
     out_json = json_file
     IS_GUI = False
     _API_PROJECT_ID = str(project_id)
     _API_SP_INDEX = int(sp_index)
+    RECURSIVE_SPLIT_ENABLED = bool(recursive_split)
+    if max_group_kva is not None:
+        RECURSIVE_SPLIT_MAX_KVA = float(max_group_kva)
+    if max_split_depth is not None:
+        RECURSIVE_SPLIT_MAX_DEPTH = int(max_split_depth)
+
+    if not RECURSIVE_SPLIT_ENABLED:
+        # ลบผลลัพธ์ recursive split ค้างของรอบก่อน กัน UI แสดงข้อมูลเก่าผิดๆ
+        for _fn in ("recursive_split.json", "recursive_split_points.geojson"):
+            _fp = os.path.join("pea_no_projects", "output", str(project_id), _fn)
+            if os.path.exists(_fp):
+                os.remove(_fp)
 
     _saved_argv = sys.argv
     sys.argv = [sys.argv[0]]
@@ -7002,6 +7070,7 @@ def main_pipeline(project_id: str, facility_id: str, sp_index: int = 0):
         sys.argv = _saved_argv
         _API_PROJECT_ID = None
         _API_SP_INDEX = 0
+        RECURSIVE_SPLIT_ENABLED = False
 
 
 def runProcess():

@@ -93,6 +93,12 @@
         <i class="bi bi-arrow-repeat" aria-hidden="true"></i>
         <span id="reprocessBtnText">RE-PROCESS</span>
       </button>
+      <button id="recursiveSplitBtn" type="button"
+              title="แบ่งกลุ่มย่อยเพิ่ม กรณีขนาดหม้อแปลงที่คำนวณได้ไม่มีในคลัง"
+              class="inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] bg-orange-500 hover:bg-orange-600 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-bold rounded-xl shadow-md shadow-orange-500/20 transition-all active:scale-95 focus-visible:ring-2 focus-visible:ring-orange-300 focus:outline-none">
+        <i class="bi bi-diagram-3" aria-hidden="true"></i>
+        <span>แบ่งกลุ่มย่อยเพิ่ม</span>
+      </button>
       <a href="{{ url_for('projects.download_pea_no_project_files', project_id=project) }}"
          class="inline-flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] bg-primary hover:bg-primary-dark text-white text-sm font-bold rounded-xl shadow-md shadow-primary/20 transition-all active:scale-95 focus-visible:ring-2 focus-visible:ring-primary/40 focus:outline-none">
         <i class="bi bi-download" aria-hidden="true"></i>ดาวน์โหลด
@@ -554,6 +560,39 @@
         </table>
       </div>
     </div>
+
+    {# Recursive split — leaf groups (แสดงเฉพาะเมื่อเคยกด "แบ่งกลุ่มย่อยเพิ่ม") #}
+    {% if result.recursive_split %}
+    <div class="bg-white rounded-[2rem] shadow-xl shadow-gray-200/50 border border-gray-100 overflow-hidden mb-8">
+      <div class="px-8 py-5 border-b border-gray-100 bg-orange-50/30 flex justify-between items-center">
+        <h3 class="font-black text-orange-800 uppercase tracking-widest text-sm"><i class="bi bi-diagram-3 mr-2"></i>กลุ่มย่อยที่แบ่งเพิ่ม (Recursive Split)</h3>
+        <span class="text-xs font-bold text-orange-400">{{ result.recursive_split|length }} กลุ่ม</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="bg-gray-50 text-[10px] font-black uppercase text-gray-400 text-left">
+              <th class="px-8 py-4">กลุ่ม</th>
+              <th class="px-8 py-4">โหลด (kVA)</th>
+              <th class="px-8 py-4">จำนวนมิเตอร์</th>
+              <th class="px-8 py-4">พิกัด</th>
+            </tr>
+          </thead>
+          <tbody class="font-bold text-gray-700">
+            {% for leaf in result.recursive_split %}
+            <tr class="border-t border-gray-50 hover:bg-gray-50 transition-colors {{ 'cursor-pointer' if leaf.lat }}"
+                {% if leaf.lat %}onclick="panToFeature({{ leaf.lon }}, {{ leaf.lat }})"{% endif %}>
+              <td class="px-8 py-3">{{ leaf.tag }}</td>
+              <td class="px-8 py-3 text-orange-600">{{ leaf.load_kVA }}</td>
+              <td class="px-8 py-3">{{ leaf.n_meters }}</td>
+              <td class="px-8 py-3 text-gray-400 text-xs font-mono">{{ "%.5f"|format(leaf.lat) ~ ", " ~ "%.5f"|format(leaf.lon) if leaf.lat else "—" }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
   </div>
 </div>
 {% endblock %}
@@ -731,7 +770,24 @@
       });
     }
 
-    map.addMany([lvLineLayer, mvLineLayer, meterLayer, featureGroups]);
+    // จุดหม้อแปลงของกลุ่มย่อยที่แบ่งเพิ่ม (recursive split) — ไม่มีไฟล์ถ้ายังไม่เคยกด
+    // "แบ่งกลุ่มย่อยเพิ่ม" ปล่อยให้ layer นี้ load ไม่สำเร็จเงียบๆ ได้ ไม่กระทบ layer อื่น
+    const recursiveSplitLayer = new GeoJSONLayer({
+      url: `/pea_no_projects/output/${projectId}/recursive_split_points.geojson`,
+      title: "กลุ่มย่อยที่แบ่งเพิ่ม (Recursive Split)",
+      renderer: {
+        type: "simple",
+        symbol: { type: "simple-marker", style: "triangle", color: "#f97316", size: 16, outline: { color: "white", width: 1.5 } }
+      },
+      labelingInfo: [{
+        labelExpressionInfo: { expression: "$feature.name" },
+        labelPlacement: "above-right",
+        symbol: { type: "text", color: "#9a3412", font: { size: 10, family: "Arial", weight: "bold" }, haloColor: "white", haloSize: 1.5 }
+      }],
+      popupTemplate: { title: "{name}", content: "โหลด: {load_kVA} kVA<br>จำนวนมิเตอร์: {n_meters}" }
+    });
+
+    map.addMany([lvLineLayer, mvLineLayer, meterLayer, featureGroups, recursiveSplitLayer]);
     view.ui.add(new Legend({ view, style: "classic" }), "top-right");
 
     // ===== INDEX SELECTOR + MAP MARKER =====
@@ -926,6 +982,54 @@
       }
     });
   }); // end require
+
+  // ===== RECURSIVE SPLIT (แบ่งกลุ่มย่อยเพิ่มจากจุดแบ่งเดิม — 2 เครื่อง → 4 เครื่อง) =====
+  // ไม่ถามเพดานโหลด — บังคับแบ่งอีก 1 ชั้นเสมอ (max_group_kva=0 กันไม่ให้กลุ่มไหน
+  // "เล็กพอ" จนถูกข้าม, max_split_depth=1 กันไม่ให้แบ่งเกิน 1 ชั้น) โดยใช้จุดแบ่ง/
+  // อัลกอริทึมเดียวกับตอนแบ่ง Group1/Group2 ครั้งแรก แค่รันซ้ำกับผลลัพธ์ปัจจุบัน
+  document.getElementById("recursiveSplitBtn").addEventListener("click", () => {
+    Swal.fire({
+      title: 'แบ่งกลุ่มย่อยเพิ่ม?',
+      text: 'แบ่งหม้อแปลงเครื่องที่ 1 และ 2 (ที่กำลังแสดงอยู่) ต่ออีกเครื่องละ 1 ครั้ง รวมเป็น 4 เครื่อง ใช้จุดแบ่งเดียวกับตอนแบ่งครั้งแรก',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'แบ่งกลุ่มย่อย', cancelButtonText: 'ยกเลิก',
+      buttonsStyling: false,
+      customClass: {
+        confirmButton: 'bg-orange-500 text-white px-8 py-3 rounded-xl mx-2 font-bold shadow-lg shadow-orange-500/20',
+        cancelButton: 'bg-gray-100 text-gray-600 px-8 py-3 rounded-xl mx-2 font-bold',
+        popup: 'rounded-[2rem]'
+      }
+    }).then(result => {
+      if (!result.isConfirmed) return;
+      const btn = document.getElementById("recursiveSplitBtn");
+      btn.disabled = true;
+      Swal.fire({ title: 'กำลังแบ่งกลุ่มย่อย', text: 'กรุณารอสักครู่...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+      fetch(`/reprocessPeaNoProject/${projectId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sp_index: {{ result.sp_index | default(0) }},
+          recursive_split: true,
+          max_group_kva: 0,
+          max_split_depth: 1
+        })
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data.success) {
+            Swal.fire({ icon: 'success', title: 'สำเร็จ', text: data.message }).then(() => location.reload());
+          } else {
+            btn.disabled = false;
+            Swal.fire({ icon: 'error', title: 'ผิดพลาด', text: data.error });
+          }
+        })
+        .catch(() => {
+          btn.disabled = false;
+          Swal.fire({ icon: 'error', title: 'ผิดพลาด', text: 'ไม่สามารถแบ่งกลุ่มย่อยได้' });
+        });
+    });
+  });
 
   // ===== VIEW TOGGLER (card / table) =====
   const showCardBtn = document.getElementById("showCardBtn");

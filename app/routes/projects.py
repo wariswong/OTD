@@ -357,6 +357,12 @@ def pea_no_project_map_view(project_id):
                     except ValueError:
                         pass
             cached_indices.sort()
+
+        recursive_split_path = f"pea_no_projects/output/{project_id}/recursive_split.json"
+        if os.path.exists(recursive_split_path):
+            with open(recursive_split_path, "r", encoding="utf-8") as f:
+                result_data["recursive_split"] = json.load(f)
+
         return render_template("peaNoProjectmap.html", project=project_id, result=result_data,
                                cached_indices=cached_indices, user=user)
     except FileNotFoundError:
@@ -412,11 +418,16 @@ def pea_no_project_reprocess_with_index(project_id):
     conn = get_db_connection()
     cur = conn.cursor(dictionary=True)
     try:
-        sp_index = (request.get_json(silent=True) or {}).get("sp_index", 0)
+        body = request.get_json(silent=True) or {}
+        sp_index = body.get("sp_index", 0)
+        recursive_split = bool(body.get("recursive_split", False))
+        max_group_kva = body.get("max_group_kva")
+        max_split_depth = body.get("max_split_depth")
         cur.execute("SELECT project_name FROM pea_no_projects WHERE id = %s AND owner_id = %s", (project_id, employee_id))
         project = cur.fetchone()
         if not project: return jsonify({"error": "ไม่พบโปรเจค หรือคุณไม่มีสิทธิ์เข้าถึง"}), 404
-        main_pipeline(project_id=str(project_id), facility_id=project["project_name"], sp_index=sp_index)
+        main_pipeline(project_id=str(project_id), facility_id=project["project_name"], sp_index=sp_index,
+                      recursive_split=recursive_split, max_group_kva=max_group_kva, max_split_depth=max_split_depth)
         return jsonify({"success": True, "message": "ประมวลผลเสร็จสิ้น"})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
