@@ -1,8 +1,13 @@
 import io
 import logging
+import re
+from pathlib import Path
 import pandas as pd
 import numpy as np
 from ..database import get_db_connection
+
+_SHARELOAD_FEASIBLE_DIR = Path(__file__).resolve().parent.parent.parent / 'feature_shareload' / 'FEASIBLE'
+_SHARELOAD_PAIR_RE = re.compile(r'^(\d{2}-\d{6})_(\d{2}-\d{6})$')
 
 class StatsService:
     @staticmethod
@@ -66,6 +71,32 @@ class StatsService:
         names = [r[0] for r in cur.fetchall()]
         cur.close(); conn.close()
         return problems, fixes, names
+
+    @staticmethod
+    def get_paired_transformers(facility_ids):
+        """หม้อแปลงที่เคยรัน "แชร์โหลด" (Transfer Optimizer) จับคู่ด้วยแล้ว
+
+        อ่านจากชื่อโฟลเดอร์ feature_shareload/FEASIBLE/<fac_a>_<fac_b>/ ตรงๆ
+        (ข้อมูลเดียวกับที่หน้า /shareload แสดงในรายการที่เคยรันแล้ว) แล้วคืน
+        {facility_id: [{"pair_key", "other"}]} เฉพาะ facility_id ที่ขอมา
+        """
+        wanted = set(facility_ids)
+        result = {}
+        if not wanted or not _SHARELOAD_FEASIBLE_DIR.exists():
+            return result
+
+        for folder in _SHARELOAD_FEASIBLE_DIR.iterdir():
+            if not folder.is_dir():
+                continue
+            m = _SHARELOAD_PAIR_RE.match(folder.name)
+            if not m:
+                continue
+            fac_a, fac_b = m.group(1), m.group(2)
+            if fac_a in wanted:
+                result.setdefault(fac_a, []).append({"pair_key": folder.name, "other": fac_b})
+            if fac_b in wanted:
+                result.setdefault(fac_b, []).append({"pair_key": folder.name, "other": fac_a})
+        return result
 
     @staticmethod
     def upload_stats(file_stream, target_region, overwrite=False):

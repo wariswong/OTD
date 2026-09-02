@@ -32,6 +32,10 @@ def transformer_stats():
         total_pages = (total_rows + per_page - 1) // per_page
         problem_options, fix_options, name_options = StatsService.get_filter_options(region)
 
+        paired_map = StatsService.get_paired_transformers([r['facility_id'] for r in stats])
+        for r in stats:
+            r['nearby_pairs'] = paired_map.get(r['facility_id'], [])
+
         user = session.get("user", {})
         return render_template('transformer_stats.html',
                              stats=stats,

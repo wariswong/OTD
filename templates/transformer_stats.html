@@ -128,7 +128,7 @@
     <div id="tableTopScroll" class="overflow-x-auto border-b border-gray-100" style="height:16px">
         <div id="tableTopScrollInner" style="height:1px"></div>
     </div>
-    <div id="tableScroll" class="overflow-x-auto">
+    <div id="tableScroll" class="overflow-x-auto overflow-y-auto" style="max-height: 70vh;">
         <table class="min-w-full w-max text-left border-collapse bg-white">
             <thead>
                 <tr class="bg-gray-50 text-gray-600 text-xs font-semibold uppercase tracking-wider">
@@ -149,6 +149,7 @@
                     <th class="px-6 py-4 border-b text-center">%_IC</th>
                     <th class="px-6 py-4 border-b">สรุปปัญหา</th>
                     <th class="px-6 py-4 border-b">แนวทางการแก้ไข</th>
+                    <th class="px-6 py-4 border-b">หม้อแปลงใกล้เคียง (จับคู่แชร์โหลดได้)</th>
                     <th class="px-6 py-4 border-b text-center">MAP</th>
                 </tr>
             </thead>
@@ -201,8 +202,21 @@
                             {% endif %}
                         {% else %}-{% endif %}
                     </td>
+                    <td class="px-6 py-4 text-sm" style="min-width: 200px;">
+                        {% if row.nearby_pairs %}
+                        <div class="flex flex-wrap gap-1">
+                            {% for pair in row.nearby_pairs %}
+                            <a href="{{ url_for('shareload.shareload_result', pair_key=pair.pair_key) }}"
+                               title="ดูผลวิเคราะห์แชร์โหลดกับ {{ pair.other }}"
+                               class="inline-flex items-center gap-1 text-xs bg-teal-50 text-teal-700 border border-teal-100 px-2 py-1 rounded-full hover:bg-teal-100 transition-colors font-mono no-underline">
+                                <i class="bi bi-signpost-split"></i>{{ pair.other }}
+                            </a>
+                            {% endfor %}
+                        </div>
+                        {% else %}-{% endif %}
+                    </td>
                     <td class="px-6 py-4 text-center">
-                        <button onclick='openMap({{ row|tojson|safe }})' 
+                        <button onclick='openMap({{ row|tojson|safe }})'
                                 class="p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors border border-primary/10 bg-white">
                             <i class="bi bi-geo-alt-fill"></i>
                         </button>
