@@ -19,7 +19,7 @@ Usage:
     python PhaseOptimizer.py <FACILITYID> [options]
 
     --min-voltage   float  แรงดันต่ำสุด (V)          [default 200]
-    --max-imbalance float  phase imbalance สูงสุด (%) [default 15]
+    --max-imbalance float  phase imbalance สูงสุด (%) [default 25]
     --json-dir      path   folder JSON               [default D:\\testpy\\jsonfile]
     --out-dir       path   folder ผลลัพธ์            [default D:\\TRneighborhood\\output]
 """
@@ -730,7 +730,7 @@ class LVOptimizer:
         self,
         facilityid: str,
         min_voltage_v: float = 200.0,
-        max_imbalance_pct: float = 15.0,
+        max_imbalance_pct: float = 25.0,
         json_dir: str = JSON_DIR,
         max_sim_time_s: float = 300.0,
         region: Optional[str] = None,
@@ -1744,7 +1744,7 @@ def main() -> None:
                     help="FACILITYID หม้อแปลง เช่น 04-123456 (ถ้าไม่ใส่จะถามอีกครั้ง)")
     ap.add_argument("--min-voltage",   type=float, default=200.0, metavar="V",
                     help="แรงดันต่ำสุดที่ยอมรับ (V)")
-    ap.add_argument("--max-imbalance", type=float, default=15.0,  metavar="PCT",
+    ap.add_argument("--max-imbalance", type=float, default=25.0,  metavar="PCT",
                     help="phase imbalance สูงสุด (%%)")
     ap.add_argument("--json-dir",      default=JSON_DIR,
                     help="folder ที่เก็บไฟล์ JSON")

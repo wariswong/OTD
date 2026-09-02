@@ -242,7 +242,7 @@ def run_phase_optimizer(
     out_dir: str,
     region: str | None = None,
     min_voltage_v: float = 200.0,
-    max_imbalance_pct: float = 15.0,
+    max_imbalance_pct: float = 25.0,
     max_sim_time_s: float = 300.0,
 ) -> dict:
     """Run LVOptimizer end-to-end and write all web-facing output files.
