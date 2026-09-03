@@ -1775,8 +1775,19 @@ def draw_interactive_map(
         ), row=1, col=1)
 
     # ── Top-5 feasible scenarios: switch + tie (selectable) ──────────────
+    # ต้อง sort ตามเกณฑ์เดียวกับ Step 7 (Mark optimal) ก่อนตัด top-5 เสมอ — ถ้าตัด
+    # จาก results ตรงๆ (ลำดับตามที่ candidate ถูกสร้าง ไม่ใช่ลำดับคุณภาพ) scenario ที่
+    # optimal อาจหลุด top-5 ไปเลยถ้ามันอยู่ลำดับท้ายๆ ตอนสร้าง candidate ทำให้ dropdown
+    # selector บนหน้าเว็บไม่มีตัวเลือกที่ดีที่สุดให้เลือก
     opt = next((r for r in results if r.get("optimal")), None)
-    feasible_top = [r for r in results if r.get("feasible")][:5]
+    feasible_top = sorted(
+        (r for r in results if r.get("feasible")),
+        key=lambda r: (
+            -round(r.get("min_v", 0.0), 1),
+            r["a_loading_after"],
+            r.get("tie_distance_m", 0.0),
+        ),
+    )[:5]
     SCEN_COLORS  = ["#00B050", "#0070C0", "#7030A0", "#FF6600", "#A0522D"]
 
     scen_trace_start = len(fig.data)
