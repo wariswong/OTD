@@ -38,7 +38,7 @@ _THIS_DIR = Path(__file__).resolve().parent
 if str(_THIS_DIR) not in sys.path:
     sys.path.insert(0, str(_THIS_DIR))
 
-from PhaseOptimizer import (         # noqa: E402
+from PhaseOptimizer_03092026 import (         # noqa: E402
     LVOptimizer, SimResult, save_excel_report, draw_map,
     _meter_current_pd, _build_meter_inventory, PD_TO_PHASE,
 )
@@ -102,6 +102,7 @@ def _build_results_json(opt: LVOptimizer) -> dict:
             "from_size": opt.applied_upgrade.from_size,
             "to_size": opt.applied_upgrade.to_size,
             "n_affected": opt.applied_upgrade.n_affected,
+            "n_segments": len(opt.applied_upgrade.upgraded_edges),
             "result": _sim_summary(opt.upgrade_result),
         } if opt.applied_upgrade else None,
         "phase_addition": {
@@ -220,12 +221,13 @@ def _write_geojson_layers(opt: LVOptimizer, out_dir: Path) -> list:
         })
 
     if opt.applied_upgrade:
-        u, v = opt.applied_upgrade.edge
-        _add_line(
-            u, v,
-            f"เพิ่มขนาดสาย {opt.applied_upgrade.from_size}→{opt.applied_upgrade.to_size}mm²",
-            "conductor_upgrade",
-        )
+        # อัปเกรดทั้ง path (ทุก segment จากหม้อแปลง→โหนดแรงดันต่ำ) ไม่ใช่แค่ entry
+        # edge เส้นเดียว — ต้องวาดทุก segment ใน upgraded_edges ให้ตรงกับที่
+        # draw_map()/draw_interactive_map() ใน PhaseOptimizer_03092026.py แสดง
+        # ไม่งั้นแผนที่เว็บจะโชว์แค่ช่วงแรกช่วงเดียว สั้นกว่าที่อัปเกรดจริง
+        name = f"เพิ่มขนาดสาย →{opt.applied_upgrade.to_size}mm² ({len(opt.applied_upgrade.upgraded_edges)} ช่วง)"
+        for _fi, eu, ev in opt.applied_upgrade.upgraded_edges:
+            _add_line(eu, ev, name, "conductor_upgrade")
 
     if opt.applied_phase_add:
         for _fi, eu, ev in opt.applied_phase_add.upgraded_edges:
