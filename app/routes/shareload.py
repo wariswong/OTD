@@ -249,7 +249,7 @@ def _meter_points(traces: list, prefix: str) -> list:
     return pts
 
 
-# Multi-scenario trace names from TransferOptimizer-072026.py's selectable-
+# Multi-scenario trace names from TransferOptimizer_16092026.py's selectable-
 # scenario map, e.g. "#3 Switch", "#1 ★OPT Tie 38.8m", "#2 Voltages" — the
 # ★OPT tag (only present on the optimal scenario) decodes to a literal '★'
 # once the JSON is parsed, so no escape-sequence handling is needed here.
@@ -376,7 +376,7 @@ def parse_plotly_to_map_data(html_path: Path, fac_a: str, fac_b: str) -> dict:
     if volt_trace is not None:
         result['nodes_voltage'] = _voltage_nodes_from_trace(volt_trace)
 
-    # ---- New format (TransferOptimizer-072026.py): multi-scenario selector ----
+    # ---- New format (TransferOptimizer_16092026.py): multi-scenario selector ----
     # If nothing above matched, this HTML almost certainly came from the
     # newer optimizer's per-scenario trace naming — try that scheme too
     # instead of leaving the map missing tie/switch/voltage layers.

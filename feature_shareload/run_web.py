@@ -82,11 +82,11 @@ def main():
     logging.info(f"Starting TransferOptimizer for {fac_a} <-> {fac_b} (region={region})")
     logging.info(f"Output dir: {out_dir}")
 
-    # Module filename has a hyphen (TransferOptimizer-072026.py), so it can't
-    # be reached with a plain `import` statement — load it by file path.
+    # Module filename changes every promotion round, so it can't be reached
+    # with a plain `import` statement — load it by file path.
     import importlib.util
     _spec = importlib.util.spec_from_file_location(
-        "TransferOptimizer_072026", Path(__file__).parent / "TransferOptimizer-072026.py"
+        "TransferOptimizer_16092026", Path(__file__).parent / "TransferOptimizer_16092026.py"
     )
     _optimizer_mod = importlib.util.module_from_spec(_spec)
     _spec.loader.exec_module(_optimizer_mod)

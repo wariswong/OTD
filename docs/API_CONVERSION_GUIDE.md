@@ -78,7 +78,8 @@ from optimized_transformer_group_310869 import main_pipeline   # ต้องแ
 | BalanceLoad → NetworkLV JSON | `INPUTJSON2_<code>.py` | `InputJsonApi.py` (ชื่อคงที่) | `app/services/project_service.py`, `app/routes/projects.py`, `app.py` | A |
 | Transformer group optimization | `optimized_transformer_group_<code>.py` | `optimized_transformer_group_<code>.py` (import ชื่อไฟล์ล่าสุดตรงๆ) | เช่นเดียวกัน | B |
 | Phase Optimizer | `feature_PhaseOptimizer/PhaseOptimizer_<code>.py` (import ชื่อไฟล์ล่าสุดตรงๆ จาก `run_web.py`) | `feature_PhaseOptimizer/run_web.py` (import ใน-process) | `app/routes/phase_optimizer.py`, `app/services/phase_optimizer_service.py` | B (ซ้อนใน in-process wrapper) |
-| Shareload / Transfer Optimizer | `feature_shareload/TransferOptimizer-*.py` | `feature_shareload/run_web.py` (เรียกผ่าน `subprocess.run`) | `app/routes/shareload.py` | subprocess wrapper |
+| Shareload / Transfer Optimizer | `feature_shareload/TransferOptimizer_<code>.py` (โหลดผ่าน `importlib.util.spec_from_file_location` เพราะชื่อไฟล์เปลี่ยนทุกรุ่น) | `feature_shareload/run_web.py` (เรียกผ่าน `subprocess.run`) | `app/routes/shareload.py` | B (ซ้อนใน subprocess wrapper) |
+| Runopendss (shared DSS/JSON helpers) | `feature_shareload/Runopendss_All<code>.py` | import ตรงชื่อไฟล์ล่าสุดจาก TransferOptimizer และ PhaseOptimizer ทั้งคู่ | ทั้งสองฟีเจอร์ข้างบน | B (dependency ร่วม ต้องอัปเดตพร้อมทั้งคู่) |
 
 รายละเอียดโครงสร้างโฟลเดอร์ทั้งหมด ดูที่ [`docs/PROJECT_STRUCTURE.md`](PROJECT_STRUCTURE.md)
 
@@ -116,3 +117,20 @@ Logic ใหม่จริงที่คงไว้ทั้งหมด — 
 - รายงาน (console/Excel sheet "Phase Addition"/Plotly summary table) อัปเดตให้โชว์ Δimbalance และ mode ที่ใช้ควบคู่กับ ΔVmin ทุกจุด
 
 หลังผนวก diff เหลือแค่ 19 hunks (397 บรรทัด) ตรงกับ logic ใหม่ล้วนๆ ไม่มี scaffolding ค้าง — ย้าย `PhaseOptimizer.py` เดิมไป `notUse/`
+
+## กรณีศึกษาจริง (2026-09-16): แปลง 3 ไฟล์พร้อมกัน (`Runopendss_All16092026.py` + `TransferOptimizer_16092026.py` + `PhaseOptimizer_16092026.py`)
+
+รอบนี้ไฟล์ดิบใหม่ 3 ไฟล์เข้ามาพร้อมกันเป็น dependency chain: `Runopendss_All16092026.py` (feature_shareload/) ← `TransferOptimizer_16092026.py` (เข้ามาที่ **root**, ต้องย้ายเข้า `feature_shareload/`) ← `PhaseOptimizer_16092026.py` (feature_PhaseOptimizer/) — ต้องแปลงเรียงตามลำดับ dependency แล้วต่อ import ให้ครบทั้งสาย ไม่ใช่แปลงทีละไฟล์แบบแยกส่วน
+
+**scaffolding ที่หายซ้ำในทั้ง `TransferOptimizer_16092026.py` และ `PhaseOptimizer_16092026.py`** (เซ็ตเดียวกับที่ PhaseOptimizer เจอมา 2 รอบก่อนหน้า — ยืนยันชัดเจนว่าไฟล์ดิบทุกไฟล์ในกลุ่มนี้ fork จาก snapshot เก่าเดียวกัน): sys.path bootstrap, `region` param, `_ensure_json()` แบบ `InputJsonApi`/`project_id` (ของใหม่กลับไปเรียก `INPUT_FACILITY` ที่ไม่มีจริงอีกแล้ว), `self.error` (เฉพาะ PhaseOptimizer), `--region` CLI arg, import `Runopendss_All05082026`/`TransferOptimizer-072026.py` แบบ hardcode ต้องเปลี่ยนเป็นชื่อไฟล์รุ่นใหม่ทั้งคู่
+
+**เจอเพิ่มที่ไม่เคยเจอมาก่อน**: dropdown-selector fix (`feasible_top` sort-by-quality-ก่อนตัด-top-5 จาก commit `5b7dc78`) ก็หายไปด้วยในไฟล์ `TransferOptimizer_16092026.py` — ยืนยันว่า "fix ที่เคยทำไปแล้วในโค้ด" ก็เสี่ยงหายเวลาโปรโมทรุ่นใหม่เหมือนกัน ไม่ใช่แค่ scaffolding ตอนแปลงเป็น API ครั้งแรก ต้อง diff ตรวจ fix ประวัติศาสตร์ทุกตัวด้วย ไม่ใช่แค่ 5 ข้อใน checklist บนสุด
+
+**ค่า business parameter ที่ต้องถามผู้ใช้แทนการเดา**: ไฟล์ดิบประกาศ `DEFAULT_MAX_IMBALANCE_PCT = 20.0` เป็น constant ใหม่ (ไม่ใช่ literal เปล่าแบบเดิม) พร้อม comment อธิบายเหตุผล — ต่างจากกรณี "15.0 ปนมาเฉยๆ" ก่อนหน้านี้ที่ชัดเจนว่าเป็นของตกหล่น เพราะรอบนี้ดูเหมือนการตัดสินใจใหม่โดยตั้งใจ จึงถามผู้ใช้ก่อนแทนที่จะเดาแล้วเขียนทับ — คำตอบคือให้คงค่า 25% เดิมไว้ (ค่าที่ผู้ใช้สั่งไว้ก่อนหน้า) เปลี่ยนแค่ตัวเลขในตัวแปร ไม่แตะ refactor ที่รวม literal กระจัดกระจายมาเป็น constant เดียว (เก็บ refactor นั้นไว้ เพราะเป็นของดี)
+
+Logic ใหม่จริงที่คงไว้ทั้งหมด (ใหญ่สุดในทุกรอบที่ผ่านมา — รื้ออัลกอริทึมหลายจุดพร้อมกัน):
+- **Runopendss**: ฟังก์ชันจับคู่มิเตอร์↔สายบริการ↔โหนดร่วม (`select_load_point_indices`/`select_service_line_indices`/`match_service_lines_to_meters`) ให้ `convert_json_to_dss_ordered()` กับ `TransferOptimizer.NetworkGraph` เห็นจุดต่อมิเตอร์ตรงกัน, กรอง backbone ตัด SUBTYPECODE=2 ทิ้ง, ตรวจเฟส LV feeder จริงแทนการเดา
+- **TransferOptimizer**: ระบบย้ายกิ่งพร้อมจัดการเฟสทั้งชุด (`build_transfer_features` ฯลฯ — เลือกเฟส tie ให้ TR_B สมดุลที่สุด, ย้ายเฟสมิเตอร์ที่ไม่มีไฟหลังย้าย), ข้อจำกัดโหลดรายเฟสของหม้อแปลงทั้ง TR_A/TR_B ใหม่ทั้งคู่, ตรวจโหลดที่ไม่ได้รับไฟ (`count_dead_loads`)
+- **PhaseOptimizer**: อัลกอริทึมย้ายเฟสแบบ bottom-up จากปลายกิ่งขึ้นมา (`BusNodeMapper`, `_descend_balance`, `_bottom_up_pass`, `optimize_phase_balance_bottom_up`) แทน/เสริม greedy เดิม, ระบบเช็ค overload รายเฟสของหม้อแปลงพร้อมคำแนะนำ, เกณฑ์ตรวจจับมิเตอร์ EV ใช้เปิด/ปิด Conductor Upgrade, Phase Addition ไม่เพิ่มเฟสเกินที่หม้อแปลงมีจริง
+
+**ขั้นตอนต่อ chain ที่ต้องทำเพิ่มจากการแก้ scaffolding ปกติ**: อัปเดต path เป้าหมายของ `importlib.util.spec_from_file_location` ใน `PhaseOptimizer_16092026.py` ให้ชี้ไป `TransferOptimizer_16092026.py` (ไม่ใช่แค่คืนกลไก importlib เฉยๆ) และใน `feature_shareload/run_web.py` ให้ชี้ไปไฟล์เดียวกันด้วย — ทั้งสองจุดต้องอัปเดตพร้อมกันเสมอเวลา TransferOptimizer เปลี่ยนรุ่น
