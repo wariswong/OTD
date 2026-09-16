@@ -133,6 +133,9 @@
             <thead>
                 <tr class="bg-gray-50 text-gray-600 text-xs font-semibold uppercase tracking-wider">
                     <th class="px-6 py-4 border-b sticky-col">FACILITY ID</th>
+                    <th class="px-6 py-4 border-b">สรุปปัญหา</th>
+                    <th class="px-6 py-4 border-b">แนวทางการแก้ไข</th>
+                    <th class="px-6 py-4 border-b">หม้อแปลงใกล้เคียง (จับคู่แชร์โหลดได้)</th>
                     <th class="px-6 py-4 border-b">GIS TAG</th>
                     <th class="px-6 py-4 border-b">LOCATION</th>
                     <th class="px-6 py-4 border-b">RATE KVA</th>
@@ -147,9 +150,6 @@
                     <th class="px-6 py-4 border-b text-center">%_IA</th>
                     <th class="px-6 py-4 border-b text-center">%_IB</th>
                     <th class="px-6 py-4 border-b text-center">%_IC</th>
-                    <th class="px-6 py-4 border-b">สรุปปัญหา</th>
-                    <th class="px-6 py-4 border-b">แนวทางการแก้ไข</th>
-                    <th class="px-6 py-4 border-b">หม้อแปลงใกล้เคียง (จับคู่แชร์โหลดได้)</th>
                     <th class="px-6 py-4 border-b text-center">MAP</th>
                 </tr>
             </thead>
@@ -159,33 +159,6 @@
                     <td class="px-6 py-4 text-sm font-mono text-primary font-semibold sticky-col">
                         {{ row.facility_id }}
                     </td>
-                    <td class="px-6 py-4 text-sm text-gray-600 max-w-xs truncate" title="{{ row.gistag }}">
-                        {{ row.gistag }}
-                    </td>
-                    <td class="px-6 py-4 text-sm text-gray-600 max-w-xs truncate" title="{{ row.location }}">
-                        {{ row.location }}
-                    </td>
-                    <td class="px-6 py-4 text-sm text-gray-500">{{ row.rate_kva }}</td>
-                    <td class="px-6 py-4 text-sm text-gray-500">{{ row.pload_peak }}</td>
-                    <td class="px-6 py-4 text-sm text-gray-500">{{ row.pload_kw }}</td>
-                    <td class="px-6 py-4 text-sm text-gray-500">{{ row.loss }}</td>
-                    <td class="px-6 py-4 text-sm text-gray-500">{{ row.feeder_id }}</td>
-                    <td class="px-6 py-4 text-sm text-gray-500">{{ row.vmin_peak }}</td>
-                    <td class="px-6 py-4 text-sm text-gray-500">{{ row.opsa_trsummary_len }}</td>
-                    <td class="px-6 py-4 text-sm text-gray-500">{{ row.name }}</td>
-                    <td class="px-6 py-4 text-sm text-gray-500">{{ row.peak_month }}</td>
-                    <td class="px-6 py-4 text-sm text-center font-mono text-gray-700">{{ "%.1f"|format(row.pct_ia|float) if row.pct_ia else '-' }}</td>
-                    <td class="px-6 py-4 text-sm text-center font-mono text-gray-700">{{ "%.1f"|format(row.pct_ib|float) if row.pct_ib else '-' }}</td>
-                    <td class="px-6 py-4 text-sm text-center font-mono text-gray-700">{{ "%.1f"|format(row.pct_ic|float) if row.pct_ic else '-' }}</td>
-                    <!-- <td class="px-6 py-4 text-center">
-                        {% set vals = [row.ia_peak, row.ib_peak, row.ic_peak]|reject('none')|list %}
-                        {% set max_i = vals|max|default(0)|float %}
-                        {% set min_i = vals|min|default(0)|float %}
-                        {% set unb = ((max_i - min_i) / max_i * 100) if max_i > 0 else 0 %}
-                        <span class="px-2 py-1 rounded text-xs font-bold {{ 'bg-red-100 text-red-700' if unb > 30 else 'bg-green-100 text-green-700' }}">
-                            {{ "%.1f"|format(unb) }}%
-                        </span>
-                    </td> -->
                     {% set has_problem = row.problem_summary and row.problem_summary|lower != 'none' %}
                     <td class="px-6 py-4 text-sm whitespace-normal break-words {{ 'bg-red-50/50 text-red-700 font-medium' if has_problem else 'text-gray-600' }}" style="min-width: 300px;">
                         {{ row.problem_summary if has_problem else '-' }}
@@ -215,6 +188,33 @@
                         </div>
                         {% else %}-{% endif %}
                     </td>
+                    <td class="px-6 py-4 text-sm text-gray-600 max-w-xs truncate" title="{{ row.gistag }}">
+                        {{ row.gistag }}
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-600 max-w-xs truncate" title="{{ row.location }}">
+                        {{ row.location }}
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-500">{{ row.rate_kva }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">{{ row.pload_peak }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">{{ row.pload_kw }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">{{ row.loss }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">{{ row.feeder_id }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">{{ row.vmin_peak }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">{{ row.opsa_trsummary_len }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">{{ row.name }}</td>
+                    <td class="px-6 py-4 text-sm text-gray-500">{{ row.peak_month }}</td>
+                    <td class="px-6 py-4 text-sm text-center font-mono text-gray-700">{{ "%.1f"|format(row.pct_ia|float) if row.pct_ia else '-' }}</td>
+                    <td class="px-6 py-4 text-sm text-center font-mono text-gray-700">{{ "%.1f"|format(row.pct_ib|float) if row.pct_ib else '-' }}</td>
+                    <td class="px-6 py-4 text-sm text-center font-mono text-gray-700">{{ "%.1f"|format(row.pct_ic|float) if row.pct_ic else '-' }}</td>
+                    <!-- <td class="px-6 py-4 text-center">
+                        {% set vals = [row.ia_peak, row.ib_peak, row.ic_peak]|reject('none')|list %}
+                        {% set max_i = vals|max|default(0)|float %}
+                        {% set min_i = vals|min|default(0)|float %}
+                        {% set unb = ((max_i - min_i) / max_i * 100) if max_i > 0 else 0 %}
+                        <span class="px-2 py-1 rounded text-xs font-bold {{ 'bg-red-100 text-red-700' if unb > 30 else 'bg-green-100 text-green-700' }}">
+                            {{ "%.1f"|format(unb) }}%
+                        </span>
+                    </td> -->
                     <td class="px-6 py-4 text-center">
                         <button onclick='openMap({{ row|tojson|safe }})'
                                 class="p-2 text-primary hover:bg-primary/10 rounded-lg transition-colors border border-primary/10 bg-white">
