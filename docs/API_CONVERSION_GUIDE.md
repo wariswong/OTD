@@ -134,3 +134,18 @@ Logic ใหม่จริงที่คงไว้ทั้งหมด (ใ
 - **PhaseOptimizer**: อัลกอริทึมย้ายเฟสแบบ bottom-up จากปลายกิ่งขึ้นมา (`BusNodeMapper`, `_descend_balance`, `_bottom_up_pass`, `optimize_phase_balance_bottom_up`) แทน/เสริม greedy เดิม, ระบบเช็ค overload รายเฟสของหม้อแปลงพร้อมคำแนะนำ, เกณฑ์ตรวจจับมิเตอร์ EV ใช้เปิด/ปิด Conductor Upgrade, Phase Addition ไม่เพิ่มเฟสเกินที่หม้อแปลงมีจริง
 
 **ขั้นตอนต่อ chain ที่ต้องทำเพิ่มจากการแก้ scaffolding ปกติ**: อัปเดต path เป้าหมายของ `importlib.util.spec_from_file_location` ใน `PhaseOptimizer_16092026.py` ให้ชี้ไป `TransferOptimizer_16092026.py` (ไม่ใช่แค่คืนกลไก importlib เฉยๆ) และใน `feature_shareload/run_web.py` ให้ชี้ไปไฟล์เดียวกันด้วย — ทั้งสองจุดต้องอัปเดตพร้อมกันเสมอเวลา TransferOptimizer เปลี่ยนรุ่น
+
+## กรณีศึกษาจริง (2026-09-17): แปลง `PhaseOptimizer_17092026.py`
+
+**scaffolding หายซ้ำ 5 จุดเดิมทุกจุด** เป็นรอบที่ 4 ติดกันของฟีเจอร์นี้ (sys.path bootstrap, import `Runopendss_All05082026`/`from TransferOptimizer import (...)` ตรงๆ แทน importlib load ของ `Runopendss_All16092026`/`TransferOptimizer_16092026.py`, `region` param หาย, `self.error` หาย, `_ensure_json()` กลับไปเรียก `INPUT_FACILITY` ที่ไม่มีจริงอีกครั้ง, `--region` CLI arg หาย) รวมถึง `DEFAULT_MAX_IMBALANCE_PCT` เพี้ยนกลับเป็น 20.0 อีกครั้ง (ไม่ต้องถามผู้ใช้ซ้ำ เพราะยืนยันเป็น 25% ไปแล้วในรอบก่อน) — แก้ตามเช็คลิสต์เดิมทั้งหมดโดยไม่ต้องอ่าน diff ก่อนเลย เพราะรู้ล่วงหน้าอยู่แล้วว่าจะเจอจุดไหนบ้าง
+
+Logic ใหม่จริงที่คงไว้ทั้งหมด — ฟีเจอร์ **"Design Check" (ตรวจมาตรฐานเฟสสาย)**: ใหญ่ที่สุดเท่าที่เคยแปลงมา เพิ่มการตรวจสอบว่าสาย LV เดินครบเฟสหม้อแปลงหรือไม่ตามหลักออกแบบ **แม้ไฟฟ้าจะผ่านเกณฑ์แล้ว** (เดิมทำงานเฉพาะตอนมีปัญหาทางไฟฟ้า — low-V หรือ imbalance เกิน):
+
+- `DesignComp` dataclass ใหม่ — จัดกลุ่ม segment สาย LV ที่ไม่ครบเฟสหม้อแปลงเป็น connected component (`build_non_full_phase_comps`), ถือว่า "ต้องแก้" (`violates`) ถ้ายาว ≥100m (`DESIGN_MIN_COMP_LEN_M`) หรือมีมิเตอร์ ≥5 ตัว (`DESIGN_MIN_COMP_METERS`)
+- `assess_design()` คำนวณสรุปภาพรวม (% ความยาวที่ครบเฟส, kW ที่อยู่บนสายไม่ครบเฟส, จำนวน component ที่ละเมิดเกณฑ์ ฯลฯ)
+- `simulate_phase_addition()` มี**โหมดที่ 3** ("design mode") ต่อจากโหมด low-V และ imbalance เดิม — ถูกกระตุ้นตอนไฟฟ้าผ่านเกณฑ์แล้วแต่ยังมี design violation ค้างอยู่
+- อัลกอริทึมกระจายเฟสใหม่แบบ **pool-based**: จัดกลุ่มมิเตอร์เป็น "pool" ตามโครงสร้างสาขา (BFS) แล้วเกลี่ยเข้าเป้าหมายแบบถ่วงน้ำหนักระหว่าง even-split กับสัดส่วนโหลดหม้อแปลง (`_POOL_SHARE_W`) แทนอัลกอริทึม greedy pool เดียวเดิม
+- `LVOptimizer.run()` เพิ่ม **Step 3b** (ประเมิน design violation ทันทีหลัง baseline — ถ้าไม่มีทั้งปัญหาไฟฟ้าและ design violation ให้จบเลย) และ **Step 3c** (ถ้ามี design violation ให้เพิ่มเฟสสายตามหลักออกแบบ **ก่อน** ทำ phase transfer ในสั้นๆ เพื่อให้สาขาที่เพิ่งเพิ่มเฟสได้รับโหลดจริงก่อนรอบเกลี่ยเฟส) พร้อมประเมินซ้ำหลังปรับปรุงเสร็จ (`design_comps_after`/`design_summary_after`)
+- รายงานผล: Excel มี worksheet ใหม่ `"Design Check"` (ws4b) แสดงทุก component พร้อมสถานะก่อน/หลัง, console report มีหัวข้อ Design Check เพิ่ม, Plotly interactive map มี trace ใหม่ (X สีม่วง) แสดงมิเตอร์ที่ถูกย้ายเฟสจาก Design Check
+
+หลังผนวก scaffolding กลับครบ ไฟล์ผ่าน `ast.parse` และ import smoke test ทุกจุด (`region` อยู่ใน signature, `DEFAULT_MAX_IMBALANCE_PCT == 25.0`, ไม่มี `INPUT_FACILITY`/`Runopendss_All05082026`/`from TransferOptimizer import` หลงเหลือ) — ย้าย `PhaseOptimizer_16092026.py` เดิมไป `notUse/`, อัปเดต `feature_PhaseOptimizer/run_web.py` ให้ import จาก `PhaseOptimizer_17092026` แทน
