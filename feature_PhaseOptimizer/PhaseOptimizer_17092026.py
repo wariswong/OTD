@@ -148,6 +148,9 @@ SINGLE_PDS  = frozenset({1, 2, 4})       # single-phase PHASEDESIGNATION values
 
 _PD_LABEL = {7: "ABC", 6: "AB", 5: "CA", 4: "A", 3: "BC", 2: "B", 1: "C"}
 
+# สีประจำเฟสสำหรับหมุดมิเตอร์ที่ต้องย้าย (A แดง / B เหลือง / C น้ำเงิน)
+_PHASE_MARK_COLOR = {4: "#E03131", 2: "#F0B429", 1: "#2F6FD6"}
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Data classes
@@ -2954,7 +2957,8 @@ def draw_interactive_map(opt: LVOptimizer, out_path: str) -> None:
 
     # ── มิเตอร์ที่ถูกกระจายเฟสใหม่หลังเพิ่มเฟสสาย ─────────────────────────
     if opt.applied_phase_add:
-        rx, ry, rt = [], [], []
+        # วงกลมเปิด สีขอบ = เฟสใหม่ที่ต้องย้ายไป (A แดง / B เหลือง / C น้ำเงิน)
+        by_pd: Dict[int, Tuple[List, List, List]] = {pd: ([], [], []) for pd in (4, 2, 1)}
         for fi, new_pd in opt.applied_phase_add.meter_moves:
             nid = net.load_feat_nodes.get(fi)
             feat = opt.raw["features"][fi]
@@ -2965,20 +2969,25 @@ def draw_interactive_map(opt: LVOptimizer, out_path: str) -> None:
                     continue
                 fx, fy = net.node_coords[nid]
             old_pd = _meter_current_pd(feat)
-            if old_pd == new_pd:
+            if old_pd == new_pd or new_pd not in by_pd:
                 continue                    # เฟสเดิมอยู่แล้ว ไม่ต้องทำอะไรหน้างาน
-            rx.append(fx); ry.append(fy)
-            rt.append(f"<b>กระจายเฟสใหม่: "
+            xs, ys, ts = by_pd[new_pd]
+            xs.append(fx); ys.append(fy)
+            ts.append(f"<b>กระจายเฟสใหม่: "
                       f"{str(get_attr(feat, 'PEANO', '') or '').strip() or 'idx='+str(fi)}</b>"
                       f"<br>{PD_TO_PHASE.get(old_pd,'?')} → {PD_TO_PHASE.get(new_pd,'?')}"
                       f"<br>kW={float(get_attr(feat, 'KWP', 0.0) or 0.0):.2f}")
-        if rx:
+        for pd_new in (4, 2, 1):
+            xs, ys, ts = by_pd[pd_new]
+            if not xs:
+                continue
             fig.add_trace(go.Scatter(
-                x=rx, y=ry, mode="markers",
-                marker=dict(symbol="x-thin", color="#8B00FF", size=11,
-                            line=dict(width=2, color="#8B00FF")),
-                name=f"มิเตอร์กระจายเฟสใหม่ ({len(rx)} ตัว)",
-                text=rt, hovertemplate="%{text}<extra></extra>",
+                x=xs, y=ys, mode="markers",
+                marker=dict(symbol="circle-open", size=16,
+                            color=_PHASE_MARK_COLOR[pd_new],
+                            line=dict(width=3, color=_PHASE_MARK_COLOR[pd_new])),
+                name=f"ย้ายไปเฟส {PD_TO_PHASE[pd_new]} ({len(xs)} ตัว)",
+                text=ts, hovertemplate="%{text}<extra></extra>",
             ), row=1, col=1)
 
     # ── Conductor upgrade: ทุก segment บน path หม้อแปลง→low-V ─────────────

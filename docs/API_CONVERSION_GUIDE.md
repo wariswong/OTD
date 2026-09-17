@@ -149,3 +149,11 @@ Logic ใหม่จริงที่คงไว้ทั้งหมด — 
 - รายงานผล: Excel มี worksheet ใหม่ `"Design Check"` (ws4b) แสดงทุก component พร้อมสถานะก่อน/หลัง, console report มีหัวข้อ Design Check เพิ่ม, Plotly interactive map มี trace ใหม่ (X สีม่วง) แสดงมิเตอร์ที่ถูกย้ายเฟสจาก Design Check
 
 หลังผนวก scaffolding กลับครบ ไฟล์ผ่าน `ast.parse` และ import smoke test ทุกจุด (`region` อยู่ใน signature, `DEFAULT_MAX_IMBALANCE_PCT == 25.0`, ไม่มี `INPUT_FACILITY`/`Runopendss_All05082026`/`from TransferOptimizer import` หลงเหลือ) — ย้าย `PhaseOptimizer_16092026.py` เดิมไป `notUse/`, อัปเดต `feature_PhaseOptimizer/run_web.py` ให้ import จาก `PhaseOptimizer_17092026` แทน
+
+## กรณีศึกษาจริง (2026-09-17 รอบที่ 2 — วันเดียวกัน): แก้ไข `PhaseOptimizer_17092026.py` ซ้ำ (**ชื่อไฟล์เดิม เนื้อหาใหม่**)
+
+**รูปแบบใหม่ที่ไม่เคยเจอมาก่อน**: รอบนี้ไฟล์ดิบไม่ได้มาพร้อมเลขรุ่นใหม่ (`_18092026` ฯลฯ) แต่ทับเนื้อหาลงในไฟล์**ชื่อเดิม** (`PhaseOptimizer_17092026.py`) — สังเกตจาก `git status` ที่ขึ้น `M` (modified) แทนที่จะเป็นไฟล์ใหม่ พร้อมมีไฟล์สำรอง `PhaseOptimizer_17092026old.py` โผล่มาข้างๆ (ตรวจแล้วเนื้อหาเหมือนกับเวอร์ชันที่ API-fix ล่าสุด/commit ก่อนหน้าทุกตัวอักษร ยกเว้น line ending — ยืนยันว่าเป็น backup อัตโนมัติของฝั่งผู้ใช้ก่อนทับไฟล์) วิธีตรวจจับ: ถ้าชื่อไฟล์ไม่เปลี่ยนแต่ `git status` ขึ้น modified ให้ diff กับ `git show HEAD:<path>` แทนที่จะ diff กับไฟล์รุ่นก่อนหน้าตามชื่อ
+
+**scaffolding หายซ้ำชุดเดิมอีกครั้ง** (docstring/usage, sys.path bootstrap, `Runopendss_All05082026`/`from TransferOptimizer import` ตรงๆ, `DEFAULT_MAX_IMBALANCE_PCT` กลับเป็น 20.0, `region` param, `self.error`, `_ensure_json()` กลับไปเรียก `INPUT_FACILITY`, `--region` CLI arg) — diff รอบนี้เล็กกว่าทุกรอบที่ผ่านมามาก (15 hunks/214 บรรทัด เทียบกับ 30+ hunks ปกติ) เพราะเป็นการอัปเดตจริงบนไฟล์ที่ fix แล้ว ไม่ใช่ fork จาก snapshot เก่าทั้งไฟล์
+
+Logic ใหม่จริงที่คงไว้: ปรับการแสดงผล **"มิเตอร์กระจายเฟสใหม่หลัง Phase Addition"** ใน `draw_interactive_map()` (Plotly) จาก X สีม่วงเส้นเดียวรวมทุกเฟส เป็น**วงกลมเปิดแยกสีตามเฟสปลายทาง** (`_PHASE_MARK_COLOR = {A: แดง, B: เหลือง, C: น้ำเงิน}`) — จัดกลุ่มจุดเป็น 3 trace ตาม `new_pd` แทน 1 trace เดียว ให้สอดคล้องกับ convention สีเฟสที่ใช้ในหน้าเว็บแผนที่อยู่แล้ว (ดูกรณีศึกษาการปรับ map ตอนต้นของบทสนทนานี้)
