@@ -201,7 +201,15 @@ def lookup_tx_losses_kW(rating_kva: float):
 # ─────────────────────────────────────────────────────────────────────────────
 
 def select_load_point_indices(features: List[Dict[str, Any]]) -> List[int]:
-    """index ของมิเตอร์จริง: point, SUBTYPECODE=1, ไม่ใช่หม้อแปลง (XF), มี PEANO หรือ PEAMETER"""
+    """index ของมิเตอร์จริง: point, SUBTYPECODE=1 หรือ 3, ไม่ใช่หม้อแปลง (XF), มี PEANO หรือ PEAMETER
+
+    SUBTYPECODE=1 = มิเตอร์เฟสเดียว/สองเฟสทั่วไป, SUBTYPECODE=3 = มิเตอร์ 3 เฟส
+    (ลูกค้ารายใหญ่/สถานประกอบการ) — พบว่ามิเตอร์ 3 เฟสจริงถูกกรองทิ้งไปเงียบๆ
+    ทั้งจากแผนที่และจากวงจร OpenDSS (โหลดหายไปจากผลจำลองทั้งก้อน) เพราะเดิมรับ
+    เฉพาะ SUBTYPECODE=1 — TAG "XF" + ไม่มี PEANO/PEAMETER ที่กรองอยู่แล้วด้านล่าง
+    เพียงพอกันหม้อแปลงเอง (ซึ่งก็มี SUBTYPECODE=3 เหมือนกันแต่ TAG มี "XF")
+    ไม่ต้องพึ่ง SUBTYPECODE อย่างเดียวมากรองหม้อแปลงออก
+    """
     out: List[int] = []
     for i, f in enumerate(features):
         if not has_point(f):
@@ -210,7 +218,7 @@ def select_load_point_indices(features: List[Dict[str, Any]]) -> List[int]:
             subtype = int(get_attr(f, "SUBTYPECODE", -999) or -999)
         except Exception:
             subtype = -999
-        if subtype != 1:
+        if subtype not in (1, 3):
             continue
         tag = str(get_attr(f, "TAG", "") or "").upper()
         if "XF" in tag:                       # กันไม่ให้หม้อแปลง XF ถูกสร้างเป็น Load
