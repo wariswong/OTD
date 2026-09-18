@@ -246,18 +246,15 @@
       }
     });
     // วงกลมโปร่งล้อมมิเตอร์ที่ย้ายเฟส — ใช้ภาษาภาพเดียวกับ draw_interactive_map()/draw_map()
-    // ใน PhaseOptimizer.py (circle-open ทับตำแหน่งมิเตอร์ที่ moved=1) แยกสีตามคู่ "ย้ายจาก→ไป"
+    // ใน PhaseOptimizer.py (circle-open ทับตำแหน่งมิเตอร์ที่ moved=1) แยกสีตาม "เฟสที่ย้ายไป"
+    // เท่านั้น (ไม่แยกตามคู่ก่อน→หลังอีกต่อไป) ให้ตรงกับสีเฟสของจุดมิเตอร์ปกติ (meterLayer ด้านบน)
     const ringSymbol = (color) => ({
       type: "simple-marker", style: "circle",
       color: [0, 0, 0, 0], size: 16,
       outline: { color, width: 2.5 }
     });
-    // สีต่อคู่ทิศทางการย้ายเฟส — ใช้เท่าที่มีจริงในข้อมูล (เติม fallback สีเทาให้คู่ที่ไม่รู้จัก)
-    const PHASE_MOVE_COLORS = {
-      "A->B": "#f97316", "A->C": "#a855f7",
-      "B->A": "#14b8a6", "B->C": "#ec4899",
-      "C->A": "#84cc16", "C->B": "#06b6d4"
-    };
+    // สีตามเฟสปลายทาง: A แดง / B เหลือง / C น้ำเงิน
+    const PHASE_TARGET_COLORS = { "A": "#ef4444", "B": "#eab308", "C": "#3b82f6" };
     const movedMeterRing = new GeoJSONLayer({
       url: `/phase_optimizer/output/${projectId}/meter_groups.geojson`,
       title: "มิเตอร์ที่ย้ายเฟส",
@@ -267,22 +264,22 @@
         content: "เฟสก่อน: {phase_before} → เฟสหลัง: {phase_after}<br>โหลด: {kw} kW"
       }
     });
-    // สร้าง renderer จากคู่ทิศทางที่มีอยู่จริงในข้อมูลเท่านั้น (ไม่โชว์ legend คู่ที่ไม่เกิดขึ้น)
+    // สร้าง renderer จากเฟสปลายทางที่มีอยู่จริงในข้อมูลเท่านั้น (ไม่โชว์ legend เฟสที่ไม่เกิดขึ้น)
     movedMeterRing.when(() => {
       const qDistinct = movedMeterRing.createQuery();
       qDistinct.where = "moved = 1";
-      qDistinct.outFields = ["phase_move"];
+      qDistinct.outFields = ["phase_after"];
       qDistinct.returnDistinctValues = true;
       qDistinct.returnGeometry = false;
       return movedMeterRing.queryFeatures(qDistinct).then(result => {
-        const values = [...new Set(result.features.map(f => f.attributes.phase_move).filter(Boolean))];
+        const values = [...new Set(result.features.map(f => f.attributes.phase_after).filter(Boolean))];
         if (!values.length) return;
         movedMeterRing.renderer = {
-          type: "unique-value", field: "phase_move",
+          type: "unique-value", field: "phase_after",
           uniqueValueInfos: values.map(v => ({
             value: v,
-            symbol: ringSymbol(PHASE_MOVE_COLORS[v] || "#00B050"),
-            label: `ย้าย ${v.replace("->", " → ")}`
+            symbol: ringSymbol(PHASE_TARGET_COLORS[v] || "#00B050"),
+            label: `ย้ายไปเฟส ${v}`
           }))
         };
       });
