@@ -205,7 +205,8 @@
 
   let _mapView = null;
   function panToFeature(lon, lat) {
-    if (_mapView) _mapView.goTo({ center: [lon, lat], zoom: 17 });
+    // animate:false — ดู comment เหตุผลที่จุด view.goTo() อีกจุดด้านล่าง (บั๊ก ArcGIS 4.29)
+    if (_mapView) _mapView.goTo({ center: [lon, lat], zoom: 17 }, { animate: false }).catch(() => {});
   }
 
   require([
@@ -283,7 +284,7 @@
           }))
         };
       });
-    });
+    }).catch(() => {});
     const featureGroups = new GeoJSONLayer({
       url: `/phase_optimizer/output/${projectId}/feature_groups.geojson`,
       title: "จุดสำคัญ",
@@ -364,7 +365,14 @@
       const q = featureGroups.createQuery();
       q.where = "group = 'transformer'"; q.returnGeometry = true;
       featureGroups.queryFeatures(q).then(r => {
-        if (r.features.length > 0) view.goTo({ target: r.features[0].geometry, zoom: 16 });
+        // animate:false หลบบั๊กของ ArcGIS JS API 4.29 ใน goTo() ที่คำนวณ
+        // animation/rotation ของ extent พังแล้วโยน "Cannot read properties of
+        // undefined (reading 'animation')" กลางอากาศ (Uncaught in promise) —
+        // เมื่อเกิดกลางแอนิเมชัน view จะค้างสถานะเสียจนเลเยอร์อื่น (เช่น
+        // มิเตอร์) ไม่ยอมโหลดฟีเจอร์เพิ่มอีกเลยแม้จะซูม/เลื่อนแผนที่ต่อ
+        if (r.features.length > 0) {
+          view.goTo({ target: r.features[0].geometry, zoom: 16 }, { animate: false }).catch(() => {});
+        }
       });
 
       const qAll = featureGroups.createQuery();
@@ -381,7 +389,7 @@
       ]).then(([pointResult, lineResult]) => {
         renderFeatureList([...pointResult.features, ...lineResult.features]);
       });
-    });
+    }).catch(() => {});
   });
 
   document.getElementById('rerunBtn').addEventListener('click', function() {
