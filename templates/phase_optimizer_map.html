@@ -307,16 +307,13 @@
       }).catch(() => {});
     });
 
-    // วิดเจ็ตทั้งสองอยู่มุมขวาบนที่เดียวกันและอยู่ใน Expand กลุ่มเดียวกัน (เปิดได้ทีละอัน)
-    // เพื่อไม่ให้ทับกันหรือทับปุ่ม zoom/compass มุมซ้ายบน จนกดไม่ได้
+    // LayerList (เปิด/ปิดเลเยอร์) อยู่มุมขวาบน ส่วน Legend แสดงเต็มเสมอที่มุมขวาล่าง
+    // แยกคนละมุมไม่ให้ทับกัน และไม่ซ่อน legend ไว้หลังปุ่ม
     view.ui.add(new Expand({
-      view, content: new LayerList({ view }), expanded: true, group: "top-right",
-      expandIconClass: "esri-icon-layers", expandTooltip: "เปิด/ปิดเลเยอร์"
+      view, content: new LayerList({ view }), expanded: true,
+      icon: "layers", expandTooltip: "เปิด/ปิดเลเยอร์"
     }), "top-right");
-    view.ui.add(new Expand({
-      view, content: new Legend({ view, style: "classic" }), expanded: false, group: "top-right",
-      expandIconClass: "esri-icon-legend", expandTooltip: "คำอธิบายสัญลักษณ์"
-    }), "top-right");
+    view.ui.add(new Legend({ view, style: "classic" }), "bottom-right");
 
     const fgStyles = {
       transformer:       { color: "#1f2937", icon: "bi-square-fill",   label: "หม้อแปลง" },
