@@ -47,6 +47,10 @@
       <div class="inline-flex items-center gap-1.5 bg-amber-100 text-amber-700 rounded-xl px-3 py-2 text-xs font-black uppercase tracking-wide">
         <i class="bi bi-exclamation-triangle-fill"></i> ยังพบปัญหาหลังปรับปรุง
       </div>
+      {% elif result.steps_applied %}
+      <div class="inline-flex items-center gap-1.5 bg-cyan-100 text-cyan-700 rounded-xl px-3 py-2 text-xs font-black uppercase tracking-wide">
+        <i class="bi bi-wrench-adjustable"></i> ปรับปรุงตามหลักออกแบบแล้ว
+      </div>
       {% else %}
       <div class="inline-flex items-center gap-1.5 bg-gray-100 text-gray-500 rounded-xl px-3 py-2 text-xs font-black uppercase tracking-wide">
         <i class="bi bi-info-circle-fill"></i> ระบบปกติตั้งแต่แรก
