@@ -10,3 +10,7 @@ logs/
 .env
 feature_PhaseOptimizer/output/
 #app.py
+
+# โค้ดดิบที่รอผนวก / ผนวกแล้ว (เก็บในเครื่องเท่านั้น ไม่ commit)
+incoming/*
+!incoming/README.md
