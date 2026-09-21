@@ -308,9 +308,11 @@
     // เพราะซ้อนทับ legend/ปุ่มบนแผนที่และไอคอนสวิตช์ไม่แสดง) — เลเยอร์ที่ไม่มีข้อมูลในเคสนี้
     // จะไม่โผล่เป็น checkbox และถูกซ่อนจาก legend
     const toggleBar = document.getElementById("layerToggles");
+    const legendLayers = [];
     const addToggle = (layer, label, color, required) => {
-      layer.when(() => layer.queryFeatureCount()).then(n => {
-        if (!n && !required) { layer.legendEnabled = false; layer.visible = false; return; }
+      return layer.when(() => layer.queryFeatureCount()).then(n => {
+        if (!n && !required) { layer.visible = false; return; }
+        legendLayers.push(layer);
         const chip = document.createElement("label");
         chip.className = "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-gray-200 text-xs font-bold text-gray-600 cursor-pointer select-none hover:bg-gray-50";
         chip.innerHTML = `<input type="checkbox" checked class="accent-primary"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${color}"></span><span>${label}</span><span class="text-gray-300 font-normal">${n}</span>`;
@@ -318,16 +320,24 @@
         toggleBar.appendChild(chip);
       }).catch(() => {});
     };
-    addToggle(lvLineLayer, "ระบบจำหน่าย", "#5fd918", true);
-    addToggle(meterLayer, "มิเตอร์", "#6b7280", true);
-    addToggle(condLayer, "ช่วงเพิ่มขนาดสาย", "#6366f1");
-    addToggle(phaseLayer, "ช่วงเพิ่มเฟสสาย", "#ec4899");
-    ["A", "B", "C"].forEach((ph, i) => addToggle(ringLayers[i], `ย้ายไปเฟส ${ph}`, PHASE_TARGET_COLORS[ph]));
-    addToggle(lowVFixedLayer, "แก้ไขแรงดันตกแล้ว", "#22c55e");
-    addToggle(lowVRemainLayer, "แรงดันตกยังคงอยู่", "#ef4444");
-    addToggle(transformerLayer, "หม้อแปลง", "#1f2937");
+    const toggleJobs = [];
+    toggleJobs.push(addToggle(lvLineLayer, "ระบบจำหน่าย", "#5fd918", true));
+    toggleJobs.push(addToggle(meterLayer, "มิเตอร์", "#6b7280", true));
+    toggleJobs.push(addToggle(condLayer, "ช่วงเพิ่มขนาดสาย", "#6366f1"));
+    toggleJobs.push(addToggle(phaseLayer, "ช่วงเพิ่มเฟสสาย", "#ec4899"));
+    ["A", "B", "C"].forEach((ph, i) => toggleJobs.push(addToggle(ringLayers[i], `ย้ายไปเฟส ${ph}`, PHASE_TARGET_COLORS[ph])));
+    toggleJobs.push(addToggle(lowVFixedLayer, "แก้ไขแรงดันตกแล้ว", "#22c55e"));
+    toggleJobs.push(addToggle(lowVRemainLayer, "แรงดันตกยังคงอยู่", "#ef4444"));
+    toggleJobs.push(addToggle(transformerLayer, "หม้อแปลง", "#1f2937"));
 
-    view.ui.add(new Legend({ view, style: "classic" }), "bottom-right");
+    // สร้าง Legend หลังรู้แล้วว่าเลเยอร์ไหนมีข้อมูล — ใส่เฉพาะเลเยอร์ที่มีข้อมูล ไม่งั้นเลเยอร์ว่าง
+    // จะโผล่เป็นกล่องขาวเปล่าซ้อนอยู่หลัง legend
+    Promise.all(toggleJobs).then(() => {
+      view.ui.add(new Legend({
+        view, style: "classic",
+        layerInfos: legendLayers.map(layer => ({ layer }))
+      }), "bottom-right");
+    });
 
     const fgStyles = {
       transformer:       { color: "#1f2937", icon: "bi-square-fill",   label: "หม้อแปลง" },
