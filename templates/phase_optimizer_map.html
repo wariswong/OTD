@@ -82,6 +82,12 @@
   {% endif %}
 </div>
 
+{# ===== LAYER TOGGLES (เปิด/ปิดเลเยอร์ เหมือนการคลิก legend ในไฟล์ html) ===== #}
+<div class="mb-3 flex flex-wrap items-center gap-2">
+  <span class="text-xs font-black text-gray-400 uppercase tracking-widest"><i class="bi bi-layers mr-1"></i>เลเยอร์:</span>
+  <div id="layerToggles" class="flex flex-wrap items-center gap-2"></div>
+</div>
+
 {# ===== MAP (FULL WIDTH) ===== #}
 <div class="relative mb-6">
   <div class="bg-white rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100 overflow-hidden relative">
@@ -210,9 +216,8 @@
   }
 
   require([
-    "esri/Map", "esri/views/MapView", "esri/layers/GeoJSONLayer", "esri/widgets/Legend",
-    "esri/widgets/LayerList", "esri/widgets/Expand"
-  ], function(Map, MapView, GeoJSONLayer, Legend, LayerList, Expand) {
+    "esri/Map", "esri/views/MapView", "esri/layers/GeoJSONLayer", "esri/widgets/Legend"
+  ], function(Map, MapView, GeoJSONLayer, Legend) {
 
     const map = new Map({ basemap: "streets-navigation-vector" });
     const view = new MapView({
@@ -295,24 +300,33 @@
       "group = 'conductor_upgrade'", lineSym("#6366f1"), fgPopup);
     const phaseLayer = geoLayer("upgrade_lines.geojson", "ช่วงเพิ่มเฟสสาย",
       "group = 'phase_addition'", lineSym("#ec4899"), fgPopup);
-    const optionalLayers = [transformerLayer, lowVFixedLayer, lowVRemainLayer, condLayer, phaseLayer, ...ringLayers];
 
     map.addMany([lvLineLayer, condLayer, phaseLayer, meterLayer, ...ringLayers,
                  lowVFixedLayer, lowVRemainLayer, transformerLayer]);
 
-    // เลเยอร์ที่ไม่มีข้อมูลในเคสนี้ ซ่อนออกจากรายการเปิด/ปิดและ legend
-    optionalLayers.forEach(l => {
-      l.when(() => l.queryFeatureCount()).then(n => {
-        if (!n) { l.listMode = "hide"; l.legendEnabled = false; }
+    // แถบเปิด/ปิดเลเยอร์เป็น checkbox HTML ธรรมดาเหนือแผนที่ (ไม่ใช้ LayerList ของ ArcGIS
+    // เพราะซ้อนทับ legend/ปุ่มบนแผนที่และไอคอนสวิตช์ไม่แสดง) — เลเยอร์ที่ไม่มีข้อมูลในเคสนี้
+    // จะไม่โผล่เป็น checkbox และถูกซ่อนจาก legend
+    const toggleBar = document.getElementById("layerToggles");
+    const addToggle = (layer, label, color, required) => {
+      layer.when(() => layer.queryFeatureCount()).then(n => {
+        if (!n && !required) { layer.legendEnabled = false; layer.visible = false; return; }
+        const chip = document.createElement("label");
+        chip.className = "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-gray-200 text-xs font-bold text-gray-600 cursor-pointer select-none hover:bg-gray-50";
+        chip.innerHTML = `<input type="checkbox" checked class="accent-primary"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${color}"></span><span>${label}</span><span class="text-gray-300 font-normal">${n}</span>`;
+        chip.querySelector("input").addEventListener("change", e => { layer.visible = e.target.checked; });
+        toggleBar.appendChild(chip);
       }).catch(() => {});
-    });
+    };
+    addToggle(lvLineLayer, "ระบบจำหน่าย", "#5fd918", true);
+    addToggle(meterLayer, "มิเตอร์", "#6b7280", true);
+    addToggle(condLayer, "ช่วงเพิ่มขนาดสาย", "#6366f1");
+    addToggle(phaseLayer, "ช่วงเพิ่มเฟสสาย", "#ec4899");
+    ["A", "B", "C"].forEach((ph, i) => addToggle(ringLayers[i], `ย้ายไปเฟส ${ph}`, PHASE_TARGET_COLORS[ph]));
+    addToggle(lowVFixedLayer, "แก้ไขแรงดันตกแล้ว", "#22c55e");
+    addToggle(lowVRemainLayer, "แรงดันตกยังคงอยู่", "#ef4444");
+    addToggle(transformerLayer, "หม้อแปลง", "#1f2937");
 
-    // LayerList (เปิด/ปิดเลเยอร์) อยู่มุมขวาบน ส่วน Legend แสดงเต็มเสมอที่มุมขวาล่าง
-    // แยกคนละมุมไม่ให้ทับกัน และไม่ซ่อน legend ไว้หลังปุ่ม
-    view.ui.add(new Expand({
-      view, content: new LayerList({ view }), expanded: true,
-      icon: "layers", expandTooltip: "เปิด/ปิดเลเยอร์"
-    }), "top-right");
     view.ui.add(new Legend({ view, style: "classic" }), "bottom-right");
 
     const fgStyles = {
