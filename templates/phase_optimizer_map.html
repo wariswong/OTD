@@ -210,8 +210,9 @@
   }
 
   require([
-    "esri/Map", "esri/views/MapView", "esri/layers/GeoJSONLayer", "esri/widgets/Legend"
-  ], function(Map, MapView, GeoJSONLayer, Legend) {
+    "esri/Map", "esri/views/MapView", "esri/layers/GeoJSONLayer", "esri/widgets/Legend",
+    "esri/widgets/LayerList", "esri/widgets/Expand"
+  ], function(Map, MapView, GeoJSONLayer, Legend, LayerList, Expand) {
 
     const map = new Map({ basemap: "streets-navigation-vector" });
     const view = new MapView({
@@ -256,67 +257,60 @@
     });
     // สีตามเฟสปลายทาง: A แดง / B เหลือง / C น้ำเงิน
     const PHASE_TARGET_COLORS = { "A": "#ef4444", "B": "#eab308", "C": "#3b82f6" };
-    const movedMeterRing = new GeoJSONLayer({
-      url: `/phase_optimizer/output/${projectId}/meter_groups.geojson`,
-      title: "มิเตอร์ที่ย้ายเฟส",
-      definitionExpression: "moved = 1",
-      popupTemplate: {
-        title: "มิเตอร์ {peano} (ย้ายเฟสแล้ว)",
-        content: "เฟสก่อน: {phase_before} → เฟสหลัง: {phase_after}<br>โหลด: {kw} kW"
-      }
-    });
-    // สร้าง renderer จากเฟสปลายทางที่มีอยู่จริงในข้อมูลเท่านั้น (ไม่โชว์ legend เฟสที่ไม่เกิดขึ้น)
-    movedMeterRing.when(() => {
-      const qDistinct = movedMeterRing.createQuery();
-      qDistinct.where = "moved = 1";
-      qDistinct.outFields = ["phase_after"];
-      qDistinct.returnDistinctValues = true;
-      qDistinct.returnGeometry = false;
-      return movedMeterRing.queryFeatures(qDistinct).then(result => {
-        const values = [...new Set(result.features.map(f => f.attributes.phase_after).filter(Boolean))];
-        if (!values.length) return;
-        movedMeterRing.renderer = {
-          type: "unique-value", field: "phase_after",
-          uniqueValueInfos: values.map(v => ({
-            value: v,
-            symbol: ringSymbol(PHASE_TARGET_COLORS[v] || "#00B050"),
-            label: `ย้ายไปเฟส ${v}`
-          }))
-        };
-      });
-    }).catch(() => {});
-    const featureGroups = new GeoJSONLayer({
-      url: `/phase_optimizer/output/${projectId}/feature_groups.geojson`,
-      title: "จุดสำคัญ",
-      renderer: {
-        type: "unique-value", field: "group",
-        uniqueValueInfos: [
-          { value: "transformer",     label: "หม้อแปลง", symbol: { type: "simple-marker", style: "square", color: "#1f2937", size: 14, outline: { color: "white", width: 2 } } },
-          { value: "low_v_fixed",     label: "แก้ไขแรงดันตกแล้ว", symbol: { type: "simple-marker", style: "diamond", color: "#22c55e", size: 12, outline: { color: "white", width: 1.5 } } },
-          { value: "low_v_remaining", label: "แรงดันตกยังคงอยู่", symbol: { type: "simple-marker", style: "diamond", color: "#ef4444", size: 12, outline: { color: "white", width: 1.5 } } }
-        ]
-      },
-      labelingInfo: [{
+    // ---- เลเยอร์ที่เปิด/ปิดได้ทีละกลุ่ม (เหมือนการคลิก legend ในไฟล์ html ของ Phase Optimizer) ----
+    // แยกจากไฟล์ geojson เดิมด้วย definitionExpression จึงไม่ต้องเปลี่ยนฝั่ง backend
+    const geoLayer = (file, title, where, symbol, popup, labeled) => new GeoJSONLayer({
+      url: `/phase_optimizer/output/${projectId}/${file}`,
+      title, definitionExpression: where,
+      renderer: { type: "simple", symbol },
+      popupTemplate: popup,
+      labelingInfo: labeled ? [{
         labelExpressionInfo: { expression: "$feature.name" },
         labelPlacement: "above-right",
         symbol: { type: "text", color: "#111827", font: { size: 10, family: "Arial", weight: "bold" }, haloColor: "white", haloSize: 1.5 }
-      }],
-      popupTemplate: { title: "{name}", content: "กลุ่ม: {group}" }
+      }] : undefined
     });
-    const upgradeLines = new GeoJSONLayer({
-      url: `/phase_optimizer/output/${projectId}/upgrade_lines.geojson`,
-      title: "จุดปรับปรุงสาย",
-      renderer: {
-        type: "unique-value", field: "group",
-        uniqueValueInfos: [
-          { value: "conductor_upgrade", label: "ช่วงเพิ่มขนาดสาย", symbol: { type: "simple-line", color: "#6366f1", width: 2, style: "short-dash" } },
-          { value: "phase_addition",    label: "ช่วงเพิ่มเฟสสาย", symbol: { type: "simple-line", color: "#ec4899", width: 2, style: "short-dash" } }
-        ]
-      },
-      popupTemplate: { title: "{name}", content: "กลุ่ม: {group}" }
+    const pointSym = (style, color, size) => ({
+      type: "simple-marker", style, color, size, outline: { color: "white", width: 1.5 }
+    });
+    const lineSym = (color) => ({ type: "simple-line", color, width: 2, style: "short-dash" });
+    const movedPopup = {
+      title: "มิเตอร์ {peano} (ย้ายเฟสแล้ว)",
+      content: "เฟสก่อน: {phase_before} → เฟสหลัง: {phase_after}<br>โหลด: {kw} kW"
+    };
+    const fgPopup = { title: "{name}", content: "กลุ่ม: {group}" };
+
+    // วงกลมมิเตอร์ที่ย้ายเฟส แยกตามเฟสปลายทาง (A แดง / B เหลือง / C น้ำเงิน)
+    const ringLayers = ["A", "B", "C"].map(ph => geoLayer(
+      "meter_groups.geojson", `ย้ายไปเฟส ${ph}`,
+      `moved = 1 AND phase_after = '${ph}'`,
+      ringSymbol(PHASE_TARGET_COLORS[ph]), movedPopup));
+    const transformerLayer = geoLayer("feature_groups.geojson", "หม้อแปลง",
+      "group = 'transformer'", pointSym("square", "#1f2937", 14), fgPopup, true);
+    const lowVFixedLayer = geoLayer("feature_groups.geojson", "แก้ไขแรงดันตกแล้ว",
+      "group = 'low_v_fixed'", pointSym("diamond", "#22c55e", 12), fgPopup, true);
+    const lowVRemainLayer = geoLayer("feature_groups.geojson", "แรงดันตกยังคงอยู่",
+      "group = 'low_v_remaining'", pointSym("diamond", "#ef4444", 12), fgPopup, true);
+    const condLayer = geoLayer("upgrade_lines.geojson", "ช่วงเพิ่มขนาดสาย",
+      "group = 'conductor_upgrade'", lineSym("#6366f1"), fgPopup);
+    const phaseLayer = geoLayer("upgrade_lines.geojson", "ช่วงเพิ่มเฟสสาย",
+      "group = 'phase_addition'", lineSym("#ec4899"), fgPopup);
+    const optionalLayers = [transformerLayer, lowVFixedLayer, lowVRemainLayer, condLayer, phaseLayer, ...ringLayers];
+
+    map.addMany([lvLineLayer, condLayer, phaseLayer, meterLayer, ...ringLayers,
+                 lowVFixedLayer, lowVRemainLayer, transformerLayer]);
+
+    // เลเยอร์ที่ไม่มีข้อมูลในเคสนี้ ซ่อนออกจากรายการเปิด/ปิดและ legend
+    optionalLayers.forEach(l => {
+      l.when(() => l.queryFeatureCount()).then(n => {
+        if (!n) { l.listMode = "hide"; l.legendEnabled = false; }
+      }).catch(() => {});
     });
 
-    map.addMany([lvLineLayer, meterLayer, movedMeterRing, featureGroups, upgradeLines]);
+    view.ui.add(new Expand({
+      view, content: new LayerList({ view }), expanded: true,
+      expandIconClass: "esri-icon-layers", expandTooltip: "เปิด/ปิดเลเยอร์"
+    }), "top-left");
     view.ui.add(new Legend({ view, style: "classic" }), "top-right");
 
     const fgStyles = {
@@ -361,10 +355,10 @@
       el.innerHTML = html;
     }
 
-    featureGroups.when(() => {
-      const q = featureGroups.createQuery();
-      q.where = "group = 'transformer'"; q.returnGeometry = true;
-      featureGroups.queryFeatures(q).then(r => {
+    transformerLayer.when(() => {
+      const q = transformerLayer.createQuery();
+      q.returnGeometry = true;
+      transformerLayer.queryFeatures(q).then(r => {
         // animate:false หลบบั๊กของ ArcGIS JS API 4.29 ใน goTo() ที่คำนวณ
         // animation/rotation ของ extent พังแล้วโยน "Cannot read properties of
         // undefined (reading 'animation')" กลางอากาศ (Uncaught in promise) —
@@ -375,19 +369,13 @@
         }
       });
 
-      const qAll = featureGroups.createQuery();
-      qAll.returnGeometry = true;
-      qAll.outFields = ["group", "name"];
-
-      const qLines = upgradeLines.createQuery();
-      qLines.returnGeometry = true;
-      qLines.outFields = ["group", "name"];
-
-      return Promise.all([
-        featureGroups.queryFeatures(qAll),
-        upgradeLines.queryFeatures(qLines)
-      ]).then(([pointResult, lineResult]) => {
-        renderFeatureList([...pointResult.features, ...lineResult.features]);
+      return Promise.all([transformerLayer, lowVFixedLayer, lowVRemainLayer, condLayer, phaseLayer].map(l => {
+        const qa = l.createQuery();
+        qa.returnGeometry = true;
+        qa.outFields = ["group", "name"];
+        return l.when().then(() => l.queryFeatures(qa));
+      })).then(results => {
+        renderFeatureList(results.flatMap(r => r.features));
       });
     }).catch(() => {});
   });
