@@ -66,19 +66,31 @@ def _sim_summary(r: "SimResult | None") -> dict | None:
     }
 
 
-def _build_results_json(opt: LVOptimizer) -> dict:
+def _build_results_json(opt: LVOptimizer, moved_meters: list | None = None) -> dict:
     baseline_has_problem = opt._has_problem(opt.baseline) if opt.baseline else None
     final = opt.final_result or opt.baseline
 
+    # ย้ายเฟสมิเตอร์เกิดได้ 3 จังหวะ (ก่อนเพิ่มขนาดสาย / หลังเพิ่มขนาดสาย / หลังเพิ่มเฟสสาย)
+    # และ Phase Addition เองก็กระจายเฟสมิเตอร์ในกิ่งที่เพิ่มเฟส — นับรวมทั้งหมดเป็นขั้น "ย้ายเฟสมิเตอร์"
+    n_pt1 = len(opt.phase_moves)
+    n_pt_cu = len(opt.phase_moves_cu)
+    n_pt2 = len(opt.phase_moves2)
+    n_pa_moves = len(opt.applied_phase_add.meter_moves) if opt.applied_phase_add else 0
+    n_moved_meters = len(moved_meters) if moved_meters is not None else (n_pt1 + n_pt_cu + n_pt2 + n_pa_moves)
+
+    design_before = opt.design_summary or {}
+    design_after = opt.design_summary_after or {}
+    design_applied = bool(opt.design_violations)
+
     steps_applied = []
-    if opt.phase_moves:
+    if design_applied:
+        steps_applied.append("design_check")
+    if n_pt1 or n_pt_cu or n_pt2 or n_pa_moves:
         steps_applied.append("phase_transfer")
     if opt.applied_upgrade:
         steps_applied.append("conductor_upgrade")
     if opt.applied_phase_add:
         steps_applied.append("phase_addition")
-    if opt.phase_moves2:
-        steps_applied.append("phase_transfer_2")
 
     final_has_problem = opt._has_problem(final) if final else None
     improved = bool(
@@ -93,10 +105,22 @@ def _build_results_json(opt: LVOptimizer) -> dict:
         "baseline": _sim_summary(opt.baseline),
         "baseline_has_problem": baseline_has_problem,
         "steps_applied": steps_applied,
+        "design_check": {
+            "n_violations_before": len(opt.design_violations),
+            "n_violations_after": len(opt.design_violations_after),
+            "len_violate_m": round(design_before.get("len_violate", 0.0)),
+            "meters_violate": int(design_before.get("meters_violate", 0)),
+            "ratio_full_before_pct": round(design_before.get("ratio_full_pct", 0.0)),
+            "ratio_full_after_pct": round(design_after.get("ratio_full_pct", 0.0)),
+        } if design_applied else None,
         "phase_transfer": {
-            "n_moves": len(opt.phase_moves),
+            "n_moves": n_moved_meters,
+            "n_moves_transfer": n_pt1,
+            "n_moves_after_upgrade": n_pt_cu,
+            "n_moves_after_phase_add": n_pt2,
+            "n_moves_phase_add": n_pa_moves,
             "result": _sim_summary(opt.phase_result),
-        } if opt.phase_moves else None,
+        } if (n_pt1 or n_pt_cu or n_pt2 or n_pa_moves) else None,
         "conductor_upgrade": {
             "edge": list(opt.applied_upgrade.edge),
             "from_size": opt.applied_upgrade.from_size,
@@ -108,6 +132,7 @@ def _build_results_json(opt: LVOptimizer) -> dict:
         "phase_addition": {
             "n_edges_upgraded": len(opt.applied_phase_add.upgraded_edges),
             "n_meters_moved": len(opt.applied_phase_add.meter_moves),
+            "design_fixed": getattr(opt.applied_phase_add, "design_fixed", 0),
             "result": _sim_summary(opt.applied_phase_add.result),
         } if opt.applied_phase_add else None,
         "final": _sim_summary(final),
@@ -276,7 +301,7 @@ def run_phase_optimizer(
     draw_map(optimizer, str(out_path / "downloads" / f"phase_opt_{facilityid}.png"))
     moved_meters = _write_geojson_layers(optimizer, out_path)
 
-    results = _build_results_json(optimizer)
+    results = _build_results_json(optimizer, moved_meters)
     results["moved_meters"] = moved_meters
     with open(out_path / "results.json", "w", encoding="utf-8") as fh:
         json.dump(results, fh, ensure_ascii=False, indent=2)

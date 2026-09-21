@@ -68,11 +68,20 @@
 <div class="flex flex-wrap items-center gap-2 mb-4">
   <span class="text-xs font-black text-gray-400 uppercase tracking-widest">ขั้นตอนที่ใช้:</span>
   {% set steps = result.steps_applied or [] %}
-  <span class="px-3 py-1.5 rounded-lg text-xs font-bold {{ 'bg-cyan-100 text-cyan-700' if 'phase_transfer' in steps else 'bg-gray-100 text-gray-400' }}">
-    <i class="bi bi-arrow-left-right mr-1"></i>ย้ายเฟสมิเตอร์{% if 'phase_transfer' in steps %} ({{ result.phase_transfer.n_moves }} จุด){% endif %}
+  {% set dc = result.design_check %}
+  {% if dc %}
+  <span class="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-100 text-amber-700"
+        title="สายที่เดินไม่ครบเฟสหม้อแปลงตามหลักออกแบบ: ก่อน {{ dc.n_violations_before }} กลุ่ม ({{ dc.len_violate_m }} m, {{ dc.meters_violate }} มิเตอร์) → หลัง {{ dc.n_violations_after }} กลุ่ม">
+    <i class="bi bi-clipboard-check mr-1"></i>ตรวจมาตรฐานเฟสสาย ({{ dc.n_violations_before }} → {{ dc.n_violations_after }} กลุ่ม)
+  </span>
+  {% endif %}
+  {% set pt = result.phase_transfer %}
+  <span class="px-3 py-1.5 rounded-lg text-xs font-bold {{ 'bg-cyan-100 text-cyan-700' if 'phase_transfer' in steps else 'bg-gray-100 text-gray-400' }}"
+        {% if pt %}title="ย้ายเฟสปกติ {{ pt.n_moves_transfer }} · หลังเพิ่มขนาดสาย {{ pt.n_moves_after_upgrade }} · กระจายเฟสในกิ่งที่เพิ่มเฟส {{ pt.n_moves_phase_add }} · หลังเพิ่มเฟสสาย {{ pt.n_moves_after_phase_add }} (นับรวมเป็นจำนวนมิเตอร์ที่เฟสเปลี่ยนจริง)"{% endif %}>
+    <i class="bi bi-arrow-left-right mr-1"></i>ย้ายเฟสมิเตอร์{% if pt %} ({{ pt.n_moves }} จุด){% endif %}
   </span>
   <span class="px-3 py-1.5 rounded-lg text-xs font-bold {{ 'bg-indigo-100 text-indigo-700' if 'conductor_upgrade' in steps else 'bg-gray-100 text-gray-400' }}">
-    <i class="bi bi-lightning-charge mr-1"></i>เพิ่มขนาดสาย{% if 'conductor_upgrade' in steps %} ({{ result.conductor_upgrade.from_size }}→{{ result.conductor_upgrade.to_size }}mm²){% endif %}
+    <i class="bi bi-lightning-charge mr-1"></i>เพิ่มขนาดสาย{% if 'conductor_upgrade' in steps %} ({{ result.conductor_upgrade.from_size }}→{{ result.conductor_upgrade.to_size }}mm², {{ result.conductor_upgrade.n_segments }} ช่วง){% endif %}
   </span>
   <span class="px-3 py-1.5 rounded-lg text-xs font-bold {{ 'bg-pink-100 text-pink-700' if 'phase_addition' in steps else 'bg-gray-100 text-gray-400' }}">
     <i class="bi bi-plus-circle mr-1"></i>เพิ่มเฟสสาย{% if 'phase_addition' in steps %} ({{ result.phase_addition.n_edges_upgraded }} ช่วง){% endif %}
