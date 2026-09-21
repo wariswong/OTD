@@ -38,7 +38,7 @@ _THIS_DIR = Path(__file__).resolve().parent
 if str(_THIS_DIR) not in sys.path:
     sys.path.insert(0, str(_THIS_DIR))
 
-from PhaseOptimizer_17092026 import (         # noqa: E402
+from PhaseOptimizer_22092026 import (         # noqa: E402
     LVOptimizer, SimResult, save_excel_report, draw_map,
     _meter_current_pd, _build_meter_inventory, PD_TO_PHASE,
 )
@@ -248,7 +248,7 @@ def _write_geojson_layers(opt: LVOptimizer, out_dir: Path) -> list:
     if opt.applied_upgrade:
         # อัปเกรดทั้ง path (ทุก segment จากหม้อแปลง→โหนดแรงดันต่ำ) ไม่ใช่แค่ entry
         # edge เส้นเดียว — ต้องวาดทุก segment ใน upgraded_edges ให้ตรงกับที่
-        # draw_map()/draw_interactive_map() ใน PhaseOptimizer_17092026.py แสดง
+        # draw_map()/draw_interactive_map() ใน PhaseOptimizer_22092026.py แสดง
         # ไม่งั้นแผนที่เว็บจะโชว์แค่ช่วงแรกช่วงเดียว สั้นกว่าที่อัปเกรดจริง
         name = f"เพิ่มขนาดสาย →{opt.applied_upgrade.to_size}mm² ({len(opt.applied_upgrade.upgraded_edges)} ช่วง)"
         for _fi, eu, ev in opt.applied_upgrade.upgraded_edges:
