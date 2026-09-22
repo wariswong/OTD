@@ -108,6 +108,10 @@
                                 <i class="bi bi-people-fill text-xs"></i>
                                 <span>จัดการสิทธิ์ผู้ดูแลระบบ</span>
                             </a>
+                            <a href="{{ url_for('stats.admin_report') }}" class="flex items-center space-x-2 px-4 py-2.5 text-sm text-primary hover:bg-primary/5 transition-colors">
+                                <i class="bi bi-graph-up text-xs"></i>
+                                <span>รายงานการใช้งานระบบ</span>
+                            </a>
                             {% endif %}
                         </div>
                         {% endif %}
@@ -201,6 +205,13 @@
                     <i class="bi bi-cloud-upload-fill"></i>
                     <span>อัปโหลดข้อมูลสถิติ (Admin)</span>
                 </a>
+                {% if session.get('admin_role') == 'admin_system' %}
+                <a class="flex items-center space-x-2 px-3 py-2.5 rounded-lg text-sm font-medium text-yellow-200 hover:bg-white/10"
+                   href="{{ url_for('stats.admin_report') }}">
+                    <i class="bi bi-graph-up"></i>
+                    <span>รายงานการใช้งานระบบ (Admin)</span>
+                </a>
+                {% endif %}
                 {% endif %}
                 {% if user %}
                 <div class="border-t border-white/20 mt-2 pt-3">
@@ -230,6 +241,7 @@
         'stats.transformer_stats': [('วิเคราะห์ปัญหาหม้อแปลงและแนวทางการแก้ไข', none)],
         'stats.admin_upload_stats': [('อัปโหลดข้อมูลสถิติ', none)],
         'stats.admin_management': [('จัดการสิทธิ์ผู้ดูแลระบบ', none)],
+        'stats.admin_report': [('รายงานการใช้งานระบบ', none)],
         'shareload.shareload_list': [('วิเคราะห์การแบ่งโหลดหม้อแปลงข้างเคียง', none)],
         'shareload.shareload_result': [('วิเคราะห์การแบ่งโหลดหม้อแปลงข้างเคียง', url_for('shareload.shareload_list')), ('ผลลัพธ์', none)],
         'phase_optimizer.phase_optimizer_list': [('ออกแบบงานปรับปรุงทั่วไป', none)],

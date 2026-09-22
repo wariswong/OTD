@@ -5,6 +5,7 @@ from ..utils.decorators import login_required, is_admin
 from ..utils.helpers import get_user_region
 from ..services.stats_service import StatsService
 from ..services.admin_service import AdminService
+from ..services.admin_report_service import AdminReportService
 from ..database import get_db_connection
 from ..config import Config
 
@@ -147,6 +148,42 @@ def admin_management():
         
     admins = AdminService.get_all_admins()
     return render_template('admin_management.html', admins=admins, user=session.get("user"))
+
+@stats_bp.route('/admin/report')
+@login_required
+def admin_report():
+    if session.get("admin_role") != 'admin_system':
+        return "Access Denied: System Admin only", 403
+
+    total_logins, distinct_users = AdminReportService.get_login_stats()
+    job_counts = AdminReportService.get_job_counts()
+    return render_template(
+        'admin_report.html',
+        total_logins=total_logins,
+        distinct_users=distinct_users,
+        job_counts=job_counts,
+        total_jobs=sum(j["count"] for j in job_counts),
+        top_users=AdminReportService.get_top_users(10),
+        recent_jobs=AdminReportService.get_recent_jobs(30),
+    )
+
+@stats_bp.route('/admin/migrate_login_log')
+@login_required
+def admin_migrate_login_log():
+    if session.get("admin_role") != 'admin_system':
+        return "Access Denied: System Admin only", 403
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        with open('db/create_login_log_table.sql', 'r', encoding='utf-8') as f:
+            sql = f.read()
+        results = cur.execute(sql, multi=True)
+        for res in results:
+            pass
+        conn.commit(); cur.close(); conn.close()
+        return "Migration Successful — login_log table is ready"
+    except Exception as e:
+        return f"Migration Failed: {str(e)}"
 
 @stats_bp.route('/admin/migrate_stats')
 @login_required

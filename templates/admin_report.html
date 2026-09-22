@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+
+{% block title %}รายงานการใช้งานระบบ | GIS OTD{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto">
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-800">รายงานการใช้งานระบบ</h1>
+        <p class="text-gray-500 mt-1">ภาพรวมผู้ใช้งานและงานที่สร้างในระบบทั้งหมด</p>
+    </div>
+
+    {% if distinct_users == 0 and total_logins == 0 %}
+    <div class="mb-8 bg-amber-50 border border-amber-200 text-amber-800 rounded-2xl px-6 py-4 text-sm flex items-center gap-3">
+        <i class="bi bi-exclamation-triangle-fill"></i>
+        <div>
+            ยังไม่มีข้อมูลการเข้าสู่ระบบ (ตาราง <code class="font-mono">login_log</code> อาจยังไม่ถูกสร้าง) —
+            <a href="{{ url_for('stats.admin_migrate_login_log') }}" class="underline font-bold">คลิกที่นี่เพื่อสร้างตาราง</a>
+            แล้วรอให้มีผู้ล็อกอินเข้าระบบใหม่อีกครั้ง ตัวเลขจึงจะเริ่มนับ
+        </div>
+    </div>
+    {% endif %}
+
+    {# ===== SUMMARY CARDS ===== #}
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-black text-gray-400 uppercase tracking-widest">ผู้ใช้งานทั้งหมด</span>
+                <i class="bi bi-people-fill text-primary text-xl"></i>
+            </div>
+            <p class="text-4xl font-black text-gray-800">{{ distinct_users }}</p>
+            <p class="text-xs text-gray-400 mt-1">คน (นับจากที่เคยล็อกอิน)</p>
+        </div>
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-black text-gray-400 uppercase tracking-widest">จำนวนครั้งที่เข้าใช้งาน</span>
+                <i class="bi bi-box-arrow-in-right text-primary text-xl"></i>
+            </div>
+            <p class="text-4xl font-black text-gray-800">{{ total_logins }}</p>
+            <p class="text-xs text-gray-400 mt-1">ครั้ง (นับทุกครั้งที่ล็อกอิน)</p>
+        </div>
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-black text-gray-400 uppercase tracking-widest">งานที่สร้างแล้วทั้งหมด</span>
+                <i class="bi bi-folder-fill text-primary text-xl"></i>
+            </div>
+            <p class="text-4xl font-black text-gray-800">{{ total_jobs }}</p>
+            <p class="text-xs text-gray-400 mt-1">งาน (ทุกฟีเจอร์รวมกัน)</p>
+        </div>
+    </div>
+
+    {# ===== JOBS BY FEATURE ===== #}
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-8">
+        <div class="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
+            <h3 class="font-black text-gray-700 text-sm uppercase tracking-widest"><i class="bi bi-bar-chart-fill mr-2"></i>งานที่สร้างแยกตามฟีเจอร์</h3>
+        </div>
+        <div class="divide-y divide-gray-50">
+            {% for j in job_counts %}
+            <div class="flex items-center justify-between px-6 py-4">
+                <span class="text-sm text-gray-600">{{ j.label }}</span>
+                <span class="text-lg font-black text-primary">{{ j.count }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+        {# ===== TOP USERS ===== #}
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
+                <h3 class="font-black text-gray-700 text-sm uppercase tracking-widest"><i class="bi bi-person-lines-fill mr-2"></i>ผู้ใช้งานบ่อยที่สุด</h3>
+            </div>
+            {% if top_users %}
+            <table class="min-w-full divide-y divide-gray-100">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">ผู้ใช้</th>
+                        <th class="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase">เข้าใช้งาน</th>
+                        <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">ล่าสุด</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-50">
+                    {% for u in top_users %}
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-3">
+                            <p class="text-sm font-bold text-gray-700">{{ u.hr_fullname_th or '-' }}</p>
+                            <p class="text-xs text-gray-400 font-mono">{{ u.hr_employee_id }}</p>
+                        </td>
+                        <td class="px-6 py-3 text-right text-sm font-black text-primary">{{ u.login_count }}</td>
+                        <td class="px-6 py-3 text-xs text-gray-400">{{ u.last_login }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p class="px-6 py-8 text-sm text-gray-300 text-center">ยังไม่มีข้อมูล</p>
+            {% endif %}
+        </div>
+
+        {# ===== RECENT JOBS ===== #}
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
+                <h3 class="font-black text-gray-700 text-sm uppercase tracking-widest"><i class="bi bi-clock-history mr-2"></i>งานล่าสุด</h3>
+                <span class="text-xs text-gray-400">{{ recent_jobs|length }} รายการ</span>
+            </div>
+            {% if recent_jobs %}
+            <div class="max-h-96 overflow-y-auto divide-y divide-gray-50">
+                {% for j in recent_jobs %}
+                <div class="px-6 py-3">
+                    <div class="flex items-center justify-between gap-2">
+                        <p class="text-sm font-bold text-gray-700 truncate">{{ j.project_name }}</p>
+                        <span class="text-[10px] font-bold text-gray-400 shrink-0">{{ j.created_at }}</span>
+                    </div>
+                    <p class="text-xs text-gray-400 mt-0.5">
+                        {{ j.job_type }}
+                        {% if j.owner_name or j.owner_id %} · โดย {{ j.owner_name or j.owner_id }}{% endif %}
+                        {% if j.region %} · เขต {{ j.region }}{% endif %}
+                    </p>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="px-6 py-8 text-sm text-gray-300 text-center">ยังไม่มีข้อมูล</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

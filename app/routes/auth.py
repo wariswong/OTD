@@ -2,8 +2,30 @@ import logging
 from flask import Blueprint, request, jsonify, redirect, url_for, session
 import requests
 from ..config import Config
+from ..database import get_db_connection
 
 auth_bp = Blueprint('auth', __name__)
+
+
+def _log_login(userinfo):
+    """Record one row per successful SSO login in `login_log`, for the admin
+    usage report (distinct users / total logins). Best-effort — a logging
+    failure (e.g. table not migrated yet) must never block login itself.
+    """
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO login_log (hr_employee_id, hr_fullname_th, hr_department) "
+            "VALUES (%s, %s, %s)",
+            (userinfo.get("hr_employee_id"), userinfo.get("hr_fullname_th"),
+             userinfo.get("hr_department")),
+        )
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        logging.error(f"login_log insert failed: {e}")
 
 @auth_bp.route("/login")
 def login():
@@ -52,6 +74,7 @@ def login_callback():
         u.raise_for_status()
         userinfo = u.json()
         session["user"] = userinfo
+        _log_login(userinfo)
         return redirect(url_for("stats.transformer_stats"))
     except requests.exceptions.RequestException as e:
         logging.error(f"SSO login error: {e}")
